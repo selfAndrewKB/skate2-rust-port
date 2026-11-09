@@ -1,0 +1,6 @@
+# skate2-rust-port (coop fork)
+
+Read `AGENTS.md` first: its reconstruction rules bind every change here.
+
+Co-op project notes, branch policy and per-machine setup: `docs/coop/README.md`. This file and
+`docs/coop/` exist only on the `coop` branch; upstream PRs branch from `main`.
