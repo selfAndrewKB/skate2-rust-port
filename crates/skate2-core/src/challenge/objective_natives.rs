@@ -214,18 +214,26 @@ fn get_accumulated_points(_: &mut Lua<World>, world: &mut World, _: &NativeCall)
 }
 
 /// The closure objective's points, or under `Combined` the sum over every player's copy of it.
-fn combined_points(world: &World) -> u32 {
+/// The rule is resolved once per group (`points_combined`), not per call.
+fn combined_points(world: &mut World) -> u32 {
     let Some(closure) = world.objective_closure else { return 0 };
     let Some(o) = objective(world) else { return 0 };
     let own = o.total_points;
     let Some(gi) = world.objectives.group_index(closure.group) else { return own };
-    let g = &world.objectives.groups[gi];
-    let Some((rule, _, _)) = crate::challenge::coop_rule(world, g.activity) else { return own };
-    if !rule.points_combined() {
+    let activity = world.objectives.groups[gi].activity;
+    let combined = match world.objectives.groups[gi].points_combined {
+        Some(combined) => combined,
+        None => {
+            let combined = crate::challenge::coop_rule(world, activity).is_some_and(|(rule, _, _)| rule.points_combined());
+            world.objectives.groups[gi].points_combined = Some(combined);
+            combined
+        }
+    };
+    if !combined {
         return own;
     }
     world.objectives.groups.iter()
-        .filter(|x| x.activity == g.activity)
+        .filter(|x| x.activity == activity)
         .filter_map(|x| x.objectives.get(closure.objective))
         .fold(0_u32, |sum, o| sum.wrapping_add(o.total_points))
 }

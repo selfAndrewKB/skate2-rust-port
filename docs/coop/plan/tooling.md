@@ -44,8 +44,9 @@ the waterfront spawn, a street with pedestrians; the career's continue point has
 `SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=<round tick>:<x>,<y>,<z>[;...]` the same at round ticks;
 `SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>` knocks down the nearest puppet pedestrian as a hit would
 and sends the contact to its owner; `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<round tick>:<name>` runs a
-named challenge; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[;...]` completes the main
-challenge's active objective of every group as its script would; `SKATE2_DIAGNOSTIC_COOP_ANSWER=
+named challenge; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[@<player>][;...]` completes the main
+challenge's active objective of every group (or of that player's group alone, M7) as its script
+would; `SKATE2_DIAGNOSTIC_COOP_ANSWER=
 yes|no[:<round ticks>]` answers the progression's Yes/No dialog; `SKATE2_DIAGNOSTIC_COOP_TRIGGERS=
 <round tick>:<radius>` lists the trigger volumes around the skater and every objective's state,
 boundary and condition (the volume ids match the conditions' floats through `skate3::id_float`),
@@ -120,6 +121,19 @@ SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
 SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
 SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G;4600:$B;5300:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=6500:accept SKATE2_DIAGNOSTIC_COOP_NUDGE=2700 SKATE2_DIAGNOSTIC_COOP_ZONES=1000" \
 SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G;4700:$B;5400:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=5700:signup;5720:release;5760:signup;7200:service:0" \
+CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
+```
+
+**A typical M7 run** (the opening tutorial under a rules file that makes it `Anyone`'s, player
+0's copies alone completed on both consoles; the logs show "1 of 2 players complete under
+Anyone: the activity completes" at the same tick on both):
+
+```
+printf '{"prefixes": {"m_1a_": "Anyone"}}' > /tmp/coop-rules-anyone.json
+R="1516.5,110.6,-719.6"; M="1569.5,109.3,-693.9"; G="1598.6,107.1,-662.0"
+SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
+SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_COOP_RULES=/tmp/coop-rules-anyone.json SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400@0;2500@0;2600@0;2700@0;2800@0;2900@0;3000@0;3100@0" \
+SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G" \
 CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
 ```
 

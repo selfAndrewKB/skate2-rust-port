@@ -40,10 +40,6 @@ Front page: [README](../README.md).
 36. A copy's failure is remembered until its objective activates again (`failed_sent`); a
     script that fails and re-activates an objective every tick (the go-to missions) hears the
     failure every tick under every kind, as before.
-38. `GetAccumulatedPoints` under a campaign resolves the activity's rule on every call
-    (`coop_rule`: two attribute lookups, the players and the name cloned), per objective per
-    tick; a rule cached on the group at activation is the fix if a profile shows it (review,
-    2026-11-10, deferred).
 37. Each console reads its own rules file; two different files split the round silently
     beyond the hash each traces at the round start. The design has the creator's table ride
     the campaign's `GameReset`; not built.

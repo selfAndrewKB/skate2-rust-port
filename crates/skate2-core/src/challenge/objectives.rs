@@ -247,6 +247,9 @@ pub struct ObjectiveGroup {
     pub objectives: Vec<Objective>,
     pub evaluate: bool,
     pub points_objective: Option<usize>,
+    /// Co-op fork (M7): whether this group's points add up with its siblings' (`Combined`),
+    /// resolved once from the rule on first use.
+    pub points_combined: Option<bool>,
     pub points_requirement: u32,
     /// `tObjectiveFlow`: 0 all at start, 1 sequenced.
     pub flow_type: i32,
@@ -543,6 +546,7 @@ pub fn add_objective_challenge(world: &mut World, activity: usize, player: i32, 
         objectives: Vec::new(),
         evaluate: true,
         points_objective: None,
+        points_combined: None,
         points_requirement: 0,
         flow_type: flow.0,
         max_active: flow.1,
