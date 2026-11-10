@@ -2,5 +2,6 @@
 
 Read `AGENTS.md` first: its reconstruction rules bind every change here.
 
-Co-op project notes, branch policy and per-machine setup: `docs/coop/README.md`. This file and
+Co-op project notes, branch policy and per-machine setup: `docs/coop/README.md`; the analysis and
+design record: `docs/coop/design.md`. This file and
 `docs/coop/` exist only on the `coop` branch; upstream PRs branch from `main`.

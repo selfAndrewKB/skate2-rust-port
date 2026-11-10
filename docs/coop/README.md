@@ -4,6 +4,12 @@ This fork (`selfAndrewKB/skate2-rust-port`) adds co-op campaign play on top of t
 online multiplayer. Work happens on a Mac (Apple silicon) and a Windows PC; this folder is the
 shared project knowledge for both. Upstream's rules in `AGENTS.md` still apply to all code.
 
+## Documents
+
+- `design.md`: the analysis of the port's netcode, career and living world, the paradigms
+  considered, the recommended architecture, method, milestones and the open decisions.
+- `setup-macos.md`, `setup-windows.md`: per-machine notes.
+
 ## Branches
 
 - `main` tracks `upstream/main` (skate6743). Keep it clean; never commit co-op work to it.
