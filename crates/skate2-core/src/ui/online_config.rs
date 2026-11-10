@@ -32,11 +32,14 @@ pub struct OnlineConfig {
     /// Show Ghost Players in pregame lobby: off, a member waiting in a challenge's pre-game
     /// lobby sees nothing of the challenge's players. On unless the file says otherwise.
     pub show_ghost_players: bool,
+    /// Co-op fork (M8): this console's own stable id, as 16 hex digits, made once on first use
+    /// and kept in the file, so a campaign knows a returning player. Empty until made.
+    pub player_id: String,
 }
 
 impl Default for OnlineConfig {
     fn default() -> Self {
-        Self { nickname: String::new(), server: String::new(), show_lobby_chat: true, show_ghost_players: true }
+        Self { nickname: String::new(), server: String::new(), show_lobby_chat: true, show_ghost_players: true, player_id: String::new() }
     }
 }
 
@@ -58,6 +61,22 @@ impl OnlineConfig {
             None => std::env::current_dir()?,
         }
         .join("online-config.json"))
+    }
+
+    /// Co-op fork (M8): the console's stable id, made and written to the file on first use.
+    pub fn player_id(&mut self) -> u64 {
+        if let Ok(id) = u64::from_str_radix(self.player_id.trim(), 16)
+            && id != 0
+        {
+            return id;
+        }
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |time| time.as_nanos() as u64);
+        let id = (nanos ^ u64::from(std::process::id()).rotate_left(40) ^ 0x9e37_79b9_7f4a_7c15).max(1);
+        self.player_id = format!("{id:016x}");
+        if let Err(error) = self.save() {
+            eprintln!("online-config.json: the player id could not be kept: {error}");
+        }
+        id
     }
 
     /// A missing or unreadable file is the first-use state: no nickname.
@@ -85,11 +104,12 @@ impl OnlineConfig {
 
     fn text(&self) -> String {
         format!(
-            "{{\n  \"nickname\": {},\n  \"server\": {},\n  \"show_lobby_chat\": {},\n  \"show_ghost_players\": {}\n}}\n",
+            "{{\n  \"nickname\": {},\n  \"server\": {},\n  \"show_lobby_chat\": {},\n  \"show_ghost_players\": {},\n  \"player_id\": {}\n}}\n",
             quote(&self.nickname),
             quote(&self.server),
             self.show_lobby_chat,
-            self.show_ghost_players
+            self.show_ghost_players,
+            quote(&self.player_id)
         )
     }
 }
@@ -132,6 +152,8 @@ fn parse(text: &str) -> Option<OnlineConfig> {
             config.show_lobby_chat = reader.boolean()?;
         } else if key == "show_ghost_players" && matches!(reader.peek()?, b't' | b'f') {
             config.show_ghost_players = reader.boolean()?;
+        } else if key == "player_id" && reader.peek()? == b'"' {
+            config.player_id = reader.string()?.trim().to_owned();
         } else {
             reader.skip_value()?;
         }

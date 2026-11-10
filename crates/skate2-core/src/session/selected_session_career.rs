@@ -2033,15 +2033,44 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.inner.player.as_ref().ok_or_else(||error("statistics player absent"))?.selected.owners.services.skaters.backend()
             .load_statistics(stats.as_ref(),&career.system.world().db).map_err(error)?;
         // UnlockablesBackEnd::LoadData 0x8255cd08 over the defaults Init added.
-        let unlocks = store.load_leaf(unlockables::SAVABLE, unlockables::DATA).map_err(error)?;
-        career.system.world_mut().unlockables.load(leaf_tuples(&unlocks));
+        let mut unlocks = store.load_leaf(unlockables::SAVABLE, unlockables::DATA).map_err(error)?;
         // The Sk8ChallengeSystem savable: Sk8ChallengeSystem::LoadData
         // 0x825a2ed8 → cChallengeDynamicHullManager::LoadData 0x82db4330.
-        let hulls = store.load_leaf(dynamic_hull::SAVABLE, dynamic_hull::DATA).map_err(error)?;
-        career.system.world_mut().dynamic_hulls.load(leaf_tuples(&hulls));
+        let mut hulls = store.load_leaf(dynamic_hull::SAVABLE, dynamic_hull::DATA).map_err(error)?;
         // The profile's SignPost savable: cSignPostManager::LoadData 0x825e53d8.
         let leaf = |name: &str| store.load_leaf(signpost_progress::SAVABLE, name).map_err(error);
-        let saved = [leaf(signpost_progress::DATA)?, leaf(signpost_progress::POSITION)?, leaf(signpost_progress::MESSAGES)?];
+        let mut saved = [leaf(signpost_progress::DATA)?, leaf(signpost_progress::POSITION)?, leaf(signpost_progress::MESSAGES)?];
+        // Co-op fork (M8): in a campaign the server's save is the truth: its progression
+        // leaves take the local file's places (the skater's own orientation stays the file's),
+        // so two players resume at the same progression whatever each file held.
+        if self.online_campaign()
+            && let Some(adopt) = self.online.campaign_adopt.take()
+        {
+            let local: Vec<(&'static str, u32, Vec<Vec<u8>>)> = [
+                (signpost_progress::DATA, &saved[0]),
+                (signpost_progress::MESSAGES, &saved[2]),
+                (unlockables::DATA, &unlocks),
+                (dynamic_hull::DATA, &hulls),
+            ]
+            .into_iter()
+            .filter_map(|(name, leaf)| leaf.as_ref().map(|l| (name, l.version, l.tuples.clone())))
+            .collect();
+            let local_hash = self.campaign_blob_hash(&local);
+            crate::coop::trace(format_args!(
+                "campaign: the server's save adopted (session {} tick {}, hash {:016x}); the local file's progression {}",
+                adopt.session,
+                adopt.tick,
+                adopt.hash,
+                if local_hash == adopt.hash { "agreed".to_owned() } else { format!("differed (hash {local_hash:016x})") }
+            ));
+            let take = |name: &str| adopt.leaves.iter().find(|leaf| leaf.0 == name).map(|leaf| MemcardLeaf { version: leaf.1, tuples: leaf.2.clone() });
+            if let Some(leaf) = take(unlockables::DATA) { unlocks = Some(leaf); }
+            if let Some(leaf) = take(dynamic_hull::DATA) { hulls = Some(leaf); }
+            if let Some(leaf) = take(signpost_progress::DATA) { saved[0] = Some(leaf); }
+            if let Some(leaf) = take(signpost_progress::MESSAGES) { saved[2] = Some(leaf); }
+        }
+        career.system.world_mut().unlockables.load(leaf_tuples(&unlocks));
+        career.system.world_mut().dynamic_hulls.load(leaf_tuples(&hulls));
         signpost_progress::load(career.system.world_mut(), leaf_tuples(&saved[0]), leaf_tuples(&saved[1]), leaf_tuples(&saved[2]));
         if std::env::var_os("SKATE2_TRACE_CAREER").is_some() {
             let signpost = &career.system.world().signpost;

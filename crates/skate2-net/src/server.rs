@@ -158,6 +158,9 @@ fn next_id(counter: &mut u32, in_use: impl Fn(u32) -> bool) -> u32 {
 #[derive(Debug)]
 struct User {
     id: u64,
+    /// Co-op fork (M8): the console's own stable id, 0 when it has none; a new sign-in with
+    /// the same id is the same player back, and the old connection goes at once.
+    player_id: u64,
     name: String,
     /// The game version its hello named, which the lobby browser's games match.
     version: String,
@@ -232,10 +235,18 @@ struct Campaign {
     loaded: BTreeSet<u64>,
     /// The session the campaign round started as.
     started: Option<u32>,
-    /// The newest save: the member (by slot), the round tick, the hash, the bytes.
-    save: Option<(u8, u32, u64, Arc<Vec<u8>>)>,
+    /// The newest save: the member (by slot), the session and round tick it was made at, the
+    /// hash, the bytes. Newest by session, then tick; a save read from the file is session 0.
+    save: Option<(u8, u32, u32, u64, Arc<Vec<u8>>)>,
     /// Each member's last save: tick and hash.
     saves_seen: BTreeMap<u64, (u32, u64)>,
+}
+
+/// Co-op fork (M8): the campaign's save file beside the server, by the lobby's key: written at
+/// every save, read when the campaign lobby is made, so a campaign survives the server's
+/// restart.
+fn campaign_save_path(challenge_key: u64) -> String {
+    format!("campaign-{challenge_key:016x}.save")
 }
 
 /// A freeskate activity proposed in an online free skate (`Message_GameProposal`).
@@ -612,8 +623,8 @@ impl ServerCore {
         let Some(user_id) = self.user_id(id) else {
             // The game's first message is its hello, on the reliable channel, and it sends nothing
             // else until it is welcomed: it pings and acknowledges frames only once signed in.
-            if reliable && let ClientMessage::Hello { nickname, game_version } = &message {
-                self.hello(id, nickname, game_version, now);
+            if reliable && let ClientMessage::Hello { nickname, game_version, player_id } = &message {
+                self.hello(id, nickname, game_version, *player_id, now);
             } else {
                 (self.log)(&format!("connection {id} sent something before signing in: dropped"));
                 self.drop_connection(id, leave::KICKED_BEFORE_SIGN_IN, now);
@@ -690,7 +701,7 @@ impl ServerCore {
         }
     }
 
-    fn hello(&mut self, id: u32, nickname: &str, version: &str, now: Instant) {
+    fn hello(&mut self, id: u32, nickname: &str, version: &str, player_id: u64, now: Instant) {
         // The game signs in only with what its nickname prompt makes.
         if !valid_nickname(nickname) {
             (self.log)(&format!("connection {id} signed in with a nickname the game cannot make ({} bytes): dropped", nickname.len()));
@@ -702,6 +713,14 @@ impl ServerCore {
             self.drop_connection(id, leave::KICKED_FOR_NICKNAME, now);
             return;
         }
+        // Co-op fork (M8): the same player back (its stable id) drops its old connection at
+        // once, instead of the transport's timeout: a campaign's slot frees for the rejoin.
+        if player_id != 0
+            && let Some(old) = self.connections.iter().find(|(old, c)| **old != id && c.user.as_ref().is_some_and(|user| user.player_id == player_id)).map(|(old, _)| *old)
+        {
+            (self.log)(&format!("connection {id} is player {player_id:016x} back: its old connection {old} dropped"));
+            self.drop_connection(old, leave::LOST_CONNECTION, now);
+        }
         let user_id = loop {
             let candidate = self.random.next();
             if candidate != 0 && self.connections.values().all(|c| c.user.as_ref().is_none_or(|user| user.id != candidate)) {
@@ -709,9 +728,9 @@ impl ServerCore {
             }
         };
         let name = nickname.to_owned();
-        (self.log)(&format!("connection {id} signed in as {name} ({user_id:016x})"));
+        (self.log)(&format!("connection {id} signed in as {name} ({user_id:016x}, player {player_id:016x})"));
         if let Some(connection) = self.connections.get_mut(&id) {
-            connection.user = Some(User { id: user_id, name, version: version.to_owned(), game: None, content: None });
+            connection.user = Some(User { id: user_id, player_id, name, version: version.to_owned(), game: None, content: None });
         }
         self.send(id, &ServerMessage::Welcome { user_id });
     }
@@ -808,7 +827,16 @@ impl ServerCore {
                         kicked: BTreeSet::new(),
                         proposal: None,
                         activity: None,
-                        campaign: campaign.then(Campaign::default),
+                        campaign: campaign.then(|| {
+                            let mut made = Campaign::default();
+                            let path = campaign_save_path(location);
+                            if let Ok(data) = std::fs::read(&path) {
+                                let hash = data.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
+                                (self.log)(&format!("campaign save read from {path}: {} B, hash {hash:016x}; a member's newer one supersedes it", data.len()));
+                                made.save = Some((0, 0, 0, hash, Arc::new(data)));
+                            }
+                            made
+                        }),
                     },
                 );
                 (self.log)(&format!("game {game} created: type {}{} challenge {location:016x}", play.challenge_type, if campaign { " (campaign)" } else { "" }));
@@ -949,8 +977,8 @@ impl ServerCore {
         (self.log)(&format!("{name} joined game {game_id} in slot {slot}"));
         // Co-op fork: a campaign's newest save goes to a joining member, whose console says
         // whether its own agrees (adopting it is M8's).
-        if let Some((owner, tick, hash, data)) = self.games.get(&game_id).and_then(|game| game.campaign.as_ref()).and_then(|campaign| campaign.save.clone()) {
-            self.send(id, &ServerMessage::CampaignSave { slot: owner, tick, hash, data: data.to_vec() });
+        if let Some((owner, session, tick, hash, data)) = self.games.get(&game_id).and_then(|game| game.campaign.as_ref()).and_then(|campaign| campaign.save.clone()) {
+            self.send(id, &ServerMessage::CampaignSave { slot: owner, session, tick, hash, data: data.to_vec() });
         }
     }
 
@@ -1000,18 +1028,32 @@ impl ServerCore {
                 let total = game.members.len();
                 let loaded = campaign.loaded.len();
                 match campaign.started {
-                    Some(session) => (self.log)(&format!("game {game_id}: {name} loaded its career after campaign round {session} started: it runs its career alone (a join in progress is not supported yet)")),
-                    None => (self.log)(&format!("game {game_id}: {name} loaded its career ({loaded} of {total})")),
+                    Some(session) => {
+                        // Co-op fork (M8): a member loaded after the round started: every
+                        // member reloads from the newest save and the round restarts with
+                        // everyone once every member has loaded again.
+                        (self.log)(&format!("game {game_id}: {name} loaded its career after campaign round {session} started: every member reloads from the newest save and the round restarts"));
+                        campaign.started = None;
+                        campaign.loaded.clear();
+                        let save = campaign.save.clone();
+                        if let Some((owner, save_session, tick, hash, data)) = save {
+                            self.broadcast(game_id, &ServerMessage::CampaignSave { slot: owner, session: save_session, tick, hash, data: data.to_vec() }, None);
+                        }
+                        self.broadcast(game_id, &ServerMessage::CampaignReload { session }, None);
+                    }
+                    None => {
+                        (self.log)(&format!("game {game_id}: {name} loaded its career ({loaded} of {total})"));
+                        self.start_campaign(game_id, false);
+                    }
                 }
-                self.start_campaign(game_id, false);
                 true
             }
-            ClientMessage::CampaignSave { tick, hash, data } => {
+            ClientMessage::CampaignSave { session, tick, hash, data } => {
                 let Some(slot) = game.members.iter().find(|member| member.user_id == user_id).map(|member| member.slot) else { return true };
                 campaign.saves_seen.insert(user_id, (*tick, *hash));
-                let newer = campaign.save.as_ref().is_none_or(|(_, held, _, _)| *tick >= *held);
+                let newer = campaign.save.as_ref().is_none_or(|(_, held_session, held_tick, _, _)| (*session, *tick) >= (*held_session, *held_tick));
                 if newer {
-                    campaign.save = Some((slot, *tick, *hash, Arc::new(data.clone())));
+                    campaign.save = Some((slot, *session, *tick, *hash, Arc::new(data.clone())));
                 }
                 let others: Vec<String> = game
                     .members
@@ -1023,10 +1065,12 @@ impl ServerCore {
                         None => format!("{} has not saved", member.name),
                     })
                     .collect();
-                (self.log)(&format!("game {game_id}: campaign save from {name} at tick {tick}: {} B, hash {hash:016x}; {}", data.len(), others.join("; ")));
-                let path = format!("campaign-{:016x}.save", game.attributes.challenge_key);
-                if let Err(error) = std::fs::write(&path, data) {
-                    (self.log)(&format!("game {game_id}: campaign save not written to {path}: {error}"));
+                (self.log)(&format!("game {game_id}: campaign save from {name} at session {session} tick {tick}: {} B, hash {hash:016x}; {}{}", data.len(), others.join("; "), if newer { "" } else { "; older than the held one, not kept" }));
+                if newer {
+                    let path = campaign_save_path(game.attributes.challenge_key);
+                    if let Err(error) = std::fs::write(&path, data) {
+                        (self.log)(&format!("game {game_id}: campaign save not written to {path}: {error}"));
+                    }
                 }
                 true
             }

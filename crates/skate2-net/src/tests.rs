@@ -56,7 +56,7 @@ impl Net {
     }
 
     fn add_at(&mut self, name: &str, build: Build, addr: SocketAddr) -> usize {
-        let core = ClientCore::new(self.clients.len() as u64 + 100, name, "test", build, self.now);
+        let core = ClientCore::new(self.clients.len() as u64 + 100, name, "test", 0, build, self.now);
         self.clients.push((addr, core, Vec::new()));
         self.clients.len() - 1
     }
@@ -577,7 +577,7 @@ fn a_packet_capture_reads_no_message() {
 
 #[test]
 fn an_unreachable_server_times_out() {
-    let mut core = ClientCore::new(1, "Alone", "test", Build::DEVELOPMENT, Instant::now());
+    let mut core = ClientCore::new(1, "Alone", "test", 0, Build::DEVELOPMENT, Instant::now());
     let start = Instant::now();
     core.update(start);
     assert_eq!(core.take_outgoing().len(), 1);

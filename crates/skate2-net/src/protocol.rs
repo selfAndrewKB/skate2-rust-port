@@ -514,7 +514,9 @@ impl FactsNotes {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ClientMessage {
     /// Sign-in: the player's nickname and build.
-    Hello { nickname: String, game_version: String },
+    /// Co-op fork (M8): `player_id` is the console's own stable id (`online-config.json`), so
+    /// a campaign knows a returning player; 0 when the game has none.
+    Hello { nickname: String, game_version: String, player_id: u64 },
     PlayNow(PlayNow),
     /// `StateOnlinePlayNow::CancelPlayNow` 0x82748f40.
     CancelPlayNow,
@@ -579,7 +581,7 @@ pub enum ClientMessage {
     /// Co-op fork: the career's progression savables as this console autosaved them in a
     /// campaign, with their hash and the campaign round's tick: the server keeps the newest and
     /// says whether every console's agree.
-    CampaignSave { tick: u32, hash: u64, data: Vec<u8> },
+    CampaignSave { session: u32, tick: u32, hash: u64, data: Vec<u8> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -638,7 +640,11 @@ pub enum ServerMessage {
     RemoteWorld { slot: u8, tick: u32, data: Vec<u8> },
     /// Co-op fork: the campaign save the server holds, to a member joining the campaign: whose
     /// (by slot), at which round tick, its hash and bytes.
-    CampaignSave { slot: u8, tick: u32, hash: u64, data: Vec<u8> },
+    CampaignSave { slot: u8, session: u32, tick: u32, hash: u64, data: Vec<u8> },
+    /// Co-op fork (M8): every member reloads its career from the campaign's newest save (sent
+    /// just before) and the round restarts with everyone once every member has loaded: a
+    /// member joined a running campaign.
+    CampaignReload { session: u32 },
 }
 
 /// A run: its first tick and length, the frames it is coded against as their distance back from
@@ -680,10 +686,11 @@ impl ClientMessage {
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::new();
         match self {
-            Self::Hello { nickname, game_version } => {
+            Self::Hello { nickname, game_version, player_id } => {
                 w.u8(0);
                 w.string(nickname);
                 w.string(game_version);
+                w.u64(*player_id);
             }
             Self::PlayNow(play) => {
                 w.u8(1);
@@ -788,7 +795,8 @@ impl ClientMessage {
                 w.varint(u64::from(*tick));
                 w.bytes(&data[..data.len().min(MAX_WORLD)]);
             }
-            Self::CampaignSave { tick, hash, data } => {
+            Self::CampaignSave { session, tick, hash, data } => {
+                w.varint(u64::from(*session));
                 w.u8(26);
                 w.varint(u64::from(*tick));
                 w.u64(*hash);
@@ -808,7 +816,7 @@ impl ClientMessage {
     pub fn decode(bytes: &[u8]) -> DecodeResult<Self> {
         let mut r = Reader::new(bytes);
         let message = match r.u8()? {
-            0 => Self::Hello { nickname: r.string(MAX_NAME)?, game_version: r.string(MAX_NAME)? },
+            0 => Self::Hello { nickname: r.string(MAX_NAME)?, game_version: r.string(MAX_NAME)?, player_id: r.u64()? },
             1 => {
                 let mode = match r.u8()? {
                     0 => PlayNowMode::Quick,
@@ -889,7 +897,7 @@ impl ClientMessage {
             }
             24 => Self::Stalled { user_id: r.u64()?, tick: r.u32()? },
             25 => Self::World { tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
-            26 => Self::CampaignSave { tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
+            26 => Self::CampaignSave { session: r.varint_u32()?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
             _ => return Err(DecodeError("unknown client message")),
         };
         r.finish()?;
@@ -1052,12 +1060,17 @@ impl ServerMessage {
                 w.varint(u64::from(*tick));
                 w.bytes(&data[..data.len().min(MAX_WORLD)]);
             }
-            Self::CampaignSave { slot, tick, hash, data } => {
+            Self::CampaignSave { slot, session, tick, hash, data } => {
                 w.u8(28);
                 w.u8(*slot);
+                w.varint(u64::from(*session));
                 w.varint(u64::from(*tick));
                 w.u64(*hash);
                 w.bytes(&data[..data.len().min(MAX_CAMPAIGN_SAVE)]);
+            }
+            Self::CampaignReload { session } => {
+                w.u8(29);
+                w.varint(u64::from(*session));
             }
         }
         w.into_vec()
@@ -1148,7 +1161,8 @@ impl ServerMessage {
                 Self::GameProposal { kind, activity: r.u64()?, user_id: r.u64()?, timeout: r.u32()? }
             }
             27 => Self::RemoteWorld { slot: read_slot(&mut r)?, tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
-            28 => Self::CampaignSave { slot: read_slot(&mut r)?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
+            28 => Self::CampaignSave { slot: read_slot(&mut r)?, session: r.varint_u32()?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
+            29 => Self::CampaignReload { session: r.varint_u32()? },
             _ => return Err(DecodeError("unknown server message")),
         };
         r.finish()?;
@@ -1174,7 +1188,7 @@ mod tests {
     #[test]
     fn client_messages_round_trip() {
         let messages = vec![
-            ClientMessage::Hello { nickname: "Skater99".into(), game_version: "v1".into() },
+            ClientMessage::Hello { nickname: "Skater99".into(), game_version: "v1".into(), player_id: 0x0123_4567_89ab_cdef },
             ClientMessage::PlayNow(PlayNow {
                 mode: PlayNowMode::Custom,
                 ranked: false,
@@ -1213,7 +1227,7 @@ mod tests {
             ClientMessage::Stalled { user_id: 0x1234_5678_9abc_def0, tick: (3 << 20) + 77 },
             ClientMessage::World { tick: 4242, data: vec![7; 300] },
             ClientMessage::World { tick: 0, data: vec![] },
-            ClientMessage::CampaignSave { tick: 77, hash: 0xfeed_beef_1234_5678, data: vec![3; 5000] },
+            ClientMessage::CampaignSave { session: 2, tick: 77, hash: 0xfeed_beef_1234_5678, data: vec![3; 5000] },
         ];
         for message in messages {
             assert_eq!(ClientMessage::decode(&message.encode()).unwrap(), message);
@@ -1259,7 +1273,8 @@ mod tests {
             ServerMessage::GameProposal { kind: proposal::BROADCAST, activity: 0x34, user_id: 6, timeout: 15_000 },
             ServerMessage::GameProposal { kind: proposal::MISSED, activity: 0x34, user_id: 0, timeout: 0 },
             ServerMessage::RemoteWorld { slot: 3, tick: 4242, data: vec![7; 300] },
-            ServerMessage::CampaignSave { slot: 1, tick: 77, hash: 0xfeed_beef_1234_5678, data: vec![3; 5000] },
+            ServerMessage::CampaignSave { slot: 1, session: 2, tick: 77, hash: 0xfeed_beef_1234_5678, data: vec![3; 5000] },
+            ServerMessage::CampaignReload { session: 3 },
         ];
         for message in messages {
             assert_eq!(ServerMessage::decode(&message.encode()).unwrap(), message);

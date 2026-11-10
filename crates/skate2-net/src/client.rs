@@ -78,7 +78,7 @@ pub struct ClientCore {
 impl ClientCore {
     /// A client of `build` connecting.
     #[must_use]
-    pub fn new(nonce: u64, nickname: &str, game_version: &str, build: Build, now: Instant) -> Self {
+    pub fn new(nonce: u64, nickname: &str, game_version: &str, player_id: u64, build: Build, now: Instant) -> Self {
         let (state, events) = match Handshake::new() {
             Some(handshake) => (State::Connecting { nonce, next_attempt: now, deadline: now + CONNECT_TIMEOUT, handshake: Box::new(handshake) }, Vec::new()),
             None => (State::Closed, vec![ClientEvent::Disconnected(Disconnect::Network("no system random source".to_owned()))]),
@@ -86,7 +86,7 @@ impl ClientCore {
         Self {
             state,
             build,
-            hello: ClientMessage::Hello { nickname: nickname.to_owned(), game_version: game_version.to_owned() },
+            hello: ClientMessage::Hello { nickname: nickname.to_owned(), game_version: game_version.to_owned(), player_id },
             events,
             outgoing: Vec::new(),
             own_frames: FrameSender::default(),
@@ -351,7 +351,7 @@ pub struct Client {
 impl Client {
     /// Starts connecting to `server` (`host:port`) as `nickname`.
     #[must_use]
-    pub fn connect(server: &str, nickname: &str, game_version: &str) -> Self {
+    pub fn connect(server: &str, nickname: &str, game_version: &str, player_id: u64) -> Self {
         let (commands, command_queue) = mpsc::channel();
         let (event_queue, events) = mpsc::channel();
         let server = server.to_owned();
@@ -360,7 +360,7 @@ impl Client {
         let thread = std::thread::Builder::new()
             .name("online".into())
             .spawn(move || {
-                if let Err(error) = run_client(&server, &nickname, &game_version, &command_queue, &event_queue) {
+                if let Err(error) = run_client(&server, &nickname, &game_version, player_id, &command_queue, &event_queue) {
                     let _ = event_queue.send(ClientEvent::Disconnected(Disconnect::Network(error)));
                 }
             })
@@ -478,7 +478,7 @@ impl Impairment {
     }
 }
 
-fn run_client(server: &str, nickname: &str, game_version: &str, commands: &Receiver<Command>, events: &Sender<ClientEvent>) -> Result<(), String> {
+fn run_client(server: &str, nickname: &str, game_version: &str, player_id: u64, commands: &Receiver<Command>, events: &Sender<ClientEvent>) -> Result<(), String> {
     let addr = resolve(server)?;
     let socket = UdpSocket::bind(("0.0.0.0", 0)).map_err(|error| error.to_string())?;
     socket.connect(addr).map_err(|error| error.to_string())?;
@@ -487,7 +487,7 @@ fn run_client(server: &str, nickname: &str, game_version: &str, commands: &Recei
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0x5eed, |time| u64::from(time.subsec_nanos()) ^ time.as_secs().rotate_left(32))
         | 1;
-    let mut core = ClientCore::new(nonce, nickname, game_version, Build::current(), Instant::now());
+    let mut core = ClientCore::new(nonce, nickname, game_version, player_id, Build::current(), Instant::now());
     let mut impairment = Impairment::from_env(nonce);
     let mut buffer = [0_u8; 2048];
     let mut loading: Option<Instant> = None;

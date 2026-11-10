@@ -148,6 +148,14 @@ impl OnlineGame {
     }
 }
 
+/// Co-op fork (M8): the campaign save the server holds, decoded for the career's load.
+pub(super) struct AdoptedSave {
+    pub(super) session: u32,
+    pub(super) tick: u32,
+    pub(super) hash: u64,
+    pub(super) leaves: Vec<coop_campaign::Leaf>,
+}
+
 /// The session's online state.
 #[derive(Default)]
 pub(super) struct Online {
@@ -170,6 +178,11 @@ pub(super) struct Online {
     pub(super) campaign_hold: bool,
     /// Co-op fork: the round tick the bench's dialog answer saw the dialog open.
     coop_dialog_opened: Option<u32>,
+    /// Co-op fork (M8): the campaign's newest save as the server sent it, decoded, held for
+    /// the career's next load, which takes it in place of the local file's progression.
+    pub(super) campaign_adopt: Option<AdoptedSave>,
+    /// Co-op fork (M8): the connection was lost in a campaign; the next sign-in rejoins it.
+    campaign_rejoin: bool,
     /// `SKATE2_DIAGNOSTIC_ONLINE` made its request.
     diagnostic_requested: bool,
     /// Co-op fork: the last reason `SKATE2_DIAGNOSTIC_ONLINE` waited, traced when it changes.
@@ -331,13 +344,14 @@ impl<T, C> SelectedLiveSession<T, C> {
         if matches!(self.online.sign_in, SignIn::Connecting | SignIn::SignedIn) {
             return;
         }
-        let config = OnlineConfig::load();
+        let mut config = OnlineConfig::load();
         if !config.has_nickname() {
             return;
         }
-        trace(format_args!("signing in to {} as {}", config.server(), config.nickname.trim()));
+        let player_id = config.player_id();
+        trace(format_args!("signing in to {} as {} (player {player_id:016x})", config.server(), config.nickname.trim()));
         self.online.nickname = config.nickname.trim().to_owned();
-        self.online.client = Some(Client::connect(config.server(), &self.online.nickname, crate::online::GAME_VERSION));
+        self.online.client = Some(Client::connect(config.server(), &self.online.nickname, crate::online::GAME_VERSION, player_id));
         self.online.loading_told = false;
         self.online.sign_in = SignIn::Connecting;
     }
@@ -388,6 +402,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                     self.online.sign_in = SignIn::SignedIn;
                     self.online.user_id = Some(user_id);
                     self.online_send_content()?;
+                    // Co-op fork (M8): back after a lost connection: the campaign lobby again.
+                    if std::mem::take(&mut self.online.campaign_rejoin) {
+                        let key = skate2_net::protocol::campaign::KEY;
+                        crate::coop::trace(format_args!("campaign: signed in again, rejoining the campaign lobby"));
+                        self.online_play_now(MatchRequest { mode: PlayNowMode::Campaign, ranked: false, challenge_type: challenge::CAMPAIGN, challenge_key: None, private: false, create: false, fallback_key: key });
+                    }
                 }
                 ClientEvent::Disconnected(reason) => {
                     trace(format_args!("disconnected: {reason:?} (build {})", skate2_net::crypto::Build::current().id()));
@@ -398,7 +418,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     self.online.searching = None;
                     self.online.sign_in = SignIn::Failed(reason);
                     self.online.user_id = None;
-                    if had_game {
+                    let campaign_entered = self.online.game.as_ref().is_some_and(|game| game.entered && game.attributes.challenge_type == challenge::CAMPAIGN);
+                    if had_game && campaign_entered && !update && !nickname {
+                        self.online_campaign_dropped()?;
+                    } else if had_game {
                         self.online_game_lost(OnlineNotice::Disconnected)?;
                     } else {
                         self.online.notices.push(if update {
@@ -849,10 +872,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
             }
             ServerMessage::GameReset { kind, seed, session, participants, activity } => self.online_game_reset(kind, seed, session, &participants, activity)?,
-            ServerMessage::CampaignSave { slot, tick, hash, data } => crate::coop::trace(format_args!(
-                "the server holds a campaign save from slot {slot} at round tick {tick}: {} B, hash {hash:016x} (adopting it is M8's)",
-                data.len()
-            )),
+            ServerMessage::CampaignSave { slot, session, tick, hash, data } => match coop_campaign::progression_leaves(&data) {
+                Some(leaves) => {
+                    crate::coop::trace(format_args!(
+                        "campaign: the server's save from slot {slot} at session {session} round tick {tick}: {} B, hash {hash:016x}, {} leaves, held for the career's load",
+                        data.len(),
+                        leaves.len()
+                    ));
+                    self.online.campaign_adopt = Some(AdoptedSave { session, tick, hash, leaves });
+                }
+                None => crate::coop::trace(format_args!("campaign: the server's save from slot {slot} ({} B, hash {hash:016x}) does not decode: ignored, the local file loads", data.len())),
+            },
+            ServerMessage::CampaignReload { session } => self.online_campaign_reload(session)?,
             ServerMessage::GameProposal { kind, activity, user_id, timeout } => self.online_proposal(kind, activity, user_id, timeout)?,
             ServerMessage::Vote { user_id, score } => self.online_vote(user_id, score),
             ServerMessage::SyncPoint { round } => self.online_sync_point_released(round)?,
@@ -1228,6 +1259,18 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// nothing of the online free skate (its area, its frozen hulls, its hub) applies, the
     /// career's own stand. `start_career` then enters the game (`online_campaign_entered`).
     pub(super) fn start_online_campaign(&mut self) -> Result<(), SelectedLiveError> {
+        // A reload (M8) or a rejoin starts over: no round, no shared world, the scripts held.
+        if self.online.round.take().is_some()
+            && let Some(input) = self.inner.bound_input.as_ref()
+        {
+            input.try_set_online_pause(false).map_err(error)?;
+        }
+        self.online.coop = coop_world::CoopWorld::default();
+        self.online.campaign_hold = false;
+        self.online.coop_dialog_opened = None;
+        if let Some(game) = self.online.game.as_mut() {
+            game.entered = false;
+        }
         let new_career = Self::profile_is_new()?;
         trace(format_args!("campaign lobby: the career starts as {}", if new_career { "New Career" } else { "Continue Career" }));
         if new_career {
@@ -1237,6 +1280,47 @@ impl<T, C> SelectedLiveSession<T, C> {
             self.enter_single_player()?;
             self.career_start_pending = true;
         }
+        Ok(())
+    }
+
+    /// Co-op fork (M8): the server asks every member to reload: the career goes behind the fade
+    /// and starts again from the server's save (held in `campaign_adopt`), as a game joined
+    /// from play does; the round restarts once every member has loaded.
+    fn online_campaign_reload(&mut self, session: u32) -> Result<(), SelectedLiveError> {
+        if !self.online_campaign() {
+            return Ok(());
+        }
+        crate::coop::trace(format_args!(
+            "campaign: the server asks for a reload after round {session}: the career restarts from the server's save ({})",
+            match self.online.campaign_adopt.as_ref() {
+                Some(adopt) => format!("session {} tick {}, hash {:016x}", adopt.session, adopt.tick, adopt.hash),
+                None => "none held: the local file".to_owned(),
+            }
+        ));
+        self.online.start = Some(CAMPAIGN_START);
+        self.frontend_fade.cover();
+        Ok(())
+    }
+
+    /// Co-op fork (M8): the connection was lost in a campaign. The career stays up but held
+    /// (its scripts do not tick without the round), the game's state goes, and the next sign-in
+    /// rejoins the campaign lobby, whose join brings the server's save and a reload for all.
+    fn online_campaign_dropped(&mut self) -> Result<(), SelectedLiveError> {
+        crate::coop::trace(format_args!("campaign: the connection was lost; the career waits, signing in again to rejoin"));
+        if self.online.round.take().is_some()
+            && let Some(input) = self.inner.bound_input.as_ref()
+        {
+            input.try_set_online_pause(false).map_err(error)?;
+        }
+        self.online.campaign_hold = true;
+        self.online.coop = coop_world::CoopWorld::default();
+        self.online.game = None;
+        self.online.chat = None;
+        self.online.start = None;
+        self.online.event_log.clear();
+        self.online.notices.push(OnlineNotice::Disconnected);
+        self.online.campaign_rejoin = true;
+        self.online_sign_in();
         Ok(())
     }
 

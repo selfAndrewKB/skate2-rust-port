@@ -7,7 +7,7 @@ use super::{SelectedLiveError, SelectedLiveSession};
 use crate::coop::trace;
 use skate2_net::protocol::ClientMessage;
 
-type Leaf = (&'static str, u32, Vec<Vec<u8>>);
+pub(super) type Leaf = (&'static str, u32, Vec<Vec<u8>>);
 
 /// `SKATE2_DIAGNOSTIC_COOP_ANSWER=yes|no[:<ticks>]`: the progression's Yes/No dialog answered that
 /// many round ticks (default 60) after it opens, the same tick on every console, so the bench
@@ -130,6 +130,47 @@ fn progression_blob(leaves: &[Leaf]) -> Vec<u8> {
     out
 }
 
+/// The blob back into leaves (M8): the inverse of [`progression_blob`], each name mapped to its
+/// savable's constant; a name no savable has, or a cut blob, is `None`.
+pub(super) fn progression_leaves(data: &[u8]) -> Option<Vec<Leaf>> {
+    use crate::challenge::{dynamic_hull, signpost_progress, unlockables};
+    fn u32_at(data: &[u8], at: &mut usize) -> Option<u32> {
+        let bytes: [u8; 4] = data.get(*at..*at + 4)?.try_into().ok()?;
+        *at += 4;
+        Some(u32::from_le_bytes(bytes))
+    }
+    let mut at = 0_usize;
+    let mut leaves = Vec::new();
+    while at < data.len() {
+        let name_len = u32_at(data, &mut at)? as usize;
+        let name = std::str::from_utf8(data.get(at..at + name_len)?).ok()?;
+        at += name_len;
+        let name: &'static str = match name {
+            signpost_progress::DATA => signpost_progress::DATA,
+            signpost_progress::MESSAGES => signpost_progress::MESSAGES,
+            signpost_progress::POSITION => signpost_progress::POSITION,
+            unlockables::DATA => unlockables::DATA,
+            dynamic_hull::DATA => dynamic_hull::DATA,
+            _ => return None,
+        };
+        let version = u32_at(data, &mut at)?;
+        let count = u32_at(data, &mut at)? as usize;
+        let mut tuples = Vec::with_capacity(count.min(4096));
+        for _ in 0..count {
+            let len = u32_at(data, &mut at)? as usize;
+            tuples.push(data.get(at..at + len)?.to_vec());
+            at += len;
+        }
+        leaves.push((name, version, tuples));
+    }
+    Some(leaves)
+}
+
+/// The hash of leaves as the server compares them (M8: the local file's against the server's).
+fn blob_hash(leaves: &[Leaf]) -> u64 {
+    fnv1a(&progression_blob(leaves))
+}
+
 fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
 }
@@ -140,17 +181,23 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.online_campaign() && self.online.campaign_hold && self.online.round.is_none()
     }
 
+    /// M8: the hash of the local file's progression leaves, as the server would compare them.
+    pub(in super::super) fn campaign_blob_hash(&self, leaves: &[(&'static str, u32, Vec<Vec<u8>>)]) -> u64 {
+        blob_hash(leaves)
+    }
+
     /// The career autosaved in a campaign: its progression to the server, hashed.
     pub(in super::super) fn online_campaign_saved(&mut self, leaves: &[Leaf], unlocks: &[Leaf], hulls: &[Leaf]) {
         let Some(tick) = self.campaign_round_tick() else { return };
+        let session = self.online.round.as_ref().map_or(0, |round| round.session);
         let mut all: Vec<Leaf> = Vec::new();
         all.extend_from_slice(leaves);
         all.extend_from_slice(unlocks);
         all.extend_from_slice(hulls);
         let data = progression_blob(&all);
         let hash = fnv1a(&data);
-        trace(format_args!("campaign save at round tick {tick}: {} B, hash {hash:016x}, to the server", data.len()));
-        self.online.send(ClientMessage::CampaignSave { tick, hash, data });
+        trace(format_args!("campaign save at session {session} round tick {tick}: {} B, hash {hash:016x}, to the server", data.len()));
+        self.online.send(ClientMessage::CampaignSave { session, tick, hash, data });
     }
 
     /// Before a campaign round's tick runs the scripts: the bench's inputs, at the round tick.
@@ -232,6 +279,23 @@ impl<T, C> SelectedLiveSession<T, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_blob_comes_back_as_leaves() {
+        let leaves: Vec<Leaf> = vec![
+            (crate::challenge::signpost_progress::DATA, 14, vec![vec![1, 2, 3], vec![]]),
+            (crate::challenge::signpost_progress::MESSAGES, 1, vec![vec![9; 300]]),
+            (crate::challenge::unlockables::DATA, 1, vec![vec![4, 5]]),
+            (crate::challenge::dynamic_hull::DATA, 3, vec![vec![0, 0, 0, 2], vec![7, 7]]),
+        ];
+        let data = progression_blob(&leaves);
+        assert_eq!(progression_leaves(&data), Some(leaves.clone()));
+        assert_eq!(progression_leaves(&data[..data.len() - 1]), None, "a cut blob is refused");
+        let mut other = data.clone();
+        other[4] = b'x';
+        assert_eq!(progression_leaves(&other), None, "an unknown savable is refused");
+        assert_eq!(progression_leaves(&[]), Some(Vec::new()));
+    }
 
     #[test]
     fn the_blob_leaves_the_skaters_own_orientation_out() {
