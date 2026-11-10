@@ -60,8 +60,13 @@ impl PedestrianConstruction {
         let speed = (velocity[0] * velocity[0] + velocity[2] * velocity[2]).sqrt();
         let animation = self.animation.as_mut().ok_or("puppet intent animation absent")?;
         let queue = self.intent_queue.as_mut().ok_or("puppet intent queue absent")?;
-        let mappings = animation.selected_animation_data()?.try_pedestrian_speed_mappings()?;
-        queue.select_speed_mapping(speed, &mappings)?;
+        // As `update_base_locomotion`: while the motion graph plays a locomotion transition or
+        // a turn, the intents stay as they are (re-selecting them every tick restarted the
+        // transition every tick: the player saw pedestrians limp).
+        if animation.ai_input.locomotion_turn_complete && animation.ai_input.locomotion_transition_complete {
+            let mappings = animation.selected_animation_data()?.try_pedestrian_speed_mappings()?;
+            queue.select_speed_mapping(speed, &mappings)?;
+        }
         animation.motion_intents.valid = true;
         animation.motion_intents.set_packet(queue.base.active()?);
         Ok(())
