@@ -37,6 +37,11 @@ own skater, never both.
 - **Commits as the work goes** (the player, 2026-11-10: "commit as you go along"), each finished
   step its own commit on `coop`, pushed to the fork; no attribution lines of any kind (the player,
   2026-11-09). A milestone is tagged `coop-vX.Y.Z-name` ([versions](versions.md)).
+- **Reviewed before tagged** (the player, 2026-11-10: peer reviews as standard practice):
+  every milestone's whole diff is read by a reviewer who did not write it before its tag is
+  pushed, each finding fixed or recorded in the open items, and the ledger row says
+  "reviewed"; a commit that changes the wire format or the completion rules is reviewed on
+  its own as well. M0 to M6 were tagged before the rule; M6's review ran with M7's.
 - **No images in the repository** (the player, 2026-11-10). Captures and logs that prove a
   milestone live in `../bench/evidence/` beside the repository, dated, and are named by path.
 - **Upstream hygiene**: `main` tracks upstream; co-op work lives on `coop`; a fix worth sending
@@ -95,3 +100,4 @@ stream as pedestrians do or through the replay recorder's living-world record
   as a note added to Decided.
 - 2026-11-10 (M6): world ids for life, the handoff by epoch, the puppet as the owner's copy
   and the population by the nearer console added to Decided.
+- 2026-11-10 (M7): reviewed before tagged added to In force.

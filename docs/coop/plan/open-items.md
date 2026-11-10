@@ -33,6 +33,21 @@ Front page: [README](../README.md).
     velocity through the speed table, so a startled run shows as a run and nothing else. The
     owner's graph behaviour (a small index) is the next thing to stream if play wants it.
 
+## Kinds ([topic](topics/kinds.md), M7)
+
+35. `BestOf` decides completion like `Anyone`; the best single run's score on the results
+    screen and the leaderboard is still each console's own display, not the best copy's.
+36. A copy's failure is remembered until its objective activates again (`failed_sent`); a
+    script that fails and re-activates an objective every tick (the go-to missions) hears the
+    failure every tick under every kind, as before.
+38. `GetAccumulatedPoints` under a campaign resolves the activity's rule on every call
+    (`coop_rule`: two attribute lookups, the players and the name cloned), per objective per
+    tick; a rule cached on the group at activation is the fix if a profile shows it (review,
+    2026-11-10, deferred).
+37. Each console reads its own rules file; two different files split the round silently
+    beyond the hash each traces at the round start. The design has the creator's table ride
+    the campaign's `GameReset`; not built.
+
 ## Play (2026-11-10, the player, M5 build)
 
 31. Pedestrians' positions and the dodge when run into are synced; their models differ per
@@ -54,8 +69,9 @@ Front page: [README](../README.md).
 10. A member who loads its career after the campaign round started runs its career alone; the
     server names it in its log. Joining a running campaign is M8's (the server's save adopted,
     the round's tick caught up).
-11. The tutorials' `eChallengeTypes` family number is unknown; the built-in rule table names
-    the opening tutorials by prefix (`m_1a_`).
+11. Retired by M7: the families are `binding_table.rs`'s `eChallengeTypes` enumeration
+    (tutorial 0, security 17, the races and contests, best trick 8, Own the Spot 9, Hall of
+    Meat 31 and 33); the built-in table names them ([kinds](topics/kinds.md)).
 12. With one objective group per player the HUD may list both copies' objectives; not looked
     at on the bench (no HUD capture of it) [UNKNOWN].
 13. The Start State Machine's "New to skate?" dialog does not come back on Continue with a

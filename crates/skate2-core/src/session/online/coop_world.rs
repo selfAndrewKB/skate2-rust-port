@@ -87,6 +87,8 @@ struct Stats {
     contacts_sent: u32,
     contacts_applied: u32,
     confirmed: u32,
+    /// Records received and ignored for an epoch older than the table's.
+    stale: u32,
     since: u32,
 }
 
@@ -127,6 +129,9 @@ pub(in super::super) struct CoopWorld {
     despawns: Vec<u32>,
     /// Puppets handed to this console, promoted at the next tick.
     promotions: Vec<u32>,
+    /// This console's own entities another console claimed with a higher epoch, demoted at
+    /// the next tick.
+    demotions: Vec<u32>,
     /// Contacts the others reported on this console's own entities.
     received_contacts: Vec<Contact>,
     /// Entities handed over, with the runs left to say so (the record names the new owner).
@@ -191,6 +196,22 @@ fn distance_squared(a: [f32; 4], b: [f32; 4]) -> f32 {
     (0..3).map(|lane| (a[lane] - b[lane]) * (a[lane] - b[lane])).sum()
 }
 
+/// A pedestrian's state on the wire (`coop::world_stream::flags`): down, colliding, the hit's
+/// force and direction.
+fn entity_flags(pedestrian: &crate::living_world_pedestrian_entity::PedestrianConstruction) -> u8 {
+    let mut entity_flags = 0;
+    if pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) {
+        entity_flags |= flags::KNOCKED_DOWN;
+    }
+    if pedestrian.collision.as_ref().is_some_and(|collision| collision.colliding) {
+        entity_flags |= flags::COLLIDING;
+        if pedestrian.collision_info.force == CollisionForce::Standing {
+            entity_flags |= flags::STANDING_HIT;
+        }
+    }
+    entity_flags | (((pedestrian.collision_info.direction as u32 as u8) << flags::DIRECTION_SHIFT) & flags::DIRECTION_MASK)
+}
+
 impl<T, C> SelectedLiveSession<T, C> {
     /// Another member's world run, from the connection's events: sorted into samples for known
     /// puppets, spawns for new entities, despawns and the contacts on this console's own.
@@ -218,6 +239,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             let known = coop.entities.get_mut(&id);
             let stale = known.as_ref().is_some_and(|known| entity.epoch < known.epoch || (entity.epoch == known.epoch && known.owner == Owner::Local));
             if stale {
+                // Received and ignored: an older epoch than the table's (counted; the
+                // measurement line says how many).
+                coop.stats.stale += 1;
                 continue;
             }
             if entity.owner == local_slot {
@@ -244,6 +268,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let old = known.owner;
                         known.owner = ownership::decide(known.kind, id, Some(old), Owner::Remote(entity.owner), &format!("handed over (epoch {})", entity.epoch));
                         known.epoch = entity.epoch;
+                        if old == Owner::Local {
+                            // This console's copy stops simulating it: a puppet from the next tick.
+                            coop.demotions.push(id);
+                        }
                     }
                     coop.updates.push(entity);
                 }
@@ -285,16 +313,21 @@ impl<T, C> SelectedLiveSession<T, C> {
                 trace(format_args!("diagnostic: teleport to {position:?} at {tick}: {}", self.diagnostic_teleport_local_player(position)));
             }
         }
-        // The other players' testers from the facts (the same on every console), for the
-        // handoff rule.
-        let peers: Vec<(u8, [f32; 4])> = self
+        // Every player's tester from the facts (the same instant on every console: the
+        // processed tick's), for the handoff rule; the local one among them, so the rule
+        // never compares a live position with a two-second-old one.
+        let (peers, own_facts): (Vec<(u8, [f32; 4])>, Option<[f32; 4]>) = self
             .career
             .as_ref()
             .map(|career| {
-                career.system.world().skaters.iter()
+                let frames = &career.system.world().skaters;
+                let at = |frame: &crate::challenge::mission::MissionFrame| [frame.tester_base[0], frame.tester_base[1], frame.tester_base[2], 1.];
+                let peers = frames.iter()
                     .filter(|frame| !frame.local && frame.tester_valid)
-                    .filter_map(|frame| Some((u8::try_from(frame.player).ok()?, [frame.tester_base[0], frame.tester_base[1], frame.tester_base[2], 1.])))
-                    .collect()
+                    .filter_map(|frame| Some((u8::try_from(frame.player).ok()?, at(frame))))
+                    .collect();
+                let own = frames.iter().find(|frame| frame.local && frame.tester_valid).map(at);
+                (peers, own)
             })
             .unwrap_or_default();
         let mut coop = std::mem::take(&mut self.online.coop);
@@ -314,6 +347,19 @@ impl<T, C> SelectedLiveSession<T, C> {
                 {
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
                     let roster = living.pedestrian_entities.as_deref_mut().ok_or("pedestrian EntityMan absent")?;
+                    // 0. Own entities another console claimed become puppets first.
+                    for id in std::mem::take(&mut coop.demotions) {
+                        let Some(known) = coop.entities.get(&id).filter(|known| known.owner != Owner::Local) else { continue };
+                        let Some(pedestrian) = roster.get_mut(known.entity) else { continue };
+                        if pedestrian.puppet.is_none()
+                            && let Some(core) = pedestrian.core.as_mut()
+                        {
+                            core.allow_culling = false;
+                            let transform = core.transform;
+                            pedestrian.puppet = Some(PuppetDrive::new(transform));
+                            trace(format_args!("own pedestrian {id:08x} demoted: another console claimed it at {tick}"));
+                        }
+                    }
                     for sample in coop.updates.drain(..) {
                         let Some(puppet) = coop.entities.get_mut(&sample.id).filter(|known| known.owner != Owner::Local) else { continue };
                         let Some(pedestrian) = roster.get_mut(puppet.entity) else {
@@ -541,7 +587,6 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
                 let mut run = WorldRun::default();
                 let mut owned = Vec::new();
-                let mut guards = BTreeSet::new();
                 let roster_size;
                 {
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
@@ -562,9 +607,6 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         let Some(core) = pedestrian.core.as_ref() else { continue };
                         let guard = pedestrian.security_guard.is_some();
-                        if guard {
-                            guards.insert(id);
-                        }
                         let d2 = distance_squared(core.transform[3], centre);
                         if d2 > STREAM_RADIUS * STREAM_RADIUS {
                             continue;
@@ -579,9 +621,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                         });
                         // The handoff rule: a peer nearer by the margin for a second takes it.
                         let position = core.transform[3];
+                        let own_d2 = own_facts.map_or(d2, |at| distance_squared(position, at));
                         let nearest_peer = peers.iter().map(|&(slot, at)| (distance_squared(position, at), slot)).min_by(|a, b| a.0.total_cmp(&b.0));
                         match nearest_peer {
-                            Some((peer_d2, slot)) if peer_d2.sqrt() + HANDOFF_MARGIN < d2.sqrt() && peer_d2 <= STREAM_RADIUS * STREAM_RADIUS => {
+                            Some((peer_d2, slot)) if peer_d2.sqrt() + HANDOFF_MARGIN < own_d2.sqrt() && peer_d2 <= STREAM_RADIUS * STREAM_RADIUS => {
                                 tracked.nearer = if tracked.nearer.1 == slot { (tracked.nearer.0 + 1, slot) } else { (1, slot) };
                             }
                             _ => tracked.nearer = (0, 0),
@@ -604,17 +647,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             continue;
                         }
                         let Some(core) = pedestrian.core.as_ref() else { continue };
-                        let mut entity_flags = 0;
-                        if pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) {
-                            entity_flags |= flags::KNOCKED_DOWN;
-                        }
-                        if pedestrian.collision.as_ref().is_some_and(|collision| collision.colliding) {
-                            entity_flags |= flags::COLLIDING;
-                            if pedestrian.collision_info.force == CollisionForce::Standing {
-                                entity_flags |= flags::STANDING_HIT;
-                            }
-                        }
-                        entity_flags |= ((pedestrian.collision_info.direction as u32 as u8) << flags::DIRECTION_SHIFT) & flags::DIRECTION_MASK;
+                        let entity_flags = entity_flags(pedestrian);
                         let describe = tracked.runs % DESCRIBE_EVERY == 0;
                         owned.push((d2, EntityState {
                             id: wid,
@@ -640,7 +673,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                         *left -= 1;
                         let Some(tracked) = coop.entities.get(&wid) else { continue };
                         let Owner::Remote(slot) = tracked.owner else { continue };
-                        let Some(core) = roster.get(tracked.entity).and_then(|p| p.core.as_ref()) else { continue };
+                        let Some(pedestrian) = roster.get(tracked.entity) else { continue };
+                        let Some(core) = pedestrian.core.as_ref() else { continue };
                         owned.push((-1., EntityState {
                             id: wid,
                             kind: tracked.kind,
@@ -649,8 +683,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                             position: [core.transform[3][0], core.transform[3][1], core.transform[3][2]],
                             yaw: stream::yaw_of(&core.transform),
                             velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
-                            flags: 0,
-                            motion: 0,
+                            flags: entity_flags(pedestrian),
+                            motion: pedestrian.state_out.state.min(255) as u8,
                             descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices }),
                         }));
                     }
@@ -711,7 +745,6 @@ impl<T, C> SelectedLiveSession<T, C> {
                         tracked.runs += 1;
                     }
                 }
-                let _ = &guards;
                 if included < run.entities.len() {
                     trace(format_args!("world run at {tick}: {} of {} owned pedestrians fit {MAX_WORLD} bytes", included, run.entities.len()));
                 }
@@ -724,10 +757,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let seconds = f64::from(tick.saturating_sub(stats.since)) / 60.;
                     let per_entity = if stats.entities == 0 { 0. } else { stats.bytes as f64 / seconds / (stats.entities as f64 / f64::from(stats.runs.max(1))) };
                     trace(format_args!(
-                        "world stream at {tick}: {} runs, {} entity samples, {} prop samples, {} B ({:.0} B/s, {:.0} B/s per streamed pedestrian), {} owned in range of {} pedestrians here, {} puppets, {} props owned of {} known, contacts sent {} applied {} confirmed {}",
+                        "world stream at {tick}: {} runs, {} entity samples, {} prop samples, {} B ({:.0} B/s, {:.0} B/s per streamed pedestrian), {} owned in range of {} pedestrians here, {} puppets, {} props owned of {} known, contacts sent {} applied {} confirmed {}, {} records ignored for an older epoch",
                         stats.runs, stats.entities, stats.props, stats.bytes, stats.bytes as f64 / seconds, per_entity, run.entities.len(), roster_size, coop.entities.values().filter(|known| known.owner != Owner::Local).count(),
                         coop.props.values().filter(|prop| prop.owner == Owner::Local).count(), coop.props.len(),
-                        stats.contacts_sent, stats.contacts_applied, stats.confirmed
+                        stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.stale
                     ));
                     *stats = Stats { since: tick, ..Default::default() };
                 }

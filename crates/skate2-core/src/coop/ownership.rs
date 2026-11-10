@@ -35,9 +35,12 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// The kinds the run's entity list carries (a story character never travels; a prop has
+    /// its own list).
     pub fn from_wire(kind: u8) -> Option<Self> {
         match kind {
             0 => Some(Self::Pedestrian),
+            2 => Some(Self::SecurityGuard),
             _ => None,
         }
     }
@@ -105,6 +108,7 @@ mod tests {
         assert!(streamed(Kind::Pedestrian) && streamed(Kind::SecurityGuard) && !streamed(Kind::StoryCharacter));
         assert_eq!(Kind::from_wire(0), Some(Kind::Pedestrian));
         assert_eq!(Kind::from_wire(1), None, "a story character never travels");
+        assert_eq!(Kind::from_wire(2), Some(Kind::SecurityGuard), "a guard travels as its kind");
         assert!(claim_wins(None, 1, 1));
         assert!(claim_wins(Some((1, 0)), 2, 1));
         assert!(!claim_wins(Some((2, 0)), 2, 1), "a tie goes to the lower slot");

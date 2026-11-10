@@ -29,12 +29,18 @@ pub enum Rule {
 }
 
 impl Rule {
+    /// How many of `copies` player copies must be complete for the activity to be: every one,
+    /// or the first. A completion is heard exactly once, when the count reaches this.
+    pub fn threshold(self, copies: usize) -> usize {
+        match self {
+            Self::Everyone | Self::Compete { every_human_must_win: true } => copies,
+            Self::Anyone | Self::BestOf | Self::Combined | Self::Compete { every_human_must_win: false } => 1,
+        }
+    }
+
     /// Whether an activity with `complete` of `copies` player copies complete is complete.
     pub fn completes(self, complete: usize, copies: usize) -> bool {
-        match self {
-            Self::Everyone | Self::Compete { every_human_must_win: true } => complete == copies,
-            Self::Anyone | Self::BestOf | Self::Combined | Self::Compete { every_human_must_win: false } => complete >= 1,
-        }
+        complete >= self.threshold(copies)
     }
 
     /// Whether an activity with `failed` of `copies` player copies failed is failed.
@@ -419,10 +425,12 @@ mod tests {
         for rule in any {
             assert!(rule.completes(1, 2) && !rule.completes(0, 2));
             assert!(!rule.fails(1, 2) && rule.fails(2, 2));
+            assert_eq!(rule.threshold(2), 1);
         }
         for rule in all {
             assert!(!rule.completes(1, 2) && rule.completes(2, 2));
             assert!(rule.fails(1, 2));
+            assert_eq!(rule.threshold(2), 2);
         }
         assert!(Rule::Combined.points_combined() && !Rule::BestOf.points_combined());
     }

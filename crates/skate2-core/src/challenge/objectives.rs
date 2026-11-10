@@ -687,7 +687,7 @@ fn presentation_plays(world: &World, group: u32, index: usize, status: Status) -
     }
     let count = siblings.iter().filter(|x| x.objectives.get(index).is_some_and(|o| o.state == status)).count();
     let plays = match status {
-        Status::Complete => rule.completes(count, siblings.len()) && (count == siblings.len() || count == 1),
+        Status::Complete => count == rule.threshold(siblings.len()),
         _ => count == 1,
     };
     crate::coop::trace(format_args!(
@@ -727,7 +727,7 @@ fn script_hears(world: &World, class_name: &str, handle: usize, index: usize) ->
     let (count, send) = match class_name {
         "cMsgObjectiveComplete" => {
             let count = with(Status::Complete);
-            (count, rule.completes(count, siblings.len()) && (count == siblings.len() || count == 1))
+            (count, count == rule.threshold(siblings.len()))
         }
         "cMsgObjectiveActivate" => (with(Status::Active), with(Status::Active) == 1),
         "cMsgObjectiveFailed" => {
@@ -737,9 +737,8 @@ fn script_hears(world: &World, class_name: &str, handle: usize, index: usize) ->
         _ => (1, true),
     };
     // The activations and failures come every tick from a script that resets its objectives
-    // each tick (the go-to missions'); only the completions, and a failure withheld, are worth
-    // a line.
-    if class_name == "cMsgObjectiveComplete" || (class_name == "cMsgObjectiveFailed" && !send) {
+    // each tick (the go-to missions'); only the completions are worth a line.
+    if class_name == "cMsgObjectiveComplete" {
         crate::coop::trace(format_args!(
             "{name}: {class_name} of objective {index} from player {}: {count} of {} copies under {rule:?}: {}",
             g.player,
@@ -1336,7 +1335,9 @@ fn on_objective_completed(world: &mut World, group: u32, completed: &[usize]) {
                 let first = siblings.iter().min_by_key(|x| x.player).map_or(g.handle, |x| x.handle);
                 let complete_players: Vec<i32> = siblings.iter().filter(|x| x.objectives.iter().all(|o| o.state == Status::Complete)).map(|x| x.player).collect();
                 let all = complete_players.len() == siblings.len();
-                let send = rule.completes(complete_players.len(), siblings.len());
+                // Heard once: at the rule's threshold, not again when another copy completes
+                // in the same tick (its group was listed before the first retired it).
+                let send = complete_players.len() == rule.threshold(siblings.len());
                 crate::coop::trace(format_args!(
                     "rule: {name}: player {player} completed its objectives; {} of {} players complete under {rule:?}: {}",
                     complete_players.len(),

@@ -59,7 +59,12 @@ stream follow); `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>` scans the security g
 within 1500 m of the skater and traces the nearest point of each (the bench's way into a
 chase).
 The career's own `SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a
-seat. `COOP_EXECUTE` and `COOP_COMPLETE` act on the seat that carries them only (a mission a
+seat. The completion rules: `coop-rules.json` beside the saves (a seat's folder on the bench) or
+`SKATE2_COOP_RULES=<file>`, e.g. `{"prefixes": {"m_1a_": "Anyone"}}` to let the first seat's
+completion end the opening tutorial for both ([kinds](topics/kinds.md)); every seat reads its
+own file, so every seat must read the same one or the round splits (the hash traced at the
+round start on each console says; sending the creator's table is owed,
+[open items](open-items.md) 37). `COOP_EXECUTE` and `COOP_COMPLETE` act on the seat that carries them only (a mission a
 diagnostic starts is not a note, unlike a sign-up's accept), so a mission run belongs in
 `SEAT_EXTRA`, every seat's: with it on one seat alone the mission ran there alone while the
 other seat idled in the same round (2026-11-10, a run not kept).
