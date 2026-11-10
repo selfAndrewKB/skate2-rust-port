@@ -256,15 +256,20 @@ pub fn remove_groups(world: &mut World, activity: u64) {
 
 /// `StartPresentation` (`0x82e07bc0`).
 pub fn start(world: &mut World, group: u32) {
+    // The native queue holds 8; a ninth start is dropped. Co-op fork: in a campaign the
+    // objectives' presentations of every player's copy queue behind a scene that holds the
+    // director, and a dropped start can be the script's own outro group, which the script
+    // then waits on forever (M4, M7 on the bench); a campaign's queue holds 32.
+    let capacity = if world.coop.is_some() { 32 } else { 8 };
     let director = &mut world.presentation;
     if let Some(active) = director.active {
-        if (!director.queued.is_empty() || active != group) && director.queued.last() != Some(&group) && director.queued.len() < 8 {
+        if (!director.queued.is_empty() || active != group) && director.queued.last() != Some(&group) && director.queued.len() < capacity {
             director.queued.push(group);
         } else if world.coop.is_some() {
             crate::coop::trace(format_args!(
                 "presentation group {group} not queued behind {active}: {} queued{}",
                 director.queued.len(),
-                if director.queued.len() >= 8 { " (the queue is full: this start is lost)" } else { "" }
+                if director.queued.len() >= capacity { " (the queue is full: this start is lost)" } else { "" }
             ));
         }
         return;

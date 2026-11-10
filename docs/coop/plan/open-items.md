@@ -138,12 +138,12 @@ Front page: [README](../README.md).
 20. An end only a non-leader console saw (a speech line the leader's audio cut short) is never
     delivered to its scripts: it stays in the round's log. The port's rule, kept; watch for a
     script waiting on it in play.
-21. The presentation director's queue is 8 deep and a ninth start is dropped (the port's
-    rule). The bench's `COOP_COMPLETE` diagnostic completes objectives while an outro scene
-    holds the director, so some activation and completion presentations are lost there
-    (`not queued ... lost` in the trace); a person cannot complete objectives during a scene,
-    so this is the bench's, not play's. A callout start retried every tick by the go-to script
-    traces the same line each tick while a scene holds the director.
+21. The presentation director's queue is 8 deep natively and a ninth start is dropped. The
+    bench's `COOP_COMPLETE` diagnostic completes objectives while an outro scene holds the
+    director, and the dropped start was twice the script's own outro group, which the script
+    waits on forever (M4's second run, M7's second proof run under `Anyone`); a campaign's
+    queue holds 32 now (`presentation::start`). A callout start retried every tick by the
+    go-to script still traces the same line each tick while a scene holds the director.
 22. The go-to script resets its objectives every tick, so `cMsgObjectiveActivate` and
     `cMsgObjectiveFailed` reach it every tick; heard once per tick now, not traced (it would be
     a line a tick).
