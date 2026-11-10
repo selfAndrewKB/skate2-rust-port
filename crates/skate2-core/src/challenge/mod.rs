@@ -39,9 +39,10 @@ mod natives;
 pub mod objective_data;
 
 /// Co-op fork, the ledger's "nearest player who is up" kind for the boxes the world tests the
-/// skater against (sign-up boxes, global activities, discovery volumes, dynamic hulls, story
-/// characters): in a campaign every player's tester, read from the facts alike on every
-/// console; otherwise the local player's. A box any player stands in counts.
+/// skater against (sign-up boxes, global activities, discovery volumes, dynamic hulls): in a
+/// campaign every player's tester, read from the facts alike on every console; otherwise the
+/// local player's. A box any player stands in counts. Story characters are not among them:
+/// each console spawns its own where its own skater is (`characters.rs`, M5).
 pub(crate) fn tester_bases(world: &system::World) -> Vec<[f32; 3]> {
     if world.coop.is_some() && !world.player_states.is_empty() {
         world.player_states.iter().filter_map(|(_, state)| state.tester_base).collect()

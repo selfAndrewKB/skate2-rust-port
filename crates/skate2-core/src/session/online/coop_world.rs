@@ -83,6 +83,8 @@ pub(in super::super) struct CoopWorld {
     announced: BTreeMap<u32, u32>,
     /// This console's entities gone from its roster, with the runs left to say so.
     gone: BTreeMap<u32, u8>,
+    /// This console's own story characters (never streamed), each decided once.
+    own: BTreeSet<u32>,
     bad_runs: u32,
     shoved: bool,
     stats: Stats,
@@ -336,6 +338,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                         if pedestrian.puppet.is_some() {
                             continue;
                         }
+                        // A pedestrian a challenge placed is every console's own (M5).
+                        if pedestrian.challenge_owner.is_some() {
+                            if coop.own.insert(id) {
+                                ownership::decide(Kind::StoryCharacter, id, None, ownership::owner(Kind::StoryCharacter, Owner::Local), "a challenge placed it: every console's own, not streamed");
+                            }
+                            continue;
+                        }
                         let Some(core) = pedestrian.core.as_ref() else { continue };
                         let d2 = distance_squared(core.transform[3], centre);
                         if d2 > STREAM_RADIUS * STREAM_RADIUS {
@@ -380,6 +389,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         trace(format_args!("contact on puppet {id:08x} of slot {}: force {force} direction {direction}, reported to its owner at {tick}", puppet.owner));
                     }
                     // Entities announced before and gone from the roster are despawned to the others.
+                    coop.own.retain(|id| present.contains(id));
                     let gone: Vec<u32> = coop.announced.keys().filter(|id| !present.contains(id)).copied().collect();
                     for id in gone {
                         coop.announced.remove(&id);

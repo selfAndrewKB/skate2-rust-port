@@ -985,9 +985,12 @@ pub(crate) fn update(world: &mut World) {
 }
 
 /// `SpotTestCharactersAgainstLocalPlayer` (0x825ac7e8): the local skater's tester box, while
-/// its tester is valid.
+/// its tester is valid. In a campaign too (co-op fork, M5): a story character is every
+/// console's own (`coop::ownership::Rule::EachConsole`), spawned where its own skater is, so
+/// the test stays the local tester's; a test per player's tester (M3) released and re-queued
+/// an entry every tick whenever one tester stood in its box and the other did not.
 fn spot_test_characters_against_local_player(world: &mut World) {
-    for base in super::tester_bases(world) {
+    if let Some(base) = world.player.tester_base {
         test_bbox_against_tree(world, tester_bounds(base));
     }
 }
