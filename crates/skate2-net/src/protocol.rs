@@ -796,8 +796,8 @@ impl ClientMessage {
                 w.bytes(&data[..data.len().min(MAX_WORLD)]);
             }
             Self::CampaignSave { session, tick, hash, data } => {
-                w.varint(u64::from(*session));
                 w.u8(26);
+                w.varint(u64::from(*session));
                 w.varint(u64::from(*tick));
                 w.u64(*hash);
                 w.bytes(&data[..data.len().min(MAX_CAMPAIGN_SAVE)]);
