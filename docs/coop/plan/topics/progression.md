@@ -56,7 +56,9 @@ back on Continue with a mission done, so the bench did not pass through it (its 
   differs") by one leaf, `cSignPost::Position`, whose rotation floats differed in their low bits
   (each seat's own physics; `cmp` of the two `SKATER.P`, the dump tool's `Position` row); M2's
   agreement was the identical teleports'. The leaf left out of the blob and the hash
-  (`coop_campaign.rs`, tested).
+  (`coop_campaign.rs`, tested); the next run's saves agreed again, 130246 B, hash
+  `e6a2db1d166eb003`, the server: "Seat 2 agrees (tick 5284)"
+  (`../bench/evidence/2026-11-10-m4e-*.log`) [CONFIRMED on the bench].
 - 2026-11-10 M2 (commits `1917acc` server, `da0e21d` client, then the fixes): the round would
   not tick until the server relayed facts outside a challenge phase; the hold leaked queued
   events through `flush` (one seat's global activities started early); the go-to objectives

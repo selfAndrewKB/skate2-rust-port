@@ -50,7 +50,11 @@ own skater; a mission's presentation played once per activity. Front page:
   completions); the end phase waited for its outro and both seats entered `challenge_cleanup` at
   4233 and autosaved at 4234; then M3's sign-up and accept started the flip-tricks tutorial on
   both at 6652. The starts the director dropped in that run are the bench's doing
-  ([open items](../open-items.md) 21).
+  ([open items](../open-items.md) 21). The next run (`2026-11-10-m4e-*.log`) took the end
+  phase's other presentation, the welcome-back scene itself (`01_Welcome_Back` at 3511 on both,
+  3 characters, none a player, its end delivered on both at 5162, `challenge_cleanup` at 5283
+  on both): which of the two the script plays varies between runs and never between seats
+  [ASSUMPTION: the round's seed decides it; the two runs' seeds differ].
 
 **Not done:** a story scene with the players' skaters in it; a movie; a skip press; whether the
 NIS state's "skip" prompt still shows while refused [UNKNOWN]; the results screen's replay
