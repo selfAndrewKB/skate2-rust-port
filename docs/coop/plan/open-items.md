@@ -116,6 +116,21 @@ Front page: [README](../README.md).
     skater may not count as skating in the zone, and the census's security spawn switch may be
     off; a run with the skater moving, or a person, decides.
 
+## Saves ([topic](topics/saves.md), M8)
+
+41. New Career inside a campaign lobby is unexercised: the career starts from nothing on that
+    console while the others hold the server's progression, and its first autosave would then
+    be the newest. By design a campaign is joined on Continue Career; a guard (refuse New
+    Career once the server holds a save, or adopt after Create-a-Skater) is to decide in play.
+42. A reload for a late joiner uses the newest autosave the server holds; mission progress since
+    it is lost for every member. A save request before the reload (the leader autosaving on
+    `ChallengeLoaded`) would narrow the loss; not done.
+43. One campaign per server: the save file is keyed by the lobby's constant key, so two campaign
+    lobbies on one server would share a file. Fine for one server per group of friends; a key
+    per lobby (the host's player id) if a public server is ever wanted.
+44. No notice is shown to the player while the rejoin runs (the career sits held behind the
+    fade); a HUD line is to add.
+
 ## Prompts ([topic](topics/prompts.md))
 
 15. A note is applied one to two seconds after the press on the bench (the round's processed

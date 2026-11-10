@@ -2,7 +2,8 @@
 """The mission crawl (M8): every campaign mission run on the two-seat bench, one bench start per
 mission, the saves carried forward, each mission executed by name at round tick 900 and won by
 diagnostic at 1800 (`SKATE2_DIAGNOSTIC_COOP_WIN`), and the logs read for the end phase and the
-saves' agreement. The report says which missions complete in co-op and where each one stopped.
+saves' agreement (a mission that sends no save, such as a tutorial, passes as "no save"). The report
+says which missions complete in co-op and where each one stopped.
 
     python3 tools/coop/crawl.py --list                       # the missions (challenge_global_data m_*), by name
     python3 tools/coop/crawl.py --run [--from NAME] [--count N] [--out REPORT.md]
@@ -103,6 +104,8 @@ def verdict(r):
         return 'NOT EXECUTED'
     if any(r[s]['failed'] for s in (1, 2)):
         return 'CRASHED'
+    if both and not any(r[s]['save'] for s in (1, 2)):
+        return 'PASS (no save)'
     if both:
         return 'PASS (saves differ)'
     return 'STOPPED'

@@ -188,7 +188,8 @@ database (`SKATE2_CAREER_DB`); `--run [--from NAME] [--count N]` runs them on th
 start at a time with the saves carried forward (`BENCH_KEEP`), each executed by name at round
 tick 900 and won by diagnostic at 1800, and appends one row per mission to
 `../bench/evidence/<date>-crawl.md`: PASS (both seats reached `challenge_cleanup` and the saves
-agree), STOPPED (with each seat's last state), NOT EXECUTED, CRASHED. Each mission's logs are
+agree), PASS (no save) (a tutorial that autosaves nothing), PASS (saves differ), STOPPED (with
+each seat's last state), NOT EXECUTED, CRASHED. Each mission's logs are
 kept as `crawl-<name>-seat-N.log`. About three minutes a mission.
 
 ## The synchronization audit

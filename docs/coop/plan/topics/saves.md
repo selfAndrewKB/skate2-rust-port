@@ -34,22 +34,24 @@ file, made the campaign lobby, seated both, and round 1064924775 started with 2 
   made (as session 0, so any member's live save supersedes it): a campaign survives the
   server's restart. The blob decodes back into leaves (`progression_leaves`, tested).
 - **Resume: the server's save is the truth.** A joining member receives the newest blob before
-  its career loads; `start_career` in a campaign takes its leaves in place of the local file's
-  (the orientation stays the file's) and traces whether the local progression agreed or
-  differed. Either player can still continue alone from their own `SKATER.P`, which the next
+  its career loads; `start_career` in a campaign, on Continue Career, takes its leaves in place
+  of the local file's (the orientation stays the file's) and traces whether the local
+  progression agreed or differed; New Career starts from nothing, as it does alone. Either player can still continue alone from their own `SKATER.P`, which the next
   autosave brings up to the campaign's progression.
 - **Identity.** Each console's `online-config.json` holds a `player_id` (16 hex digits, made
   once on first use); it rides the hello (protocol 121). A sign-in with a player id the server
   already has drops that old connection at once, so a returning player's slot frees without
   the transport's 10 s or the campaign's 15 s.
 - **A member joining a running campaign.** The server, on a `ChallengeLoaded` after the round
-  started, sends every member the newest save and `CampaignReload`, clears the round's start,
-  and starts it again once every member has loaded: each console takes its career down behind
-  the fade and starts it again from the server's save, exactly as a game joined from play is
-  entered; the round restarts at tick 0 with everyone. Mission progress since the last
+  started, sends every other member the newest save and `CampaignReload` (the joiner's load,
+  from that save, stands), clears the round's start, and starts it again once they have loaded:
+  each of those consoles takes its career down behind the fade and starts it again from the
+  server's save, exactly as a game joined from play is entered; the round restarts at tick 0
+  with everyone (the net test `campaign` covers the reload's recipients and the restart with
+  three; the `m8b` run predates the review and reloaded the joiner too). Mission progress since the last
   autosave is lost for all, as a reload would lose it.
-- **Reconnect.** A console whose connection drops in a campaign keeps its career up but held
-  (no scripts tick without the round), signs in again after a second and rejoins the campaign
+- **Reconnect.** A console whose connection drops in a campaign, its career loading or up,
+  keeps the career (held: no scripts tick without the round), signs in again after a second and rejoins the campaign
   lobby, trying again every three seconds while the server is not back; the join brings the
   server's save and, if the others' round runs, a reload for everyone.
 
