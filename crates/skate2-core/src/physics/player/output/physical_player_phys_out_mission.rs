@@ -140,6 +140,9 @@ impl PhysicalPlayerPhysOut {
             banked_point_change: scoring.banked_point_change_this_frame,
             hom_bail_in_progress: scoring.ho_m_bail_in_progress,
             hom_bail_completed: scoring.ho_m_bail_completed,
+            // Co-op fork: the chase is the session's to fill (`career_mission_frames`).
+            being_chased: false,
+            jacked: false,
             hom_body_tweak: bail.just_performed_body_tweak.then_some(bail.current_body_tweak),
             just_started_line_timer: scoring.just_started_line_timer,
             is_onboard_or_hippy_jumping: scoring.is_onboard_or_hippy_jumping,

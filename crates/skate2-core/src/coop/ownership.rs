@@ -27,6 +27,8 @@ pub enum Kind {
     /// A pedestrian a challenge placed (`challenge_owner` set): a story character, or in profile
     /// free skate a no-skate-zone guard.
     StoryCharacter = 1,
+    /// A security guard of the census (`security_guard` set): streamed as a pedestrian.
+    SecurityGuard = 2,
 }
 
 impl Kind {
@@ -45,6 +47,10 @@ pub enum Rule {
     Spawner,
     /// Every console's own: each spawns and simulates its copy, and none travels.
     EachConsole,
+    /// The console of the player it chases. A guard chases only the skater of the console
+    /// that simulates it (a remote skater is a replay, not an actor), so until M6's migration
+    /// that is its spawner; its puppets elsewhere perceive and chase nobody.
+    Chasee,
 }
 
 /// The rule for a kind. One table, read here and nowhere else.
@@ -52,13 +58,14 @@ pub fn rule(kind: Kind) -> Rule {
     match kind {
         Kind::Pedestrian => Rule::Spawner,
         Kind::StoryCharacter => Rule::EachConsole,
+        Kind::SecurityGuard => Rule::Chasee,
     }
 }
 
 /// The owner an entity gets under its kind's rule.
 pub fn owner(kind: Kind, spawner: Owner) -> Owner {
     match rule(kind) {
-        Rule::Spawner => spawner,
+        Rule::Spawner | Rule::Chasee => spawner,
         Rule::EachConsole => Owner::Local,
     }
 }
@@ -66,8 +73,23 @@ pub fn owner(kind: Kind, spawner: Owner) -> Owner {
 /// Whether the owner streams a kind to the others.
 pub fn streamed(kind: Kind) -> bool {
     match rule(kind) {
-        Rule::Spawner => true,
+        Rule::Spawner | Rule::Chasee => true,
         Rule::EachConsole => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_table_names_every_kind() {
+        assert_eq!(owner(Kind::Pedestrian, Owner::Remote(1)), Owner::Remote(1));
+        assert_eq!(owner(Kind::SecurityGuard, Owner::Remote(1)), Owner::Remote(1));
+        assert_eq!(owner(Kind::StoryCharacter, Owner::Remote(1)), Owner::Local);
+        assert!(streamed(Kind::Pedestrian) && streamed(Kind::SecurityGuard) && !streamed(Kind::StoryCharacter));
+        assert_eq!(Kind::from_wire(0), Some(Kind::Pedestrian));
+        assert_eq!(Kind::from_wire(1), None, "a story character never travels");
     }
 }
 

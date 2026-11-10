@@ -28,13 +28,20 @@ impl super::SelectedRecipeFrame<'_> {
                 &mut living, world, target.entity, cvars, &actors, &painter, self.vault, &avoid,
                 simulation_random.as_deref_mut(),Some(ground),|entity, frame| {
                     frame.pedestrian_prestate_prefix(entity, target.dt, ground)?;
-                    frame.update_threats(entity, local_player_index, ground)?;
-                    frame.update_needs_and_wants(entity, local_player_index)?;
-                    frame.update_chasee(entity, target.dt)?;
-                    frame.update_zone_interests(entity)?;
+                    // Co-op fork (M5): a puppet is its owner's: it perceives no threats, wants
+                    // nothing, chases and guards nobody here (a guard chases only the skater
+                    // of the console that simulates it); its graph still animates it.
+                    if entity.puppet.is_none() {
+                        frame.update_threats(entity, local_player_index, ground)?;
+                        frame.update_needs_and_wants(entity, local_player_index)?;
+                        frame.update_chasee(entity, target.dt)?;
+                        frame.update_zone_interests(entity)?;
+                    }
                     frame.pedestrian_prestate_suffix(entity)?;
-                    frame.security_guard_prestate_suffix(entity, target.dt)?;
-                    frame.big_black_prestate(entity)?;
+                    if entity.puppet.is_none() {
+                        frame.security_guard_prestate_suffix(entity, target.dt)?;
+                        frame.big_black_prestate(entity)?;
+                    }
                     // BasicEntity82e4c1d0 checks the actual optional AI graph.
                     if entity.ai_bindings.is_some() { entity.update_ai_graph(target.dt, frame)?; }
                     // Pedestrian.UpdateState82e6eaf0 clears tAnimData+68,

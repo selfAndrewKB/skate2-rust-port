@@ -150,6 +150,8 @@ impl FactsScope {
             just_wiped_out: frame.just_wiped_out,
             hom_bail_in_progress: frame.hom_bail_in_progress,
             hom_bail_completed: frame.hom_bail_completed,
+            being_chased: frame.being_chased,
+            jacked: frame.jacked,
             current_air_initial_scorable: -1,
             current_gesture: GESTURE_NONE,
             ..MissionFrame::default()
@@ -556,7 +558,7 @@ fn i32r(r: &mut Reader<'_>) -> DecodeResult<i32> {
 }
 
 /// The frame's flags, one bit each in this order.
-fn flags(frame: &MissionFrame) -> [bool; 38] {
+fn flags(frame: &MissionFrame) -> [bool; 40] {
     let [f0, f1, f2] = frame.finished_pattern_matches;
     let [c0, c1, c2] = frame.current_pattern_matches;
     [
@@ -598,6 +600,8 @@ fn flags(frame: &MissionFrame) -> [bool; 38] {
         frame.sequence_completed_successfully,
         frame.is_in_state_ground,
         frame.wiping_out,
+        frame.being_chased,
+        frame.jacked,
     ]
 }
 
@@ -846,6 +850,8 @@ fn read_layout(data: &[u8]) -> DecodeResult<MissionFrame> {
         sequence_completed_successfully,
         is_in_state_ground,
         wiping_out,
+        being_chased,
+        jacked,
     ] = unpack(r.u64()?);
     let big: [bool; 30] = unpack(u64::from(r.u32()?));
     let mut frame = MissionFrame {
@@ -873,6 +879,8 @@ fn read_layout(data: &[u8]) -> DecodeResult<MissionFrame> {
         sequence_completed_successfully,
         is_in_state_ground,
         wiping_out,
+        being_chased,
+        jacked,
         finished_pattern_matches: [f0, f1, f2],
         current_pattern_matches: [c0, c1, c2],
         big_trick_achieved: std::array::from_fn(|i| [big[2 * i], big[2 * i + 1]]),
@@ -965,6 +973,10 @@ mod tests {
             frame.hom_score = 9000;
             frame.vote = Some(3);
             frame.is_teleport_finished = true;
+        }
+        if tick >= 5 {
+            frame.being_chased = true;
+            frame.jacked = tick == 7;
         }
         frame
     }

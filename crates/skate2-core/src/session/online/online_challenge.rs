@@ -1073,7 +1073,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         world.players = Some(Arc::new(backend));
         world.local_player = local_index;
         world.online = Some(OnlineChallenge { local_player: local_index, players: i32::try_from(count).unwrap_or(0), ..OnlineChallenge::default() });
-        world.coop = Some(crate::coop::rules::CampaignWorld { rules, players: (0..i32::try_from(count).unwrap_or(0)).collect() });
+        world.coop = Some(crate::coop::rules::CampaignWorld { rules, players: (0..i32::try_from(count).unwrap_or(0)).collect(), chase_on: false });
         career.online_random = Some(random);
         career.nis.set_online_game(true);
         // The design's online rule for scenes: no skip, so every console sees a scene end at the

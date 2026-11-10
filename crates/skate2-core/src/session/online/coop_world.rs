@@ -327,6 +327,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
                 let mut run = WorldRun::default();
                 let mut owned = Vec::new();
+                let mut guards = BTreeSet::new();
                 let roster_size;
                 {
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
@@ -346,6 +347,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                             continue;
                         }
                         let Some(core) = pedestrian.core.as_ref() else { continue };
+                        if pedestrian.security_guard.is_some() {
+                            guards.insert(id);
+                        }
                         let d2 = distance_squared(core.transform[3], centre);
                         if d2 > STREAM_RADIUS * STREAM_RADIUS {
                             continue;
@@ -408,7 +412,11 @@ impl<T, C> SelectedLiveSession<T, C> {
                 for entity in &run.entities[..included] {
                     let id = stream::local_id(entity.id);
                     let runs = coop.announced.entry(id).or_insert_with(|| {
-                        ownership::decide(Kind::Pedestrian, entity.id, None, Owner::Local, "this census spawned it");
+                        if guards.contains(&id) {
+                            ownership::decide(Kind::SecurityGuard, entity.id, None, ownership::owner(Kind::SecurityGuard, Owner::Local), "this census spawned it; it chases this console's skater only");
+                        } else {
+                            ownership::decide(Kind::Pedestrian, entity.id, None, Owner::Local, "this census spawned it");
+                        }
                         0
                     });
                     *runs += 1;

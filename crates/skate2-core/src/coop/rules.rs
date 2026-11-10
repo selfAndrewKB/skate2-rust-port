@@ -149,6 +149,9 @@ impl RuleTable {
 pub struct CampaignWorld {
     pub rules: RuleTable,
     pub players: Vec<i32>,
+    /// Whether any player's facts said "chased" at the last tick (the local chase messages'
+    /// edge, M5).
+    pub chase_on: bool,
 }
 
 /// A small JSON reader for the rules file: objects, strings, numbers, booleans and null.

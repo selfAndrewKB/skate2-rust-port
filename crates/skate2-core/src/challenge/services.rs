@@ -132,7 +132,7 @@ fn is_security_service_available(_: &mut Lua<World>, world: &mut World, _: &Nati
 /// IsSecurityServiceAvailable8289c448.
 pub fn security_service_available(world: &World) -> bool {
     let setting = message_setting(world, "Security Available");
-    let chase = world.characters.facts().is_some_and(|facts| facts.chase_is_on());
+    let chase = super::any_player_chased(world);
     let can_start = world.activities.main.is_none() && super::ai::can_start_main_challenge(world);
     setting && !chase && can_start && !world.services.big_black_active && !world.services.introduction_in_progress
 }

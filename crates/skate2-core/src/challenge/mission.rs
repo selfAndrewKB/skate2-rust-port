@@ -162,6 +162,11 @@ pub struct MissionFrame {
     pub banked_point_change: i32,
     pub hom_bail_in_progress: bool,
     pub hom_bail_completed: bool,
+    /// Co-op fork (M5): the skater's own console's `ChaseMan::ChaseIsOn` and
+    /// `IsSkaterBeingJacked`, so every console's scripts read the same chase at the same
+    /// tick; a guard chases only the skater of the console that simulates it.
+    pub being_chased: bool,
+    pub jacked: bool,
     pub hom_effect_enabled: bool,
     pub hom_body_tweak: Option<i32>,
     pub just_started_line_timer: bool,

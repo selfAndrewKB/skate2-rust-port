@@ -226,12 +226,7 @@ fn get_if_player_being_chased(
     world: &mut World,
     _: &NativeCall,
 ) -> LuaResult<Vec<Value>> {
-    Ok(vec![Value::Boolean(
-        world
-            .characters
-            .facts()
-            .is_some_and(|facts| facts.chase_is_on()),
-    )])
+    Ok(vec![Value::Boolean(super::any_player_chased(world))])
 }
 
 pub(crate) fn natives() -> Vec<(&'static str, &'static str, NativeFn<World>)> {

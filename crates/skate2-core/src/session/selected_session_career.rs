@@ -2494,10 +2494,27 @@ impl<T, C> SelectedLiveSession<T, C> {
             };
             let physical = actor.cached_physical_allocation().map_err(error)?;
             let output = physical.owner().phys_out().lock().map_err(|_| error("PhysOut lock poisoned"))?;
-            frames.push(output.try_mission_frame(index, index == local, true).map_err(|e| error(format!("{e:?}")))?);
+            let mut frame = output.try_mission_frame(index, index == local, true).map_err(|e| error(format!("{e:?}")))?;
+            if index == local {
+                // Co-op fork (M5): the chase of this console's skater rides its facts.
+                let (being_chased, jacked) = self.local_chase_state();
+                frame.being_chased = being_chased;
+                frame.jacked = jacked;
+            }
+            frames.push(frame);
         }
         frames.sort_by_key(|frame| frame.player);
         Ok(frames)
+    }
+
+    /// This console's `ChaseMan`: whether its skater is chased, and whether it is being jacked.
+    fn local_chase_state(&self) -> (bool, bool) {
+        let Some(world) = self.inner.world.as_ref() else { return (false, false) };
+        let Ok(world) = world.world.lock() else { return (false, false) };
+        let owner = Arc::clone(world.grind_services.living_world());
+        drop(world);
+        let Ok(living) = owner.lock() else { return (false, false) };
+        living.chase.as_ref().map_or((false, false), |chase| (chase.chase_is_on(), chase.is_skater_being_jacked()))
     }
 
     /// The players back end the challenge natives read and write, and
@@ -2973,6 +2990,17 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
         system.world_mut().local_player = local_index;
         system.world_mut().skaters.clone_from(&frames);
+        // Co-op fork (M5): in a campaign the local chase messages are the facts' edges (any
+        // player's chase), the same tick on every console; the queue's own are dropped above.
+        if let Some(campaign) = system.world_mut().coop.as_mut() {
+            let chased = frames.iter().any(|frame| frame.being_chased);
+            if chased != campaign.chase_on {
+                campaign.chase_on = chased;
+                let name = if chased { "cMsgLocalChaseStart" } else { "cMsgLocalChaseEnd" };
+                crate::coop::trace(format_args!("{name}: {} of {} players chased at tick {}", frames.iter().filter(|frame| frame.being_chased).count(), frames.len(), system.world().online.as_ref().map_or(0, |online| online.tick)));
+                system.post(Event::Challenge(Message::new(name, Vec::new())));
+            }
+        }
         // An online player's teleport is finished once its output says so.
         if let Some(online) = system.world_mut().online.as_mut() {
             for frame in frames.iter().filter(|frame| frame.is_teleport_finished) {

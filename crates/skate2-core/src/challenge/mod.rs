@@ -51,6 +51,16 @@ pub(crate) fn tester_bases(world: &system::World) -> Vec<[f32; 3]> {
     }
 }
 
+/// Co-op fork (M5): whether any player the scripts read is chased, from the facts; outside a
+/// campaign this console's `ChaseMan`.
+pub(crate) fn any_player_chased(world: &system::World) -> bool {
+    if world.coop.is_some() && !world.skaters.is_empty() {
+        world.skaters.iter().any(|frame| frame.being_chased)
+    } else {
+        world.characters.facts().is_some_and(|facts| facts.chase_is_on())
+    }
+}
+
 /// Co-op fork: whether any player the scripts read is in or just out of a Hall of Meat bail.
 pub(crate) fn any_player_hom_bailing(world: &system::World) -> bool {
     if world.coop.is_some() && !world.player_states.is_empty() {
