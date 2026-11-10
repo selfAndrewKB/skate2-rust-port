@@ -6,6 +6,8 @@
 #   tools/coop/bench.sh prime [N]    give N seats a scratch profile with the first mission done (Continue Career),
 #                                    kept as SKATER.P.primed
 #   tools/coop/bench.sh start [N]    start the server and N seats (default 2), each from its primed profile
+#   tools/coop/bench.sh server       start the server alone (M8: it reads campaign-<key>.save back)
+#   tools/coop/bench.sh seat N       start seat N alone, joining the running server (a late join, a rejoin)
 #   tools/coop/bench.sh stop         stop everything the last start began
 #   tools/coop/bench.sh logs         tail every log
 #   tools/coop/bench.sh status       pids and the last line of each log
@@ -87,9 +89,7 @@ prime() {
     wait
 }
 
-start() {
-    [ -x "$GAME" ] || { echo "no game binary at $GAME (build it first)"; exit 1; }
-    [ -f "$SKATE2_GAME_ROOT/default.xex" ] || { echo "no game at $SKATE2_GAME_ROOT"; exit 1; }
+start_server() {
     mkdir -p "$BENCH/server"
     echo "server: $SERVER (log $BENCH/server/server.log)"
     # Every process the bench starts is detached from the caller's stdio (nothing of it stays
@@ -97,22 +97,31 @@ start() {
     # never waits on the games; `stop` reaches them by pid.
     (cd "$BENCH/server" && exec "$GAME" --server "$SERVER" > server.log 2>&1) < /dev/null > /dev/null 2>&1 &
     echo $! > "$BENCH/server/pid"
-    sleep 1
-    i=1
-    while [ "$i" -le "$seats" ]; do
-        dir="$BENCH/seat-$i"
-        mkdir -p "$dir"
+}
+
+# The seat's `player_id` (M8: its stable identity, made by the game on first use) survives the
+# online-config.json the bench rewrites, so a seat started again is the same player back.
+seat_player_id() {
+    [ -f "$1/online-config.json" ] && sed -n 's/.*"player_id": *"\([0-9a-f]*\)".*/\1/p' "$1/online-config.json"
+}
+
+start_seat() {
+    i=$1
+    dir="$BENCH/seat-$i"
+    mkdir -p "$dir"
+    {
         # Every run starts from the primed profile: a run's autosaves (the mission's progress, the
         # dynamic hull states the outro set, a sign-up) would otherwise change what the next run's
         # scripts do (2026-11-10: a replayed opening tutorial waited forever on a hull state the
-        # previous run had saved).
-        if [ -f "$dir/SKATER.P.primed" ]; then
+        # previous run had saved). BENCH_KEEP=1 keeps the last run's save (a crawl, a resume).
+        if [ -f "$dir/SKATER.P.primed" ] && [ -z "${BENCH_KEEP:-}" ]; then
             cp "$dir/SKATER.P.primed" "$dir/SKATER.P"
             rm -f "$dir"/SKATER.P.*.bak
         fi
         # The save root is the seat's folder: config.json, online-config.json, saves/ live here,
         # never in the player's own folder.
-        printf '{\n  "nickname": "Seat %s",\n  "server": "%s",\n  "show_lobby_chat": true,\n  "show_ghost_players": true\n}\n' "$i" "$SERVER" > "$dir/online-config.json"
+        player_id=$(seat_player_id "$dir")
+        printf '{\n  "nickname": "Seat %s",\n  "server": "%s",\n  "show_lobby_chat": true,\n  "show_ghost_players": true,\n  "player_id": "%s"\n}\n' "$i" "$SERVER" "$player_id" > "$dir/online-config.json"
         eval "online=\${SEAT_ONLINE_$i:-}"
         if [ -z "$online" ]; then
             if [ "$i" -eq 1 ]; then online="create:8"; else online="join:8"; fi
@@ -125,6 +134,17 @@ start() {
             SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" $(window_env "$i") ${SEAT_EXTRA:-} $extra \
             sh -c 'env | grep "^SKATE2_" | sort > seat.env; exec "$0" "$@"' "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) < /dev/null > /dev/null 2>&1 &
         echo $! > "$dir/pid"
+    }
+}
+
+start() {
+    [ -x "$GAME" ] || { echo "no game binary at $GAME (build it first)"; exit 1; }
+    [ -f "$SKATE2_GAME_ROOT/default.xex" ] || { echo "no game at $SKATE2_GAME_ROOT"; exit 1; }
+    start_server
+    sleep 1
+    i=1
+    while [ "$i" -le "$seats" ]; do
+        start_seat "$i"
         # The creator must hold the lobby before a joiner searches.
         [ "$i" -eq 1 ] && sleep 8
         i=$((i + 1))
@@ -153,8 +173,10 @@ status() {
 case "$command" in
     prime) prime ;;
     start) start ;;
+    server) start_server ;;
+    seat) start_seat "$seats" ;;
     stop) stop ;;
     status) status ;;
     logs) tail -n 30 "$BENCH"/server/server.log "$BENCH"/seat-*/seat.log ;;
-    *) echo "usage: bench.sh prime [N] | start [N] | stop | status | logs"; exit 1 ;;
+    *) echo "usage: bench.sh prime [N] | start [N] | server | seat N | stop | status | logs"; exit 1 ;;
 esac
