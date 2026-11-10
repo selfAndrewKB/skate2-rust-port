@@ -102,7 +102,7 @@ start_server() {
 # The seat's `player_id` (M8: its stable identity, made by the game on first use) survives the
 # online-config.json the bench rewrites, so a seat started again is the same player back.
 seat_player_id() {
-    [ -f "$1/online-config.json" ] && sed -n 's/.*"player_id": *"\([0-9a-f]*\)".*/\1/p' "$1/online-config.json"
+    if [ -f "$1/online-config.json" ]; then sed -n 's/.*"player_id": *"\([0-9a-f]*\)".*/\1/p' "$1/online-config.json"; fi
 }
 
 start_seat() {
