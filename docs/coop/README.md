@@ -6,11 +6,15 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.7.0-city`**
-(2026-11-10): M6, the city. A pedestrian belongs to the player nearer to it and is handed over
-when the other comes nearer, the puppet on the other console is its owner's copy in look and
-motion, and the two censuses populate a shared street once ([world](plan/topics/world.md)).
-Over `coop-v0.6.0-mission-world` (M5, story characters, props, guards and services,
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.8.0-kinds`**
+(2026-11-10): M7, kinds. Every completion rule decides at the objective system's one
+evaluation point, with one copy of the objectives per player under every rule; the built-in
+table names the families; and synchronization is measured, not assumed: an inventory of every
+pedestrian field generated from the code, a census dump, an offline audit, and a live audit in
+every build ([kinds](plan/topics/kinds.md), [sync-inventory](plan/sync-inventory.md)). The
+first milestone reviewed before its tag. Over `coop-v0.7.0-city` (M6, ownership by the nearer
+player, puppets as the owner's copy, [world](plan/topics/world.md)),
+`coop-v0.6.0-mission-world` (M5, story characters, props, guards and services,
 [world](plan/topics/world.md), [prompts](plan/topics/prompts.md)), `coop-v0.5.0-scenes-in-step`
 (M4, scenes under the online rule, [scenes](plan/topics/scenes.md)),
 `coop-v0.4.0-prompts-as-notes` (M3, a pad's answer as a note, [prompts](plan/topics/prompts.md)),
@@ -22,16 +26,14 @@ bench's ([versions](plan/versions.md)).
 
 ## Current focus (2026-11-10)
 
-M7, kinds: the completion rule per mission family across every family (`Everyone`, `Anyone`,
-`Combined`, `BestOf`, `Compete`), the table read from `coop-rules.json`, changed from the lobby
-and by `SKATE2_COOP_RULES`; the AI photographer and cameraman kept for photo and film with
-both players skating ([kinds](plan/topics/kinds.md)). Beside it, what play on the M6 build
-says about the puppets.
+M8, the whole campaign: the mission crawl from the tutorial to the ender on two consoles,
+resume from the server's blob, a member joining a running campaign, reconnect, Training
+Facility travel ([saves](plan/topics/saves.md), [session](plan/topics/session.md)); and what
+the audits say in play (the puppet's speed, open item 39).
 
 ## What's next
 
-M7 kinds → M8 the whole campaign, resume and reconnect. Milestones and their done-when:
-[design](plan/design.md) §5.
+M8 the whole campaign, then play. Milestones and their done-when: [design](plan/design.md) §5.
 
 ## Documents
 

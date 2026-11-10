@@ -14,6 +14,8 @@ claim is never wider than its run. Front page: [README](../README.md).
 | 2 | one Mac | a prop nudged on one seat claimed and streamed, a puppet on the other; a service bought by one seat decided alike on both at the same tick | M5, 2026-11-10 [CONFIRMED on the bench]; story characters, the purchase itself [ASSUMPTION] |
 | 2 | one Mac | a chase in a security area: guards chasing one seat's skater, puppets on the other, "chased" the same on both | not reached: five minutes at the zone's edge spawned no guard (`2026-11-10-m5c-*.log`) [ASSUMPTION] |
 | 2 | one Mac | the waterfront: one seat skates 70 m away and back; the pedestrians near the other are handed to it and promoted, none back within the margin; puppets with their owners' models; 18 pedestrians in the shared street | M6, 2026-11-10 [CONFIRMED on the bench] |
+| 2 | one Mac | the opening tutorial under a rules file making it `Anyone`'s, player 0's copies alone completed: the activity completes at the same tick on both with one player complete, the end phase through on both | M7, 2026-11-10 [CONFIRMED on the bench] |
+| 2 | one Mac | the synchronization audit over two hours of the M6 build: ownership never doubled, models identical, position within 0.5 m in 99.95 % | 2026-11-10 [CONFIRMED on the bench] |
 | 2 | Mac + Windows over the internet | any | not run; needs the same commit and `release-secret.txt` on both |
 | 3-4 | one machine | lobby | not run (the lobby takes 4) |
 | 2 | one Mac | a seat leaves and rejoins; the server restarted | not run |

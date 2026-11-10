@@ -5,7 +5,7 @@ the table read from `coop-rules.json`, sent in the campaign's `GameReset`, chang
 lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
 [design](../design.md) §3.4, §7.
 
-## State (2026-11-10, M7) [ASSUMPTION: built and tested in units; the bench run is next]
+## State (2026-11-10, M7) [CONFIRMED on the bench for `Anyone` and `Everyone`; the rest by unit test]
 
 - **Every kind decides at the one evaluation point** (`coop/rules.rs`, `Rule::completes`,
   `Rule::fails`, `Rule::points_combined`; `challenge/objectives.rs`): `Everyone` and
