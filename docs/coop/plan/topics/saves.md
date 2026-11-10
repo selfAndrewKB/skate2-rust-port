@@ -20,6 +20,12 @@ after campaign round 2816581293 started: every member reloads from the newest sa
 round restarts"; all three received the save and "the server asks for a reload", took their
 careers down and up again adopting it, and round 2816581294 started with 3 players.
 
+**What M8 proved, the server restarted under a round** (`../bench/evidence/2026-11-10-m8c-*.log`):
+the server died at round 3325878957; both seats traced "the connection was lost; the career
+waits, signing in again to rejoin", tried every three seconds while it was down ("Connection
+refused"), and when it came back signed in with their player ids; the server read the save
+file, made the campaign lobby, seated both, and round 1064924775 started with 2 players.
+
 - **The blob.** Every autosave sends the progression leaves (SignPost's data and messages, the
   unlockables, the dynamic hulls; never the skater's own orientation) as one byte string with
   its FNV-1a hash, the round's session and tick (`CampaignSave`); the server keeps the newest
