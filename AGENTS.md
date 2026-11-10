@@ -119,3 +119,32 @@ not sufficient.
 
 Record material progress and remaining deviations in the relevant
 `docs/evidence/*.md` file or subsystem reference.
+
+## Co-op fork rules (the `coop` branch)
+
+These apply on top of everything above, to every co-op change.
+
+- **Clean, straightforward code.** A reader who was not there understands a module from its
+  types and names. One mechanism in one place: a rule, a seat table, a pacing set lives in one
+  module and is read from there. No feature flags scattered through sub-controllers.
+- **Never blind: logging alongside the analysis, in every build.** Each co-op mechanism ships
+  with its trace, compiled into release and switched at runtime through the port's own
+  convention (`SKATE2_TRACE_<AREA>=1`, checked where the line is written, as the existing
+  traces do; `diagnostics::set_quiet` keeps the player's launch silent). Logging is written with the mechanism, after the static
+  analysis that says what the mechanism must do, not before it and not after the first bug.
+  - Log the *decision* at its one funnel: old value, new value, the reason the caller set, and
+    every seat the decision considered, so a wrong choice names itself.
+  - Log both ends of every bridge across the wire: sent, dropped, received, applied, or received
+    and ignored and why. A silent bridge is a bug.
+  - Number repeated events in their kind's order (ticks, scenes, speech lines, facts stints) so
+    two consoles' logs line up by number, and keep `tools/online_diverge.py` working on them.
+  - One line a tick at most per trace, per-frame detail only under its own switch; a trace that
+    answers its question is retired by the commit that answers it, never left to rot. A trace
+    that still reads live play stays.
+  - Hygiene: no personal data, paths or player names on the wire-side logs that may be shared.
+- **Measured, not assumed.** A claim about determinism, pacing or what a script does reaches
+  the design record (`docs/coop/design.md`) only with the layer of proof that established it
+  (static reading, pure test, headless career test, two-instance bench, field play).
+- **Build on the port's netcode.** New needs become new facts groups, notes, messages and
+  barriers added the documented way; never a second transport, never a server that simulates
+  unless route B is chosen in the design record.
