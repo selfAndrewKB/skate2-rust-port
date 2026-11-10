@@ -183,6 +183,9 @@ pub(super) struct Online {
     pub(super) campaign_adopt: Option<AdoptedSave>,
     /// Co-op fork (M8): the connection was lost in a campaign; the next sign-in rejoins it.
     campaign_rejoin: bool,
+    /// Co-op fork (M8): the frame the next sign-in for the rejoin is tried at, while the
+    /// server is not back yet.
+    campaign_rejoin_at: Option<u32>,
     /// `SKATE2_DIAGNOSTIC_ONLINE` made its request.
     diagnostic_requested: bool,
     /// Co-op fork: the last reason `SKATE2_DIAGNOSTIC_ONLINE` waited, traced when it changes.
@@ -394,6 +397,16 @@ impl<T, C> SelectedLiveSession<T, C> {
 
     /// Everything the client heard since the last frame.
     pub(super) fn update_online(&mut self) -> Result<(), SelectedLiveError> {
+        // Co-op fork (M8): a rejoin whose sign-in failed (the server not back yet) tries again
+        // every three seconds until it is.
+        if self.online.campaign_rejoin
+            && self.online.client.is_none()
+            && self.online.campaign_rejoin_at.is_some_and(|at| self.completed_frames >= at)
+        {
+            self.online.campaign_rejoin_at = None;
+            crate::coop::trace(format_args!("campaign: signing in again to rejoin"));
+            self.online_sign_in();
+        }
         let events = self.online.client.as_ref().map(Client::poll).unwrap_or_default();
         for event in events {
             match event {
@@ -421,6 +434,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let campaign_entered = self.online.game.as_ref().is_some_and(|game| game.entered && game.attributes.challenge_type == challenge::CAMPAIGN);
                     if had_game && campaign_entered && !update && !nickname {
                         self.online_campaign_dropped()?;
+                    } else if self.online.campaign_rejoin && !update && !nickname {
+                        // The server is not back yet: again in three seconds.
+                        self.online.campaign_rejoin_at = Some(self.completed_frames + 180);
+                        crate::coop::trace(format_args!("campaign: the rejoin's sign-in failed; again in 3 s"));
                     } else if had_game {
                         self.online_game_lost(OnlineNotice::Disconnected)?;
                     } else {
@@ -1320,7 +1337,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.online.event_log.clear();
         self.online.notices.push(OnlineNotice::Disconnected);
         self.online.campaign_rejoin = true;
-        self.online_sign_in();
+        self.online.campaign_rejoin_at = Some(self.completed_frames + 60);
         Ok(())
     }
 
