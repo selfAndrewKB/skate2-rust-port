@@ -625,10 +625,29 @@ pub(crate) fn update(world: &mut World) {
                 setup_prompt(world);
                 show_prompt(world);
                 world.signup.state = SignUpState::WaitingForDPadUp;
+                if world.coop.is_some() {
+                    crate::coop::trace(format_args!("sign-up prompt shown: {} boxes under a tester, {} challenges offered", world.signup.previous.len(), world.signup.prompt.len()));
+                }
+            } else if world.coop.is_some() && !world.signup.previous.is_empty() && world.tick % 300 == 0 {
+                crate::coop::trace(format_args!(
+                    "sign-up prompt withheld: {} boxes under a tester; can start main {}, memcard {}, living world {}, flow loading {}, goto allows {}, hom bail {}, ots {}, services {}",
+                    world.signup.previous.len(),
+                    activity::can_start_main_challenge(world),
+                    world.memcard_active,
+                    super::living_world::is_signup_available(world),
+                    world.flow_loading,
+                    world.goto_allows_signup,
+                    super::any_player_hom_bailing(world),
+                    super::ots_discovery::is_signup_available(world),
+                    super::services::is_signup_available(world)
+                ));
             }
         }
         SignUpState::WaitingForDPadUp => {
             if !is_allowed_to_sign_up(world) || (changed && world.signup.previous.is_empty()) {
+                if world.coop.is_some() {
+                    crate::coop::trace(format_args!("sign-up prompt hidden: allowed {}, {} boxes under a tester", is_allowed_to_sign_up(world), world.signup.previous.len()));
+                }
                 hide_prompt(world);
                 world.signup.state = SignUpState::WaitingForSignUpVolume;
             } else if changed {

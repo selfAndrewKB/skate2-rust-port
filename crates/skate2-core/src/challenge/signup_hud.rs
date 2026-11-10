@@ -183,6 +183,13 @@ pub(crate) fn show(world: &mut World, show_it: bool) {
 /// visible component. The props adapter handles the DMO input separately.
 /// The return value tells the host whether the several-challenges popup paused it.
 pub(crate) fn dpad_up(world: &mut World) -> bool {
+    if world.coop.is_some() {
+        crate::coop::trace(format_args!(
+            "sign-up D-pad up: bound {}, visible {}, prop {}, delay {}, held {}, prompt of {} challenges, state {:?}",
+            world.signup_hud.bound, world.signup_hud.visible, world.signup_hud.prop_bound, world.signup_hud.delay, world.signup_hud.dpad_held,
+            world.signup.prompt.len(), world.signup.state
+        ));
+    }
     if !world.signup_hud.bound || !world.signup_hud.visible || world.signup_hud.prop_bound {
         return false;
     }

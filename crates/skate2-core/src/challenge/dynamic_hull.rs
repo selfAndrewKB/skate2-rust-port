@@ -326,8 +326,9 @@ pub(crate) fn update(world: &mut World) {
     if !world.dynamic_hulls.game_loaded || world.dynamic_hulls.teleport_hold {
         return;
     }
-    for base in super::tester_bases(world) {
-        perform_bbox_tests(world, base);
+    let bases = super::tester_bases(world);
+    if !bases.is_empty() {
+        perform_bbox_tests(world, &bases);
     }
     for callback in std::mem::take(&mut world.dynamic_hulls.dispatch) {
         complete(world, callback, DISPATCH_HULL_ID);
@@ -338,7 +339,7 @@ pub(crate) fn update(world: &mut World) {
 /// the stream focus before the loading flow waits for the loader.
 pub fn spot_test_against_point(world: &mut World, point: [f32; 3]) {
     if world.dynamic_hulls.game_loaded {
-        perform_bbox_tests(world, point);
+        perform_bbox_tests(world, &[point]);
     }
 }
 
@@ -347,15 +348,17 @@ pub fn spot_test_against_point(world: &mut World, point: [f32; 3]) {
 /// box holds whose hull `RequiresHullLoad` loads it (registered on load, normal priority, the
 /// `LoadCallbackMap` callback taken out of the map), with its mapping in `LoadedDynamicHulls`;
 /// every activity the box left unloads its loaded hull.
-fn perform_bbox_tests(world: &mut World, position: [f32; 3]) {
-    let tester = super::characters::tester_bounds(position);
+fn perform_bbox_tests(world: &mut World, positions: &[[f32; 3]]) {
+    // Co-op fork: every player's tester at once (one set, so two testers never load and unload
+    // a hull in turns); offline the one local tester as before.
+    let testers: Vec<_> = positions.iter().map(|&position| super::characters::tester_bounds(position)).collect();
     // GetCollisions sorts the indices; GenerateEnterExitData's exits keep the previous order.
     let colliding: Vec<u32> = world
         .dynamic_hulls
         .tree
         .iter()
         .enumerate()
-        .filter(|(_, (_, bounds))| bounds.overlaps(tester))
+        .filter(|(_, (_, bounds))| testers.iter().any(|tester| bounds.overlaps(*tester)))
         .filter_map(|(index, _)| u32::try_from(index).ok())
         .collect();
     let exited: Vec<u32> = world.dynamic_hulls.previous.iter().copied().filter(|index| !colliding.contains(index)).collect();
