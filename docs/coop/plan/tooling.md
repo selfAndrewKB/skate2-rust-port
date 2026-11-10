@@ -116,6 +116,17 @@ SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G;4700
 CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
 ```
 
+**The guard run** (no mission; both seats to the waterfront, then into the no-skate zone the
+scan found, `NoSkateZone_Area` at x 591..663, z 640..748; no guard spawned in five minutes,
+[open items](open-items.md) 30):
+
+```
+SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no" \
+SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1000:786,-58,882;1500:662.6,-58,700 SKATE2_DIAGNOSTIC_COOP_ZONES=1800" \
+SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1000:792,-58,888;1600:640,-58,700" \
+CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
+```
+
 **A typical M1 run:**
 
 ```

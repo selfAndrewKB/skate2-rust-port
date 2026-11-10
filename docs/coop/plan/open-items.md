@@ -63,6 +63,11 @@ Front page: [README](../README.md).
 29. A guard chases only the skater of the console that simulates it; a remote skater has no
     actor. A guard between two players chases one; the other player sees it as a puppet. To be
     judged in play; migration by the chased player's console is M6's.
+30. The bench never saw a guard: five minutes at the edge of `NoSkateZone_Area` (the only
+    security area within 1500 m of the waterfront; `2026-11-10-m5c-*.log`) spawned none, so the
+    chase facts, the puppet guard and the chase messages are by reading. A teleported, still
+    skater may not count as skating in the zone, and the census's security spawn switch may be
+    off; a run with the skater moving, or a person, decides.
 
 ## Prompts ([topic](topics/prompts.md))
 

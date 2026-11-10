@@ -40,6 +40,14 @@ pedestrians around the flip-trick box are the census's.]
 **Puppets' AI (M5):** a puppet perceives no threats, wants nothing, chases and guards nobody;
 its graph still animates it (the locomotion from the owner's motion state stays M6's).
 
+**Guards (M5):** the chase of each console's own skater rides its facts (`being_chased`,
+`jacked`), every console's scripts read any player's, the local chase messages are the facts'
+edges. [ASSUMPTION: the bench reached no chase. `2026-11-10-m5c-*.log`: both seats stood five
+minutes at the edge of `NoSkateZone_Area` (x 591..663, z 640..748, the only security area
+within 1500 m of the waterfront) and the census spawned no guard; whether the area wants a
+skater skating in it, or the security spawn switch, is for play ([open items](../open-items.md)
+30).]
+
 **The stream** (`coop/world_stream.rs`, format 1; `ClientMessage::World` relayed as it is to the
 campaign's other members): every third tick a seat sends the pedestrians it owns within 80 m of
 its skater, nearest first, until `MAX_WORLD` (1024 B): position (1/256 m), yaw, velocity

@@ -12,7 +12,7 @@ claim is never wider than its run. Front page: [README](../README.md).
 | 2 | one Mac | a sign-up by one seat, the poster accepted by the other, the next tutorial started on both | M3, 2026-11-10 [CONFIRMED on the bench] |
 | 2 | one Mac | the opening tutorial's three outro scenes and seven speech lines started and ended at the same round ticks on both seats, each objective's presentation once, the end phase waiting for its outro, then M3's sign-up | M4, 2026-11-10 [CONFIRMED on the bench]; own skater in a scene, a movie, a skip [ASSUMPTION] |
 | 2 | one Mac | a prop nudged on one seat claimed and streamed, a puppet on the other; a service bought by one seat decided alike on both at the same tick | M5, 2026-11-10 [CONFIRMED on the bench]; story characters, the purchase itself [ASSUMPTION] |
-| 2 | one Mac | a chase in a security area: guards chasing one seat's skater, puppets on the other, "chased" the same on both | M5, 2026-11-10 (see the scenes row's caveats) [UNKNOWN until run C] |
+| 2 | one Mac | a chase in a security area: guards chasing one seat's skater, puppets on the other, "chased" the same on both | not reached: five minutes at the zone's edge spawned no guard (`2026-11-10-m5c-*.log`) [ASSUMPTION] |
 | 2 | Mac + Windows over the internet | any | not run; needs the same commit and `release-secret.txt` on both |
 | 3-4 | one machine | lobby | not run (the lobby takes 4) |
 | 2 | one Mac | a seat leaves and rejoins; the server restarted | not run |
