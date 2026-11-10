@@ -224,6 +224,20 @@ enum GamePhase {
     NextChallenge { participants: Vec<u64>, until: Instant },
 }
 
+/// Co-op fork: a campaign's state on the server (`docs/coop/plan/topics/progression.md`): the
+/// members whose career is loaded, the round once started, and the newest progression save a
+/// member autosaved, with every member's last hash so the log says whether they agree.
+#[derive(Debug, Default)]
+struct Campaign {
+    loaded: BTreeSet<u64>,
+    /// The session the campaign round started as.
+    started: Option<u32>,
+    /// The newest save: the member (by slot), the round tick, the hash, the bytes.
+    save: Option<(u8, u32, u64, Arc<Vec<u8>>)>,
+    /// Each member's last save: tick and hash.
+    saves_seen: BTreeMap<u64, (u32, u64)>,
+}
+
 /// A freeskate activity proposed in an online free skate (`Message_GameProposal`).
 #[derive(Debug)]
 struct Proposal {
@@ -253,6 +267,8 @@ struct Game {
     kicked: BTreeSet<IpAddr>,
     /// The freeskate activity proposed and not yet started or timed out.
     proposal: Option<Proposal>,
+    /// Co-op fork: a campaign lobby's own state.
+    campaign: Option<Campaign>,
     /// The freeskate activity the challenge is, from its load until the game is back in lobby
     /// skate: no matchmaking or lobby browser offers the game meanwhile.
     activity: Option<u64>,
@@ -792,6 +808,7 @@ impl ServerCore {
                         kicked: BTreeSet::new(),
                         proposal: None,
                         activity: None,
+                        campaign: campaign.then(Campaign::default),
                     },
                 );
                 (self.log)(&format!("game {game} created: type {}{} challenge {location:016x}", play.challenge_type, if campaign { " (campaign)" } else { "" }));
@@ -930,6 +947,91 @@ impl ServerCore {
         }
         self.broadcast(game_id, &ServerMessage::PlayerJoin(PlayerInfo { user_id, slot, name: name.clone() }), Some(user_id));
         (self.log)(&format!("{name} joined game {game_id} in slot {slot}"));
+        // Co-op fork: a campaign's newest save goes to a joining member, whose console says
+        // whether its own agrees (adopting it is M8's).
+        if let Some((owner, tick, hash, data)) = self.games.get(&game_id).and_then(|game| game.campaign.as_ref()).and_then(|campaign| campaign.save.clone()) {
+            self.send(id, &ServerMessage::CampaignSave { slot: owner, tick, hash, data: data.to_vec() });
+        }
+    }
+
+    /// Co-op fork: a campaign's own messages. The round starts once every member's career is
+    /// loaded and there are two or more members, or when a member asks for the start with every
+    /// member loaded (a solo campaign, or a lobby that will not wait): `GameReset(CAMPAIGN)` with
+    /// the seed and the table, the same to everyone. A member who loads after the start is told
+    /// in the log; joining a running campaign is M8's.
+    fn start_campaign(&mut self, game_id: u32, forced: bool) {
+        let seed = self.random.next_u32();
+        let Some(game) = self.games.get_mut(&game_id) else { return };
+        let members: Vec<u64> = game.members.iter().map(|member| member.user_id).collect();
+        let Some(campaign) = game.campaign.as_mut() else { return };
+        if let Some(session) = campaign.started {
+            if forced {
+                (self.log)(&format!("game {game_id}: campaign round {session} is already running"));
+            }
+            return;
+        }
+        let waiting: Vec<String> = game.members.iter().filter(|member| !campaign.loaded.contains(&member.user_id)).map(|member| member.name.clone()).collect();
+        if !waiting.is_empty() {
+            if forced {
+                (self.log)(&format!("game {game_id}: the campaign cannot start, not loaded yet: {}", waiting.join(", ")));
+            }
+            return;
+        }
+        if !forced && members.len() < 2 {
+            return;
+        }
+        game.session = game.session.wrapping_add(1);
+        let session = game.session;
+        campaign.started = Some(session);
+        let slots = game.slots(&members);
+        (self.log)(&format!("game {game_id}: campaign round {session} started with {} players, seed {seed:08x}", members.len()));
+        self.broadcast(game_id, &ServerMessage::GameReset { kind: reset::CAMPAIGN, seed, session, participants: slots, activity: 0 }, None);
+    }
+
+    /// Co-op fork: whether a campaign took the message.
+    fn campaign_message(&mut self, game_id: u32, user_id: u64, message: &ClientMessage, now: Instant) -> bool {
+        let _ = now;
+        let Some(game) = self.games.get_mut(&game_id) else { return false };
+        let Some(campaign) = game.campaign.as_mut() else { return false };
+        let name = game.members.iter().find(|member| member.user_id == user_id).map(|member| member.name.clone()).unwrap_or_default();
+        match message {
+            ClientMessage::ChallengeLoaded => {
+                campaign.loaded.insert(user_id);
+                let total = game.members.len();
+                let loaded = campaign.loaded.len();
+                match campaign.started {
+                    Some(session) => (self.log)(&format!("game {game_id}: {name} loaded its career after campaign round {session} started: it runs its career alone (a join in progress is not supported yet)")),
+                    None => (self.log)(&format!("game {game_id}: {name} loaded its career ({loaded} of {total})")),
+                }
+                self.start_campaign(game_id, false);
+                true
+            }
+            ClientMessage::CampaignSave { tick, hash, data } => {
+                let Some(slot) = game.members.iter().find(|member| member.user_id == user_id).map(|member| member.slot) else { return true };
+                campaign.saves_seen.insert(user_id, (*tick, *hash));
+                let newer = campaign.save.as_ref().is_none_or(|(_, held, _, _)| *tick >= *held);
+                if newer {
+                    campaign.save = Some((slot, *tick, *hash, Arc::new(data.clone())));
+                }
+                let others: Vec<String> = game
+                    .members
+                    .iter()
+                    .filter(|member| member.user_id != user_id)
+                    .map(|member| match campaign.saves_seen.get(&member.user_id) {
+                        Some(&(their_tick, their_hash)) if their_hash == *hash => format!("{} agrees (tick {their_tick})", member.name),
+                        Some(&(their_tick, their_hash)) => format!("{} differs: {their_hash:016x} at tick {their_tick}", member.name),
+                        None => format!("{} has not saved", member.name),
+                    })
+                    .collect();
+                (self.log)(&format!("game {game_id}: campaign save from {name} at tick {tick}: {} B, hash {hash:016x}; {}", data.len(), others.join("; ")));
+                let path = format!("campaign-{:016x}.save", game.attributes.challenge_key);
+                if let Err(error) = std::fs::write(&path, data) {
+                    (self.log)(&format!("game {game_id}: campaign save not written to {path}: {error}"));
+                }
+                true
+            }
+            _ => false,
+        }
     }
 
     fn leave_game(&mut self, id: u32, reason: u8, now: Instant) {
@@ -970,6 +1072,9 @@ impl ServerCore {
     }
 
     fn game_message(&mut self, game_id: u32, user_id: u64, message: ClientMessage, now: Instant) {
+        if self.campaign_message(game_id, user_id, &message, now) {
+            return;
+        }
         match message {
             // The game sends its skater as it enters the world, and again as the player leaves the
             // pre-game Edit Skater (PC port addition): the new one replaces it for every member
@@ -1192,9 +1297,9 @@ impl ServerCore {
                 {
                     return;
                 }
-                // Co-op fork: a campaign has no challenge to start; its missions run in the career.
+                // Co-op fork: a campaign's "start" is its round's, once every member has loaded.
                 if game.attributes.challenge_type == challenge::CAMPAIGN {
-                    (self.log)(&format!("game {game_id}: a campaign takes no challenge start"));
+                    self.start_campaign(game_id, true);
                     return;
                 }
                 let seed = self.random.next_u32();
@@ -1337,6 +1442,10 @@ impl ServerCore {
     /// A participant left: the barriers stop waiting for them.
     fn remove_participant(&mut self, game_id: u32, user_id: u64, now: Instant) {
         if let Some(game) = self.games.get_mut(&game_id) {
+            if let Some(campaign) = game.campaign.as_mut() {
+                campaign.loaded.remove(&user_id);
+                campaign.saves_seen.remove(&user_id);
+            }
             match &mut game.phase {
                 GamePhase::Loading { participants, loaded, .. } => {
                     participants.retain(|participant| *participant != user_id);

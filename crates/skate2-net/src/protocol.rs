@@ -21,6 +21,8 @@ pub const MAX_FACTS: usize = 16 * 1024;
 /// Co-op fork: the most a world run (one tick of the living-world entities a console owns) may
 /// hold. It travels unreliably, so it must fit one datagram.
 pub const MAX_WORLD: usize = 1024;
+/// Co-op fork: the most a campaign save (the career's progression savables) may hold.
+pub const MAX_CAMPAIGN_SAVE: usize = 512 * 1024;
 /// The most online challenges one `Content` message names.
 pub const MAX_CONTENT: usize = 4096;
 
@@ -75,6 +77,9 @@ pub mod reset {
     pub const LOBBY_SKATE: u8 = 0;
     pub const LOAD_CHALLENGE: u8 = 1;
     pub const CHALLENGE: u8 = 2;
+    /// Co-op fork: the campaign's round starts, every member's career loaded: the seed is the
+    /// career's `online_random`, the table the players by slot, from this reset's tick 0 on.
+    pub const CAMPAIGN: u8 = 3;
 }
 
 /// `Message_GameProposal::ProposalType`: a freeskate activity proposed in an online free skate.
@@ -532,6 +537,10 @@ pub enum ClientMessage {
     /// D's world stream, `docs/coop/design.md` §3.6), coded by the game (`skate2-core`'s
     /// `coop::world_stream`); the server relays it to the campaign's other members as it is.
     World { tick: u32, data: Vec<u8> },
+    /// Co-op fork: the career's progression savables as this console autosaved them in a
+    /// campaign, with their hash and the campaign round's tick: the server keeps the newest and
+    /// says whether every console's agree.
+    CampaignSave { tick: u32, hash: u64, data: Vec<u8> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -588,6 +597,9 @@ pub enum ServerMessage {
     /// Co-op fork: another member's world run ([`ClientMessage::World`]), the member named by its
     /// slot in the game.
     RemoteWorld { slot: u8, tick: u32, data: Vec<u8> },
+    /// Co-op fork: the campaign save the server holds, to a member joining the campaign: whose
+    /// (by slot), at which round tick, its hash and bytes.
+    CampaignSave { slot: u8, tick: u32, hash: u64, data: Vec<u8> },
 }
 
 /// A run: its first tick and length, the frames it is coded against as their distance back from
@@ -737,6 +749,12 @@ impl ClientMessage {
                 w.varint(u64::from(*tick));
                 w.bytes(&data[..data.len().min(MAX_WORLD)]);
             }
+            Self::CampaignSave { tick, hash, data } => {
+                w.u8(26);
+                w.varint(u64::from(*tick));
+                w.u64(*hash);
+                w.bytes(&data[..data.len().min(MAX_CAMPAIGN_SAVE)]);
+            }
             Self::Stalled { user_id, tick } => {
                 w.u8(24);
                 w.u64(*user_id);
@@ -832,6 +850,7 @@ impl ClientMessage {
             }
             24 => Self::Stalled { user_id: r.u64()?, tick: r.u32()? },
             25 => Self::World { tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
+            26 => Self::CampaignSave { tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
             _ => return Err(DecodeError("unknown client message")),
         };
         r.finish()?;
@@ -994,6 +1013,13 @@ impl ServerMessage {
                 w.varint(u64::from(*tick));
                 w.bytes(&data[..data.len().min(MAX_WORLD)]);
             }
+            Self::CampaignSave { slot, tick, hash, data } => {
+                w.u8(28);
+                w.u8(*slot);
+                w.varint(u64::from(*tick));
+                w.u64(*hash);
+                w.bytes(&data[..data.len().min(MAX_CAMPAIGN_SAVE)]);
+            }
         }
         w.into_vec()
     }
@@ -1028,7 +1054,7 @@ impl ServerMessage {
             8 => Self::Recipe { user_id: r.u64()?, data: r.bytes(MAX_RECIPE)?.to_vec() },
             9 => {
                 let kind = r.u8()?;
-                if kind > reset::CHALLENGE {
+                if kind > reset::CAMPAIGN {
                     return Err(DecodeError("reset type"));
                 }
                 let seed = r.u32()?;
@@ -1083,6 +1109,7 @@ impl ServerMessage {
                 Self::GameProposal { kind, activity: r.u64()?, user_id: r.u64()?, timeout: r.u32()? }
             }
             27 => Self::RemoteWorld { slot: read_slot(&mut r)?, tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
+            28 => Self::CampaignSave { slot: read_slot(&mut r)?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
             _ => return Err(DecodeError("unknown server message")),
         };
         r.finish()?;
@@ -1147,6 +1174,7 @@ mod tests {
             ClientMessage::Stalled { user_id: 0x1234_5678_9abc_def0, tick: (3 << 20) + 77 },
             ClientMessage::World { tick: 4242, data: vec![7; 300] },
             ClientMessage::World { tick: 0, data: vec![] },
+            ClientMessage::CampaignSave { tick: 77, hash: 0xfeed_beef_1234_5678, data: vec![3; 5000] },
         ];
         for message in messages {
             assert_eq!(ClientMessage::decode(&message.encode()).unwrap(), message);
@@ -1192,6 +1220,7 @@ mod tests {
             ServerMessage::GameProposal { kind: proposal::BROADCAST, activity: 0x34, user_id: 6, timeout: 15_000 },
             ServerMessage::GameProposal { kind: proposal::MISSED, activity: 0x34, user_id: 0, timeout: 0 },
             ServerMessage::RemoteWorld { slot: 3, tick: 4242, data: vec![7; 300] },
+            ServerMessage::CampaignSave { slot: 1, tick: 77, hash: 0xfeed_beef_1234_5678, data: vec![3; 5000] },
         ];
         for message in messages {
             assert_eq!(ServerMessage::decode(&message.encode()).unwrap(), message);

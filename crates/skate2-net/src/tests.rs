@@ -18,6 +18,8 @@ use std::time::{Duration, Instant};
 
 struct Net {
     server: ServerCore,
+    /// Co-op fork: the server's log lines, for tests that read what the server said.
+    server_log: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     clients: Vec<(SocketAddr, ClientCore, Vec<ClientEvent>)>,
     /// Every datagram either way, as a packet capture would see it.
     wire: Vec<Vec<u8>>,
@@ -31,8 +33,11 @@ struct Net {
 
 impl Net {
     fn new() -> Self {
+        let server_log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = std::sync::Arc::clone(&server_log);
         Self {
-            server: ServerCore::new(7, Build::DEVELOPMENT, Box::new(|_| {})),
+            server: ServerCore::new(7, Build::DEVELOPMENT, Box::new(move |line| sink.lock().expect("log").push(line.to_owned()))),
+            server_log,
             clients: Vec::new(),
             wire: Vec::new(),
             received_bytes: HashMap::new(),
@@ -1864,4 +1869,58 @@ fn a_campaign_s_world_runs_reach_the_other_members_as_sent_and_no_one_elsewhere(
     net.clients[host].1.send_world(1, vec![1]);
     net.run(100);
     assert!(world(&mut net, guest).is_empty());
+}
+
+#[test]
+fn a_campaign_round_starts_once_every_member_s_career_is_loaded() {
+    let mut net = Net::new();
+    let host = net.add("Host");
+    let guest = net.add("Guest");
+    net.run(100);
+    net.send(host, &campaign_lobby(true));
+    net.run(100);
+    net.send(guest, &campaign_lobby(false));
+    net.run(100);
+    let host_id = signed_in(&net.events(host)).expect("signed in");
+    let guest_id = signed_in(&net.events(guest)).expect("signed in");
+    let resets = |net: &mut Net, client: usize| -> Vec<(u8, u32, [u64; MAX_PLAYERS])> {
+        net.events(client).into_iter().filter_map(|event| match event {
+            ClientEvent::Message(ServerMessage::GameReset { kind, seed, participants, .. }) => Some((kind, seed, participants)),
+            _ => None,
+        }).collect()
+    };
+    // One career loaded: nothing starts; a forced start cannot either.
+    net.send(host, &ClientMessage::ChallengeLoaded);
+    net.run(100);
+    net.send(host, &ClientMessage::GameRequest { request: request::START_GAME, value: 0 });
+    net.run(100);
+    assert!(resets(&mut net, host).is_empty());
+    assert!(resets(&mut net, guest).is_empty());
+    // Both loaded: the same reset, seed and table to both.
+    net.send(guest, &ClientMessage::ChallengeLoaded);
+    net.run(100);
+    let host_resets = resets(&mut net, host);
+    let guest_resets = resets(&mut net, guest);
+    assert_eq!(host_resets.len(), 1, "{host_resets:?}");
+    assert_eq!(host_resets, guest_resets);
+    let (kind, _, participants) = host_resets[0];
+    assert_eq!(kind, reset::CAMPAIGN);
+    assert_eq!(&participants[..2], &[host_id, guest_id]);
+    // A save goes to the server; the log names the agreement, and a later joiner gets the save.
+    net.send(host, &ClientMessage::CampaignSave { tick: 600, hash: 0xabc, data: vec![1, 2, 3] });
+    net.send(guest, &ClientMessage::CampaignSave { tick: 600, hash: 0xabc, data: vec![1, 2, 3] });
+    net.run(100);
+    let third = net.add("Third");
+    net.run(100);
+    net.send(third, &campaign_lobby(false));
+    net.run(100);
+    let saves: Vec<(u32, u64, Vec<u8>)> = net.events(third).into_iter().filter_map(|event| match event {
+        ClientEvent::Message(ServerMessage::CampaignSave { tick, hash, data, .. }) => Some((tick, hash, data)),
+        _ => None,
+    }).collect();
+    assert_eq!(saves, [(600, 0xabc, vec![1, 2, 3])]);
+    let log = net.server_log.lock().expect("log").join("\n");
+    assert!(log.contains("campaign round") && log.contains("started with 2 players"), "{log}");
+    assert!(log.contains("Host agrees (tick 600)"), "{log}");
+    let _ = std::fs::remove_file(format!("campaign-{:016x}.save", campaign::KEY));
 }
