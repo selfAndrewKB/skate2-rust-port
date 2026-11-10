@@ -1,6 +1,7 @@
 //! The prompts a pad answers in the career (a dialog's Yes or No, a script popup's option, a
 //! sign-up press, the several-challenges choice, a poster's accept or decline, Skate 101's and
-//! the unlock overlay's continue), as the ledger's "the one who did it" kind: in a campaign the
+//! the unlock overlay's continue, the phone's service purchase and its cancel), as the ledger's
+//! "the one who did it" kind: in a campaign the
 //! press on one console is not applied there but queued as a note on that player's next facts,
 //! and every console (the presser's included) applies it at the tick the note arrives, so the
 //! scripts take the same answer at the same tick everywhere. The wire form is
@@ -26,6 +27,11 @@ pub enum PromptAnswer {
     /// The sign-up poster's accept and decline.
     PosterAccept,
     PosterDecline,
+    /// The phone's service bought (`eServiceType`: 0 security, 1 uncapping, 2 draining), M5:
+    /// the shared cash pays once and every console's scripts start the service.
+    Service(i32),
+    /// The phone's "cancel security" while Big Black is hired.
+    ServiceCancel,
 }
 
 impl PromptAnswer {
@@ -41,6 +47,8 @@ impl PromptAnswer {
             Self::SignUpChoice(choice) => (8, choice.unwrap_or(-1)),
             Self::PosterAccept => (9, 0),
             Self::PosterDecline => (10, 0),
+            Self::Service(service) => (11, service),
+            Self::ServiceCancel => (12, 0),
         }
     }
 
@@ -56,6 +64,8 @@ impl PromptAnswer {
             8 => Self::SignUpChoice((value >= 0).then_some(value)),
             9 => Self::PosterAccept,
             10 => Self::PosterDecline,
+            11 => Self::Service(value),
+            12 => Self::ServiceCancel,
             _ => return None,
         })
     }
@@ -72,11 +82,14 @@ impl PromptAnswer {
             "accept" => Self::PosterAccept,
             "decline" => Self::PosterDecline,
             "cancel" => Self::SignUpChoice(None),
+            "service_cancel" => Self::ServiceCancel,
             other => {
                 if let Some(option) = other.strip_prefix("option:") {
                     Self::Option(option.parse().ok()?)
                 } else if let Some(choice) = other.strip_prefix("choice:") {
                     Self::SignUpChoice(Some(choice.parse().ok()?))
+                } else if let Some(service) = other.strip_prefix("service:") {
+                    Self::Service(service.parse().ok()?)
                 } else {
                     return None;
                 }
@@ -103,6 +116,9 @@ mod tests {
             PromptAnswer::SignUpChoice(None),
             PromptAnswer::PosterAccept,
             PromptAnswer::PosterDecline,
+            PromptAnswer::Service(0),
+            PromptAnswer::Service(2),
+            PromptAnswer::ServiceCancel,
         ];
         for answer in all {
             let (kind, value) = answer.to_wire();
@@ -110,6 +126,8 @@ mod tests {
         }
         assert_eq!(PromptAnswer::parse("choice:1"), Some(PromptAnswer::SignUpChoice(Some(1))));
         assert_eq!(PromptAnswer::parse("option:3"), Some(PromptAnswer::Option(3)));
+        assert_eq!(PromptAnswer::parse("service:0"), Some(PromptAnswer::Service(0)));
+        assert_eq!(PromptAnswer::parse("service_cancel"), Some(PromptAnswer::ServiceCancel));
         assert_eq!(PromptAnswer::parse("maybe"), None);
         assert_eq!(PromptAnswer::from_wire(99, 0), None);
     }

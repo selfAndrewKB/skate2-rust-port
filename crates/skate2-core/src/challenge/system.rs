@@ -543,6 +543,9 @@ pub struct World {
     /// Co-op fork: set while a campaign round runs: the completion-rule table and the players
     /// by challenge index, which the objective system reads at its one evaluation point.
     pub coop: Option<crate::coop::rules::CampaignWorld>,
+    /// Co-op fork (M5): the prompts a HUD inside the challenge world (the phone) answered this
+    /// update instead of acting, for the session's prompt funnel to queue as notes.
+    pub coop_prompts: Vec<crate::coop::prompts::PromptAnswer>,
     /// The network game an online challenge runs in, installed by the session.
     pub online: Option<super::players::OnlineChallenge>,
     /// The skater manager's skaters' completed outputs this update, in index order.
@@ -859,6 +862,7 @@ impl ChallengeSystem {
                 objective_vars_cleared: Vec::new(),
                 player: PlayerState::default(),
                 player_states: Vec::new(),
+                coop_prompts: Vec::new(),
                 hom_enabled: true,
                 objective_notification_window: 1.0,
                 stop_threshold: 1.2,

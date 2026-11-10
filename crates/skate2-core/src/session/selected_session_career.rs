@@ -1155,6 +1155,10 @@ impl CareerSession {
                     if contacts.input(self.system.world_mut(),input,self.contacts_saving,&mut self.sounds) {
                         self.pausing.pop();self.hud.contacts=None;
                     } else {self.hud.contacts=Some(contacts.view.clone());self.contacts=Some(contacts);}
+                    // Co-op fork (M5): the phone's purchase is a note.
+                    for answer in std::mem::take(&mut self.system.world_mut().coop_prompts) {
+                        self.prompt(answer);
+                    }
                 }
             }
             Some(PausingState::Unlock) => {
@@ -1296,6 +1300,25 @@ impl CareerSession {
                 self.system.sign_up_decline();
                 self.poster_blocked = true;
                 self.hud.poster = None;
+            }
+            A::Service(service) => {
+                let world = self.system.world_mut();
+                let cash = crate::challenge::signpost_progress::cash(world);
+                let cost = crate::challenge::services::cost(service);
+                let available = service == 0 || crate::challenge::services::available(world, service);
+                if available && cash >= cost {
+                    crate::challenge::services::activate(world, service);
+                    crate::coop::trace(format_args!("service {service} bought: {cost} of {cash} cash, every console's scripts start it"));
+                } else {
+                    crate::coop::trace(format_args!("service {service} not bought here: available {available}, cash {cash} of {cost}"));
+                }
+            }
+            A::ServiceCancel => {
+                let world = self.system.world_mut();
+                if world.services.big_black_active {
+                    crate::challenge::services::deactivate_security(world);
+                    crate::coop::trace(format_args!("security service cancelled: every console's protector goes"));
+                }
             }
         }
     }

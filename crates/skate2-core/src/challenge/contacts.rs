@@ -222,12 +222,23 @@ impl Contacts {
         match self.choices.get(self.selections[page]).copied().unwrap_or(Choice::None) {
             Choice::None=>{},
             Choice::Menu(p)=>self.push(world,p,saving),
-            Choice::Service(0) if world.services.big_black_active=>{services::deactivate_security(world);return true;},
+            // Co-op fork (M5): in a campaign the purchase and the cancel are notes on the
+            // facts (`coop_prompts`), applied on every console at the note's tick; the
+            // availability and cash checks are the same here and there.
+            Choice::Service(0) if world.services.big_black_active=>{
+                if world.coop.is_some() {world.coop_prompts.push(crate::coop::prompts::PromptAnswer::ServiceCancel);}
+                else {services::deactivate_security(world);}
+                return true;
+            },
             Choice::Service(s)=>{
                 // OnMenuSelect82689d78 rechecks availability for uncapping and
                 // draining; security checks the active service and cash only.
                 if s==0 || services::available(world,s) {
-                    if signpost_progress::cash(world)>=services::cost(s) {services::activate(world,s);return true;}
+                    if signpost_progress::cash(world)>=services::cost(s) {
+                        if world.coop.is_some() {world.coop_prompts.push(crate::coop::prompts::PromptAnswer::Service(s));}
+                        else {services::activate(world,s);}
+                        return true;
+                    }
                     self.view.not_enough_cash=true;sounds.push("FE_SOUND_CORE_POPUP");
                 }
             },
