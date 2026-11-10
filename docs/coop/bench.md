@@ -63,8 +63,8 @@ online: <other seat> shows
 ```
 
 Captures show each seat in its own career with the minimap and the lobby's player list
-("Challenge Lobby: Seat 1, Seat 2") and the other skater's puppet beside the local skater
-(`m0-seat1.png` here is seat 1's view after seat 2 pushed off).
+("Challenge Lobby: Seat 1, Seat 2") and the other skater's puppet beside the local skater.
+Captures stay in the bench folder, never in the repository.
 
 ## What the bench taught (fixed on this branch)
 
