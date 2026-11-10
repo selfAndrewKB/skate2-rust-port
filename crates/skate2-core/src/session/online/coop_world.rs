@@ -11,6 +11,12 @@
 //!   local hit takes (`record_accepted_full_collision`), so the hit becomes real on the owner
 //!   and streams back to everyone as the owner's state.
 //!
+//! M6: every entity has one world id for life (its first spawner's slot and local id) and a
+//! table entry here naming its owner and epoch; an owned pedestrian a peer is nearer to by a
+//! margin for a second is handed over (`HANDOFF`): this console's copy becomes a puppet, the
+//! record names the new owner with the epoch raised, and the new owner promotes its puppet
+//! (its graph and navigation take over where the puppet stood).
+//!
 //! Every decision is traced under `SKATE2_TRACE_COOP`; the stream's cost is measured and
 //! traced every ten seconds.
 
@@ -38,17 +44,28 @@ const DESPAWN_RUNS: u8 = 3;
 const SPAWN_PATIENCE: u32 = 1200;
 /// The measurement trace's period in ticks.
 const MEASURE_TICKS: u32 = 600;
+/// A peer must be nearer an owned pedestrian than this console by this many metres...
+const HANDOFF_MARGIN: f32 = 15.;
+/// ...for this many ticks before the pedestrian is handed over.
+const HANDOFF_TICKS: u32 = 60;
 
+/// An entity the table knows, by its world id: this console's copy, who owns it, and its epoch.
 #[derive(Debug)]
-struct Puppet {
-    /// The local entity id of the puppet pedestrian.
+struct Tracked {
+    /// The local entity id of this console's copy (a puppet unless the owner is this console).
     entity: u32,
-    owner: u8,
-    /// The local tick its last sample arrived.
+    owner: Owner,
+    epoch: u32,
+    kind: Kind,
+    /// The local tick its last sample arrived (a puppet's).
     updated: u32,
     /// The local tick a contact was sent to the owner and not yet confirmed by its flags.
     awaiting: Option<u32>,
     knocked_down: bool,
+    /// How many runs this console has streamed it in (an owned one's).
+    runs: u32,
+    /// How many ticks a peer has been nearer by the margin (an owned one's), and which.
+    nearer: (u32, u8),
 }
 
 #[derive(Debug)]
@@ -57,6 +74,8 @@ struct Spawn {
     descriptor: Descriptor,
     state: EntityState,
     since: u32,
+    /// The record handed the entity to this console: promote the puppet once spawned.
+    promote: bool,
 }
 
 #[derive(Debug, Default)]
@@ -98,15 +117,20 @@ pub(in super::super) struct CoopWorld {
     /// The owners' prop samples received, applied at the next tick.
     prop_updates: Vec<PropState>,
     nudged: bool,
-    puppets: BTreeMap<u32, Puppet>,
+    /// Every entity the table knows, by world id (M6): this console's own and the puppets.
+    entities: BTreeMap<u32, Tracked>,
+    /// This console's local entity ids and their world ids.
+    locals: BTreeMap<u32, u32>,
     spawns: BTreeMap<u32, Spawn>,
     /// The samples received for known puppets, applied at the next tick.
     updates: Vec<EntityState>,
     despawns: Vec<u32>,
+    /// Puppets handed to this console, promoted at the next tick.
+    promotions: Vec<u32>,
     /// Contacts the others reported on this console's own entities.
     received_contacts: Vec<Contact>,
-    /// This console's entities described at least once, and how many runs each has been in.
-    announced: BTreeMap<u32, u32>,
+    /// Entities handed over, with the runs left to say so (the record names the new owner).
+    handoffs: BTreeMap<u32, u8>,
     /// This console's entities gone from its roster, with the runs left to say so.
     gone: BTreeMap<u32, u8>,
     /// This console's own story characters (never streamed), each decided once.
@@ -190,14 +214,45 @@ impl<T, C> SelectedLiveSession<T, C> {
         };
         let coop = &mut self.online.coop;
         for entity in run.entities {
-            if stream::owner_slot(entity.id) != owner {
+            let id = entity.id;
+            let known = coop.entities.get_mut(&id);
+            let stale = known.as_ref().is_some_and(|known| entity.epoch < known.epoch || (entity.epoch == known.epoch && known.owner == Owner::Local));
+            if stale {
                 continue;
             }
-            if coop.puppets.contains_key(&entity.id) {
-                coop.updates.push(entity);
-            } else if let Some(descriptor) = entity.descriptor.clone() {
-                let since = self.completed_frames;
-                coop.spawns.entry(entity.id).and_modify(|spawn| spawn.state = entity.clone()).or_insert(Spawn { owner, descriptor, state: entity, since });
+            if entity.owner == local_slot {
+                // A handoff to this console.
+                match known {
+                    Some(known) => {
+                        if known.owner != Owner::Local {
+                            known.epoch = entity.epoch;
+                            coop.promotions.push(id);
+                        }
+                    }
+                    None => {
+                        if let Some(descriptor) = entity.descriptor.clone() {
+                            let since = self.completed_frames;
+                            coop.spawns.entry(id).and_modify(|spawn| { spawn.state = entity.clone(); spawn.promote = true; }).or_insert(Spawn { owner, descriptor, state: entity, since, promote: true });
+                        }
+                    }
+                }
+                continue;
+            }
+            match known {
+                Some(known) => {
+                    if known.owner != Owner::Remote(entity.owner) {
+                        let old = known.owner;
+                        known.owner = ownership::decide(known.kind, id, Some(old), Owner::Remote(entity.owner), &format!("handed over (epoch {})", entity.epoch));
+                        known.epoch = entity.epoch;
+                    }
+                    coop.updates.push(entity);
+                }
+                None => {
+                    if let Some(descriptor) = entity.descriptor.clone() {
+                        let since = self.completed_frames;
+                        coop.spawns.entry(id).and_modify(|spawn| spawn.state = entity.clone()).or_insert(Spawn { owner: entity.owner, descriptor, state: entity, since, promote: false });
+                    }
+                }
             }
         }
         for prop in run.props {
@@ -212,8 +267,8 @@ impl<T, C> SelectedLiveSession<T, C> {
             coop.props.insert(prop.locator, PropOwner { owner: Owner::Remote(owner), claim: prop.claim, touched: 0, sent: None, runs: 0 });
             coop.prop_updates.push(prop);
         }
-        coop.despawns.extend(run.despawns.into_iter().filter(|&id| stream::owner_slot(id) == owner));
-        coop.received_contacts.extend(run.contacts.into_iter().filter(|contact| stream::owner_slot(contact.id) == local_slot));
+        coop.despawns.extend(run.despawns.into_iter().filter(|id| coop.entities.get(id).is_some_and(|known| known.owner == Owner::Remote(owner))));
+        coop.received_contacts.extend(run.contacts.into_iter().filter(|contact| coop.entities.get(&contact.id).is_some_and(|known| known.owner == Owner::Local)));
     }
 
     /// One completed tick of a campaign: the received runs applied, the contacts applied, and
@@ -230,6 +285,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                 trace(format_args!("diagnostic: teleport to {position:?} at {tick}: {}", self.diagnostic_teleport_local_player(position)));
             }
         }
+        // The other players' testers from the facts (the same on every console), for the
+        // handoff rule.
+        let peers: Vec<(u8, [f32; 4])> = self
+            .career
+            .as_ref()
+            .map(|career| {
+                career.system.world().skaters.iter()
+                    .filter(|frame| !frame.local && frame.tester_valid)
+                    .filter_map(|frame| Some((u8::try_from(frame.player).ok()?, [frame.tester_base[0], frame.tester_base[1], frame.tester_base[2], 1.])))
+                    .collect()
+            })
+            .unwrap_or_default();
         let mut coop = std::mem::take(&mut self.online.coop);
         let sent = self
             .inner
@@ -246,10 +313,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
                     let roster = living.pedestrian_entities.as_deref_mut().ok_or("pedestrian EntityMan absent")?;
                     for sample in coop.updates.drain(..) {
-                        let Some(puppet) = coop.puppets.get_mut(&sample.id) else { continue };
+                        let Some(puppet) = coop.entities.get_mut(&sample.id).filter(|known| known.owner != Owner::Local) else { continue };
                         let Some(pedestrian) = roster.get_mut(puppet.entity) else {
                             trace(format_args!("puppet {:08x}: its entity {:#x} is gone from the roster", sample.id, puppet.entity));
-                            coop.puppets.remove(&sample.id);
+                            coop.entities.remove(&sample.id);
                             continue;
                         };
                         let Some(drive) = pedestrian.puppet.as_mut() else { continue };
@@ -277,7 +344,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     // 2. The others' contacts on this console's own pedestrians, through the
                     // same funnel a local hit takes.
                     for contact in coop.received_contacts.drain(..) {
-                        let entity = stream::local_id(contact.id);
+                        let Some(entity) = coop.entities.get(&contact.id).filter(|known| known.owner == Owner::Local).map(|known| known.entity) else {
+                            trace(format_args!("contact on {:08x}: not this console's", contact.id));
+                            continue;
+                        };
                         let Some(pedestrian) = roster.get_mut(entity) else {
                             trace(format_args!("contact on {:08x}: no such entity here", contact.id));
                             continue;
@@ -390,24 +460,48 @@ impl<T, C> SelectedLiveSession<T, C> {
                             core.allow_culling = false;
                         }
                     }
-                    ownership::decide(Kind::Pedestrian, id, None, Owner::Remote(owner), "its census spawned it");
-                    trace(format_args!("puppet {id:08x} of slot {owner} spawned as entity {entity:#x} (entity key {:016x}, model {:016x}) at {tick}",
-                        spawn.descriptor.entity_key, spawn.descriptor.model_key));
-                    coop.puppets.insert(id, Puppet { entity, owner, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0 });
+                    let kind = spawn.state.kind;
+                    ownership::decide(kind, id, None, Owner::Remote(owner), "its census spawned it");
+                    trace(format_args!("puppet {id:08x} of slot {owner} spawned as entity {entity:#x} (entity key {:016x}, model {:016x}, epoch {}) at {tick}",
+                        spawn.descriptor.entity_key, spawn.descriptor.model_key, spawn.state.epoch));
+                    coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, runs: 0, nearer: (0, 0) });
+                    if spawn.promote {
+                        coop.promotions.push(id);
+                    }
                     coop.spawns.remove(&id);
+                }
+
+                // 3b. Puppets handed to this console are promoted: their graph and navigation
+                // take over where the puppet stood, and this console streams them from now on.
+                for id in std::mem::take(&mut coop.promotions) {
+                    let Some(known) = coop.entities.get_mut(&id).filter(|known| known.owner != Owner::Local) else { continue };
+                    let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                    let Some(pedestrian) = living.pedestrian_entities.as_deref_mut().and_then(|p| p.get_mut(known.entity)) else { continue };
+                    pedestrian.puppet = None;
+                    if let Some(core) = pedestrian.core.as_mut() {
+                        core.allow_culling = true;
+                    }
+                    let old = known.owner;
+                    known.owner = ownership::decide(known.kind, id, Some(old), Owner::Local, &format!("handed to this console: its player is nearer (epoch {})", known.epoch));
+                    known.runs = 0;
+                    known.nearer = (0, 0);
+                    coop.locals.insert(known.entity, id);
+                    trace(format_args!("puppet {id:08x} promoted: entity {:#x} runs its own graph from {tick}", known.entity));
                 }
 
                 // 4. Puppets their owner despawned or stopped streaming go.
                 let mut culls: Vec<(u32, &'static str)> = coop.despawns.drain(..).map(|id| (id, "its owner despawned it")).collect();
-                for (&id, puppet) in &coop.puppets {
+                for (&id, puppet) in coop.entities.iter().filter(|(_, known)| known.owner != Owner::Local) {
                     if tick.saturating_sub(puppet.updated) > STALE_TICKS {
                         culls.push((id, "its owner stopped streaming it"));
                     }
                 }
                 for (id, reason) in culls {
-                    let Some(puppet) = coop.puppets.remove(&id) else { continue };
-                    recipes.cull_census_pedestrian(world, cvars, puppet.entity)?;
-                    trace(format_args!("puppet {id:08x} of slot {}: culled at {tick}, {reason}", puppet.owner));
+                    let Some(puppet) = coop.entities.get(&id).filter(|known| known.owner != Owner::Local) else { continue };
+                    let (entity, owner) = (puppet.entity, puppet.owner);
+                    coop.entities.remove(&id);
+                    recipes.cull_census_pedestrian(world, cvars, entity)?;
+                    trace(format_args!("puppet {id:08x} of {owner:?}: culled at {tick}, {reason}"));
                 }
 
                 // 5. The diagnostic shove: the nearest puppet, hit as a skater would hit it.
@@ -418,8 +512,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
                     let roster = living.pedestrian_entities.as_deref_mut().ok_or("pedestrian EntityMan absent")?;
                     let nearest = coop
-                        .puppets
+                        .entities
                         .iter()
+                        .filter(|(_, known)| known.owner != Owner::Local)
                         .filter_map(|(&id, puppet)| {
                             let core = roster.get(puppet.entity)?.core.as_ref()?;
                             Some((distance_squared(core.transform[3], centre), id, puppet.entity))
@@ -452,7 +547,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let present: BTreeSet<u32> = roster.ids().into_iter().collect();
                     roster_size = present.len();
                     for &id in &present {
-                        let pedestrian = roster.get(id).expect("listed");
+                        let pedestrian = roster.get_mut(id).expect("listed");
                         if pedestrian.puppet.is_some() {
                             continue;
                         }
@@ -464,13 +559,49 @@ impl<T, C> SelectedLiveSession<T, C> {
                             continue;
                         }
                         let Some(core) = pedestrian.core.as_ref() else { continue };
-                        if pedestrian.security_guard.is_some() {
+                        let guard = pedestrian.security_guard.is_some();
+                        if guard {
                             guards.insert(id);
                         }
                         let d2 = distance_squared(core.transform[3], centre);
                         if d2 > STREAM_RADIUS * STREAM_RADIUS {
                             continue;
                         }
+                        // The table entry of an owned pedestrian, made at its first sample.
+                        let wid = *coop.locals.entry(id).or_insert_with(|| stream::world_id(local_slot, id));
+                        let kind = if guard { Kind::SecurityGuard } else { Kind::Pedestrian };
+                        let tracked = coop.entities.entry(wid).or_insert_with(|| {
+                            let reason = if guard { "this census spawned it; it chases this console's skater only" } else { "this census spawned it" };
+                            ownership::decide(kind, wid, None, ownership::owner(kind, Owner::Local), reason);
+                            Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, runs: 0, nearer: (0, 0) }
+                        });
+                        // The handoff rule: a peer nearer by the margin for a second takes it.
+                        let position = core.transform[3];
+                        let nearest_peer = peers.iter().map(|&(slot, at)| (distance_squared(position, at), slot)).min_by(|a, b| a.0.total_cmp(&b.0));
+                        match nearest_peer {
+                            Some((peer_d2, slot)) if peer_d2.sqrt() + HANDOFF_MARGIN < d2.sqrt() && peer_d2 <= STREAM_RADIUS * STREAM_RADIUS => {
+                                tracked.nearer = if tracked.nearer.1 == slot { (tracked.nearer.0 + 1, slot) } else { (1, slot) };
+                            }
+                            _ => tracked.nearer = (0, 0),
+                        }
+                        if tracked.nearer.0 >= HANDOFF_TICKS {
+                            let slot = tracked.nearer.1;
+                            tracked.epoch += 1;
+                            tracked.owner = ownership::decide(kind, wid, Some(Owner::Local), Owner::Remote(slot), &format!("that player is nearer by {HANDOFF_MARGIN} m for {HANDOFF_TICKS} ticks (epoch {})", tracked.epoch));
+                            tracked.updated = tick;
+                            tracked.nearer = (0, 0);
+                            let transform = core.transform;
+                            let velocity = [core.velocity[0], core.velocity[1], core.velocity[2]];
+                            let mut drive = PuppetDrive::new(transform);
+                            drive.arrive(transform, velocity, 0);
+                            pedestrian.puppet = Some(drive);
+                            if let Some(core) = pedestrian.core.as_mut() {
+                                core.allow_culling = false;
+                            }
+                            coop.handoffs.insert(wid, DESPAWN_RUNS);
+                            continue;
+                        }
+                        let Some(core) = pedestrian.core.as_ref() else { continue };
                         let mut entity_flags = 0;
                         if pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) {
                             entity_flags |= flags::KNOCKED_DOWN;
@@ -482,11 +613,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                             }
                         }
                         entity_flags |= ((pedestrian.collision_info.direction as u32 as u8) << flags::DIRECTION_SHIFT) & flags::DIRECTION_MASK;
-                        let runs = coop.announced.get(&id).copied();
-                        let describe = runs.is_none_or(|runs| runs % DESCRIBE_EVERY == 0);
+                        let describe = tracked.runs % DESCRIBE_EVERY == 0;
                         owned.push((d2, EntityState {
-                            id: stream::world_id(local_slot, id),
-                            kind: Kind::Pedestrian,
+                            id: wid,
+                            kind,
+                            owner: local_slot,
+                            epoch: tracked.epoch,
                             position: [core.transform[3][0], core.transform[3][1], core.transform[3][2]],
                             yaw: stream::yaw_of(&core.transform),
                             velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
@@ -500,23 +632,46 @@ impl<T, C> SelectedLiveSession<T, C> {
                             }),
                         }));
                     }
+                    // The handoffs still to say: the record names the new owner, with the
+                    // descriptor so a console that never saw the entity spawns it.
+                    for (&wid, left) in coop.handoffs.iter_mut() {
+                        *left -= 1;
+                        let Some(tracked) = coop.entities.get(&wid) else { continue };
+                        let Owner::Remote(slot) = tracked.owner else { continue };
+                        let Some(core) = roster.get(tracked.entity).and_then(|p| p.core.as_ref()) else { continue };
+                        owned.push((-1., EntityState {
+                            id: wid,
+                            kind: tracked.kind,
+                            owner: slot,
+                            epoch: tracked.epoch,
+                            position: [core.transform[3][0], core.transform[3][1], core.transform[3][2]],
+                            yaw: stream::yaw_of(&core.transform),
+                            velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
+                            flags: 0,
+                            motion: 0,
+                            descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices }),
+                        }));
+                    }
+                    coop.handoffs.retain(|_, left| *left > 0);
                     // The contacts this skater made with the others' puppets.
-                    for (&id, puppet) in &mut coop.puppets {
+                    for (&id, puppet) in coop.entities.iter_mut().filter(|(_, known)| known.owner != Owner::Local) {
                         let Some(contact) = roster.get_mut(puppet.entity).and_then(|p| p.puppet.as_mut()).and_then(|drive| drive.pending_contact.take()) else { continue };
                         let (force, direction, velocity, omega) = contact;
                         run.contacts.push(Contact { id, force, direction, velocity, omega });
                         puppet.awaiting = Some(tick);
                         coop.stats.contacts_sent += 1;
-                        trace(format_args!("contact on puppet {id:08x} of slot {}: force {force} direction {direction}, reported to its owner at {tick}", puppet.owner));
+                        trace(format_args!("contact on puppet {id:08x} of {:?}: force {force} direction {direction}, reported to its owner at {tick}", puppet.owner));
                     }
-                    // Entities announced before and gone from the roster are despawned to the others.
+                    // Owned entities gone from the roster are despawned to the others.
                     coop.own.retain(|id| present.contains(id));
-                    let gone: Vec<u32> = coop.announced.keys().filter(|id| !present.contains(id)).copied().collect();
-                    for id in gone {
-                        coop.announced.remove(&id);
-                        coop.gone.insert(id, DESPAWN_RUNS);
-                        trace(format_args!("own pedestrian {:08x} left the roster: despawn announced", stream::world_id(local_slot, id)));
+                    let gone: Vec<(u32, u32)> = coop.entities.iter().filter(|(_, known)| known.owner == Owner::Local && !present.contains(&known.entity)).map(|(&wid, known)| (wid, known.entity)).collect();
+                    for (wid, entity) in gone {
+                        coop.entities.remove(&wid);
+                        coop.locals.remove(&entity);
+                        coop.gone.insert(wid, DESPAWN_RUNS);
+                        trace(format_args!("own pedestrian {wid:08x} left the roster: despawn announced"));
                     }
+                    coop.locals.retain(|entity, _| present.contains(entity));
                 }
                 owned.sort_by(|a, b| a.0.total_cmp(&b.0));
                 run.entities = owned.into_iter().map(|(_, entity)| entity).collect();
@@ -543,24 +698,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                         run.props.push(PropState { locator, claim: owner.claim, position, rotation: stream::quaternion_of(&object.transform), velocity, resting: speed2 <= 1e-4 });
                     }
                 }
-                run.despawns = coop.gone.keys().map(|&id| stream::world_id(local_slot, id)).collect();
+                run.despawns = coop.gone.keys().copied().collect();
                 coop.gone.retain(|_, left| {
                     *left -= 1;
                     *left > 0
                 });
                 let (bytes, included) = stream::encode(&run, MAX_WORLD);
                 for entity in &run.entities[..included] {
-                    let id = stream::local_id(entity.id);
-                    let runs = coop.announced.entry(id).or_insert_with(|| {
-                        if guards.contains(&id) {
-                            ownership::decide(Kind::SecurityGuard, entity.id, None, ownership::owner(Kind::SecurityGuard, Owner::Local), "this census spawned it; it chases this console's skater only");
-                        } else {
-                            ownership::decide(Kind::Pedestrian, entity.id, None, Owner::Local, "this census spawned it");
-                        }
-                        0
-                    });
-                    *runs += 1;
+                    if let Some(tracked) = coop.entities.get_mut(&entity.id).filter(|known| known.owner == Owner::Local) {
+                        tracked.runs += 1;
+                    }
                 }
+                let _ = &guards;
                 if included < run.entities.len() {
                     trace(format_args!("world run at {tick}: {} of {} owned pedestrians fit {MAX_WORLD} bytes", included, run.entities.len()));
                 }
@@ -574,7 +723,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let per_entity = if stats.entities == 0 { 0. } else { stats.bytes as f64 / seconds / (stats.entities as f64 / f64::from(stats.runs.max(1))) };
                     trace(format_args!(
                         "world stream at {tick}: {} runs, {} entity samples, {} prop samples, {} B ({:.0} B/s, {:.0} B/s per streamed pedestrian), {} owned in range of {} pedestrians here, {} puppets, {} props owned of {} known, contacts sent {} applied {} confirmed {}",
-                        stats.runs, stats.entities, stats.props, stats.bytes, stats.bytes as f64 / seconds, per_entity, run.entities.len(), roster_size, coop.puppets.len(),
+                        stats.runs, stats.entities, stats.props, stats.bytes, stats.bytes as f64 / seconds, per_entity, run.entities.len(), roster_size, coop.entities.values().filter(|known| known.owner != Owner::Local).count(),
                         coop.props.values().filter(|prop| prop.owner == Owner::Local).count(), coop.props.len(),
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed
                     ));
