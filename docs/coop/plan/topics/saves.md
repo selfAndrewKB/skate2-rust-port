@@ -4,7 +4,21 @@
 per-player id, resume at the same progression, a member joining a running campaign, reconnect.
 Front page: [README](../../README.md). Design: [design](../design.md) §3.7, §3.8.
 
-## State (2026-11-10, M8 in progress) [ASSUMPTION: built and tested in units; the bench runs are next]
+## State (2026-11-10, M8) [CONFIRMED on the bench unless marked]
+
+**What M8 proved, resume** (`../bench/evidence/2026-11-10-m8a-*.log`): both seats played the
+opening tutorial and saved at round tick 6072 with one hash (`e6a2db1d166eb003`; the server:
+"Seat 2 agrees"); the server wrote `campaign-636f6f702d63616d.save` (130246 B); everything
+stopped; the server alone came back and read the file ("campaign save read from ... a member's
+newer one supersedes it"); each seat, started from its primed profile, received the save at
+the join ("4 leaves, held for the career's load") and adopted it at load ("the server's save
+adopted (session 0 tick 0); the local file's progression agreed"); the round started with both.
+
+**What M8 proved, a late join** (`../bench/evidence/2026-11-10-m8b-*.log`): seats 1 and 2 in
+round 2816581293; seat 3 joined and loaded its career; the server: "Seat 3 loaded its career
+after campaign round 2816581293 started: every member reloads from the newest save and the
+round restarts"; all three received the save and "the server asks for a reload", took their
+careers down and up again adopting it, and round 2816581294 started with 3 players.
 
 - **The blob.** Every autosave sends the progression leaves (SignPost's data and messages, the
   unlockables, the dynamic hulls; never the skater's own orientation) as one byte string with
@@ -29,8 +43,9 @@ Front page: [README](../../README.md). Design: [design](../design.md) §3.7, §3
   entered; the round restarts at tick 0 with everyone. Mission progress since the last
   autosave is lost for all, as a reload would lose it.
 - **Reconnect.** A console whose connection drops in a campaign keeps its career up but held
-  (no scripts tick without the round), signs in again at once and rejoins the campaign lobby;
-  the join brings the server's save and, if the others' round runs, a reload for everyone.
+  (no scripts tick without the round), signs in again after a second and rejoins the campaign
+  lobby, trying again every three seconds while the server is not back; the join brings the
+  server's save and, if the others' round runs, a reload for everyone.
 
 **Not done:** a save request before a reload (the newest autosave is used as held); a notice
 for the player while the rejoin runs; a campaign per lobby on one server (one file per
@@ -38,6 +53,9 @@ server, by the lobby's one key).
 
 ## History
 
+- 2026-11-10 M8: the first rejoin run (`2026-11-10-m8c-*.log`) signed in once, at the moment
+  the server was still down ("Connection refused"), and never again; the sign-in now retries
+  every three seconds.
 - 2026-11-10 M8: the study found the server's file never read back, keyed by a constant, with
   `tick >= held` rejecting a restarted round's saves; the client dropping the blob; a late
   member's career frozen for good behind `campaign_hold`; a lost connection sending the
