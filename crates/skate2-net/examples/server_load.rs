@@ -159,7 +159,7 @@ impl Simulation {
                 let number = index as u64;
                 Player {
                     addr: SocketAddr::from(([10, 1, a, b], 4000)),
-                    core: ClientCore::new(number + 1, &format!("Skater{index}"), VERSION, Build::DEVELOPMENT, origin),
+                    core: ClientCore::new(number + 1, &format!("Skater{index}"), VERSION, 0, Build::DEVELOPMENT, origin),
                     game: index / settings.game_size,
                     user_id: None,
                     joined: false,

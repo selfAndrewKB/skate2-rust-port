@@ -469,7 +469,7 @@ impl Raw {
 #[test]
 fn nothing_comes_before_the_hello() {
     let mut net = Net::new();
-    let hello = ClientMessage::Hello { nickname: "Polite".into(), game_version: "test".into() };
+    let hello = ClientMessage::Hello { nickname: "Polite".into(), game_version: "test".into(), player_id: 0 };
     let mut polite = Raw::connect(&mut net, 1);
     let (messages, closed) = polite.send(&mut net, &hello, true);
     assert_eq!(closed, None);
@@ -491,7 +491,7 @@ fn nothing_comes_before_the_hello() {
 fn a_message_that_does_not_decode_drops_the_connection() {
     let mut net = Net::new();
     let mut player = Raw::connect(&mut net, 1);
-    let (messages, _) = player.send(&mut net, &ClientMessage::Hello { nickname: "Fuzzer".into(), game_version: "test".into() }, true);
+    let (messages, _) = player.send(&mut net, &ClientMessage::Hello { nickname: "Fuzzer".into(), game_version: "test".into(), player_id: 0 }, true);
     assert!(messages.iter().any(|message| matches!(message, ServerMessage::Welcome { .. })));
     assert_eq!(player.send_bytes(&mut net, vec![15, 1], false).1, Some(leave::LOST_CONNECTION), "a ping cut short");
     assert_eq!(net.server.players(), 0);
@@ -1289,7 +1289,7 @@ fn the_lobby_browser_asks_only_after_the_hello() {
     let mut joiner = Raw::connect(&mut net, 2);
     assert_eq!(joiner.send(&mut net, &ClientMessage::JoinLobby { game: 1 }, true).1, Some(leave::KICKED_BEFORE_SIGN_IN));
     let mut player = Raw::connect(&mut net, 3);
-    player.send(&mut net, &ClientMessage::Hello { nickname: "Browser".into(), game_version: "test".into() }, true);
+    player.send(&mut net, &ClientMessage::Hello { nickname: "Browser".into(), game_version: "test".into(), player_id: 0 }, true);
     let (messages, closed) = player.send(&mut net, &ClientMessage::ListLobbies, true);
     assert_eq!((listing(&messages), closed), (Some(Vec::new()), None));
     assert_eq!(player.send(&mut net, &ClientMessage::ListLobbies, false), (Vec::new(), None), "the game asks on the reliable channel");
@@ -1907,8 +1907,8 @@ fn a_campaign_round_starts_once_every_member_s_career_is_loaded() {
     assert_eq!(kind, reset::CAMPAIGN);
     assert_eq!(&participants[..2], &[host_id, guest_id]);
     // A save goes to the server; the log names the agreement, and a later joiner gets the save.
-    net.send(host, &ClientMessage::CampaignSave { tick: 600, hash: 0xabc, data: vec![1, 2, 3] });
-    net.send(guest, &ClientMessage::CampaignSave { tick: 600, hash: 0xabc, data: vec![1, 2, 3] });
+    net.send(host, &ClientMessage::CampaignSave { session: 0, tick: 600, hash: 0xabc, data: vec![1, 2, 3] });
+    net.send(guest, &ClientMessage::CampaignSave { session: 0, tick: 600, hash: 0xabc, data: vec![1, 2, 3] });
     net.run(100);
     let third = net.add("Third");
     net.run(100);
