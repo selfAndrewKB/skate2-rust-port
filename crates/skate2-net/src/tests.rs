@@ -4,7 +4,7 @@ use crate::client::{ClientCore, ClientEvent, Disconnect};
 use crate::crypto::{Build, Handshake, Session};
 use crate::frames::{HEADER_WORDS, INTERVAL, NetFrame};
 use crate::protocol::{
-    ClientMessage, FactsNotes, GameAttributes, GameResult, LobbyInfo, MAX_PLAYERS, Phase, PlayNow, PlayNowMode, ServerMessage, campaign, challenge, leave,
+    ClientMessage, FactsNotes, GameAttributes, GameResult, LobbyInfo, MAX_PLAYERS, MAX_WORLD, Phase, PlayNow, PlayNowMode, ServerMessage, campaign, challenge, leave,
     play_now, proposal, refuse, request, reset,
 };
 use crate::moderation::BanList;
@@ -1827,4 +1827,41 @@ fn a_campaign_lobby_takes_its_players_and_starts_no_challenge() {
         assert!(!events.iter().any(|event| matches!(event, ClientEvent::Message(ServerMessage::GameReset { .. }))), "no challenge loads");
         assert!(!events.iter().any(|event| matches!(event, ClientEvent::Disconnected(_))), "nobody is dropped");
     }
+}
+
+#[test]
+fn a_campaign_s_world_runs_reach_the_other_members_as_sent_and_no_one_elsewhere() {
+    let mut net = Net::new();
+    let host = net.add("Host");
+    let guest = net.add("Guest");
+    net.run(100);
+    net.send(host, &campaign_lobby(true));
+    net.run(100);
+    net.send(guest, &campaign_lobby(false));
+    net.run(100);
+    let host_id = signed_in(&net.events(host)).expect("signed in");
+    net.events(guest);
+    let world = |net: &mut Net, client: usize| -> Vec<(u64, u32, Vec<u8>)> {
+        net.events(client).into_iter().filter_map(|event| match event {
+            ClientEvent::World { user_id, tick, data } => Some((user_id, tick, data)),
+            _ => None,
+        }).collect()
+    };
+    // The run goes to the other member as sent, never back to its sender.
+    net.clients[host].1.send_world(4242, vec![1, 2, 3]);
+    net.run(100);
+    assert_eq!(world(&mut net, guest), [(host_id, 4242, vec![1, 2, 3])]);
+    assert!(world(&mut net, host).is_empty());
+    // A run past MAX_WORLD is cut there, not refused.
+    net.clients[host].1.send_world(4243, vec![9; MAX_WORLD + 100]);
+    net.run(100);
+    assert_eq!(world(&mut net, guest), [(host_id, 4243, vec![9; MAX_WORLD])]);
+    // Outside a campaign the world does not travel.
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Host", "Guest"]);
+    let (host, guest) = (clients[0], clients[1]);
+    net.events(guest);
+    net.clients[host].1.send_world(1, vec![1]);
+    net.run(100);
+    assert!(world(&mut net, guest).is_empty());
 }

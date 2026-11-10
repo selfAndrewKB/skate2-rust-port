@@ -73,6 +73,9 @@ const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(10);
 /// (20 or 30 a second), more after a stall; beyond that they are dropped unrelayed, as lost ones
 /// are.
 const FRAME_RATE: Rate = Rate { per_second: 90.0, burst: 60.0 };
+/// Co-op fork: the world runs a campaign member may send, one every two or three ticks as its
+/// replay frames; beyond that they are dropped unrelayed.
+const WORLD_RATE: Rate = Rate { per_second: 90.0, burst: 60.0 };
 /// The reliable messages a connection may send: the game's facts every tick and a few others. A
 /// connection sending more is not running the game and is dropped (`leave::KICKED_FOR_FLOOD`).
 const MESSAGE_RATE: Rate = Rate { per_second: 240.0, burst: 600.0 };
@@ -177,6 +180,8 @@ struct Connection {
     /// The replay frames ([`FRAME_RATE`]), reliable messages ([`MESSAGE_RATE`]), matchmaking
     /// requests ([`PLAY_NOW_RATE`]) and lobby listings ([`LOBBY_LIST_RATE`]) it may still send.
     frames: Bucket,
+    /// Co-op fork: the world runs ([`WORLD_RATE`]).
+    world: Bucket,
     messages: Bucket,
     play_now: Bucket,
     lobby_list: Bucket,
@@ -204,6 +209,8 @@ struct Member {
     chat_sent: VecDeque<Instant>,
     /// A run of its frames failed to decode and was logged; later ones are only dropped.
     bad_frames_logged: bool,
+    /// Co-op fork: a world run outside a campaign was logged once.
+    world_refused_logged: bool,
 }
 
 #[derive(Debug)]
@@ -502,6 +509,7 @@ impl ServerCore {
                 endpoint: Endpoint::new(id, session, now),
                 user: None,
                 frames: Bucket::full(FRAME_RATE, now),
+                world: Bucket::full(WORLD_RATE, now),
                 messages: Bucket::full(MESSAGE_RATE, now),
                 play_now: Bucket::full(PLAY_NOW_RATE, now),
                 lobby_list: Bucket::full(LOBBY_LIST_RATE, now),
@@ -644,6 +652,12 @@ impl ServerCore {
                 }
             }
             ClientMessage::Busy => self.mark_alive(id, user_id, now),
+            ClientMessage::World { tick, data } if !reliable => {
+                self.mark_alive(id, user_id, now);
+                if self.connections.get_mut(&id).is_some_and(|connection| connection.world.take(WORLD_RATE, now)) {
+                    self.relay_world(id, user_id, tick, data);
+                }
+            }
             ClientMessage::FrameAcks(acks) if !reliable => self.frame_acks(id, user_id, &acks),
             message if reliable => {
                 let Some(game) = self.game_of(id) else { return };
@@ -881,6 +895,7 @@ impl ServerCore {
             in_world: false,
             chat_sent: VecDeque::new(),
             bad_frames_logged: false,
+            world_refused_logged: false,
         });
         let joined = ServerMessage::GameJoined {
             game: game_id,
@@ -1526,6 +1541,32 @@ impl ServerCore {
             connection.endpoint.send_deferred(ack.encode(), now);
         }
         self.mark_in_world(game_id, user_id);
+    }
+
+    /// Co-op fork: a campaign member's world run goes to every other member as it is; the server
+    /// reads nothing of it. Outside a campaign a world run is dropped, logged once a member.
+    fn relay_world(&mut self, id: u32, user_id: u64, tick: u32, data: Vec<u8>) {
+        let Some(game_id) = self.game_of(id) else { return };
+        let Some(game) = self.games.get_mut(&game_id) else { return };
+        let Some(source) = game.members.iter().position(|member| member.user_id == user_id) else { return };
+        if game.attributes.challenge_type != challenge::CAMPAIGN {
+            let member = &mut game.members[source];
+            if !std::mem::replace(&mut member.world_refused_logged, true) {
+                (self.log)(&format!("{}: world runs outside a campaign are not relayed", member.name));
+            }
+            return;
+        }
+        let slot = game.members[source].slot;
+        let targets: Vec<u32> = game
+            .members
+            .iter()
+            .filter(|member| member.user_id != user_id && !game.hidden_from(user_id, member.user_id))
+            .map(|member| member.connection)
+            .collect();
+        let message = ServerMessage::RemoteWorld { slot, tick, data };
+        for target in targets {
+            self.send_unreliable(target, &message);
+        }
     }
 
     fn frame_acks(&mut self, id: u32, user_id: u64, acks: &[(u8, u32, u32)]) {

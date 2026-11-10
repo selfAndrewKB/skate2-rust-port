@@ -46,6 +46,8 @@ pub enum ClientEvent {
     Frame { user_id: u64, frame: Box<NetFrame>, run_end: bool },
     /// A remote player's facts of one tick.
     Facts { user_id: u64, tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8> },
+    /// Co-op fork: another member's world run (`ClientMessage::World`).
+    World { user_id: u64, tick: u32, data: Vec<u8> },
 }
 
 #[derive(Debug)]
@@ -156,6 +158,14 @@ impl ClientCore {
         }
     }
 
+    /// Co-op fork: one tick of the living-world entities this console owns, unreliably; a run
+    /// past [`protocol::MAX_WORLD`] is cut there by the encoding.
+    pub fn send_world(&mut self, tick: u32, data: Vec<u8>) {
+        if let State::Connected { endpoint } = &mut self.state {
+            endpoint.send_unreliable(ClientMessage::World { tick, data }.encode());
+        }
+    }
+
     fn user_of(&self, slot: u8) -> Option<u64> {
         self.slots.iter().find(|&(_, &held)| held == slot).map(|(&user_id, _)| user_id)
     }
@@ -245,6 +255,11 @@ impl ClientCore {
                     self.events.push(ClientEvent::Facts { user_id, tick, stint, notes, data });
                 }
             }
+            ServerMessage::RemoteWorld { slot, tick, data } => {
+                if let Some(user_id) = self.user_of(slot) {
+                    self.events.push(ClientEvent::World { user_id, tick, data });
+                }
+            }
             ServerMessage::FrameAck { latest, mask } => self.own_frames.acknowledge(latest, mask),
             ServerMessage::Pong { time } => {
                 let elapsed = u64::try_from(now.saturating_duration_since(self.epoch).as_micros()).unwrap_or(u64::MAX);
@@ -318,6 +333,8 @@ enum Command {
     Send(ClientMessage),
     /// Messages and a run of replay frames, handed over together so they share a datagram.
     Tick(Vec<ClientMessage>, Vec<NetFrame>),
+    /// Co-op fork: a world run.
+    World(u32, Vec<u8>),
     /// The game is loading (a travel streaming its destination), when its own thread may stall
     /// past the server's inactivity limit.
     Loading(bool),
@@ -358,6 +375,11 @@ impl Client {
     /// Reliable messages, then a run of replay frames: one datagram where they fit.
     pub fn send_tick(&self, messages: Vec<ClientMessage>, frames: Vec<NetFrame>) {
         let _ = self.commands.send(Command::Tick(messages, frames));
+    }
+
+    /// Co-op fork: one tick of the living-world entities this console owns, unreliably.
+    pub fn send_world(&self, tick: u32, data: Vec<u8>) {
+        let _ = self.commands.send(Command::World(tick, data));
     }
 
     /// Whether the game is loading: meanwhile the connection's thread says `Busy` for it whenever
@@ -490,6 +512,11 @@ fn run_client(server: &str, nickname: &str, game_version: &str, commands: &Recei
                         alive_sent = Instant::now();
                         core.send_frames(&frames);
                     }
+                }
+                Ok(Command::World(tick, data)) => {
+                    busy = true;
+                    alive_sent = Instant::now();
+                    core.send_world(tick, data);
                 }
                 Ok(Command::Loading(on)) => {
                     loading = if on { Some(loading.unwrap_or_else(Instant::now)) } else { None };

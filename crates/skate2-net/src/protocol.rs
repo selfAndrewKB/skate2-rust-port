@@ -18,6 +18,9 @@ pub const MAX_NAME: usize = 64;
 pub const MAX_RECIPE: usize = 128 * 1024;
 /// The longest challenge facts record of one tick.
 pub const MAX_FACTS: usize = 16 * 1024;
+/// Co-op fork: the most a world run (one tick of the living-world entities a console owns) may
+/// hold. It travels unreliably, so it must fit one datagram.
+pub const MAX_WORLD: usize = 1024;
 /// The most online challenges one `Content` message names.
 pub const MAX_CONTENT: usize = 4096;
 
@@ -525,6 +528,10 @@ pub enum ClientMessage {
     /// participant, at least two, has a fresh report of the same player at the same tick, the
     /// server takes that player out of the challenge.
     Stalled { user_id: u64, tick: u32 },
+    /// Co-op fork: one tick of the living-world entities this console owns in a campaign (route
+    /// D's world stream, `docs/coop/design.md` §3.6), coded by the game (`skate2-core`'s
+    /// `coop::world_stream`); the server relays it to the campaign's other members as it is.
+    World { tick: u32, data: Vec<u8> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -578,6 +585,9 @@ pub enum ServerMessage {
     /// [`proposal::MISSED`]: the member it is about (the proposer of a broadcast, the member who
     /// accepted) and the milliseconds a broadcast leaves to accept it.
     GameProposal { kind: u8, activity: u64, user_id: u64, timeout: u32 },
+    /// Co-op fork: another member's world run ([`ClientMessage::World`]), the member named by its
+    /// slot in the game.
+    RemoteWorld { slot: u8, tick: u32, data: Vec<u8> },
 }
 
 /// A run: its first tick and length, the frames it is coded against as their distance back from
@@ -722,6 +732,11 @@ impl ClientMessage {
                     w.u64(challenge);
                 }
             }
+            Self::World { tick, data } => {
+                w.u8(25);
+                w.varint(u64::from(*tick));
+                w.bytes(&data[..data.len().min(MAX_WORLD)]);
+            }
             Self::Stalled { user_id, tick } => {
                 w.u8(24);
                 w.u64(*user_id);
@@ -816,6 +831,7 @@ impl ClientMessage {
                 Self::Content(challenges)
             }
             24 => Self::Stalled { user_id: r.u64()?, tick: r.u32()? },
+            25 => Self::World { tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
             _ => return Err(DecodeError("unknown client message")),
         };
         r.finish()?;
@@ -972,6 +988,12 @@ impl ServerMessage {
                 w.u64(*user_id);
                 w.u32(*timeout);
             }
+            Self::RemoteWorld { slot, tick, data } => {
+                w.u8(27);
+                w.u8(*slot);
+                w.varint(u64::from(*tick));
+                w.bytes(&data[..data.len().min(MAX_WORLD)]);
+            }
         }
         w.into_vec()
     }
@@ -1060,6 +1082,7 @@ impl ServerMessage {
                 }
                 Self::GameProposal { kind, activity: r.u64()?, user_id: r.u64()?, timeout: r.u32()? }
             }
+            27 => Self::RemoteWorld { slot: read_slot(&mut r)?, tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
             _ => return Err(DecodeError("unknown server message")),
         };
         r.finish()?;
@@ -1122,6 +1145,8 @@ mod tests {
             ClientMessage::Content(vec![0x433d_b94f_fbfa_c4a9, 7]),
             ClientMessage::Content(Vec::new()),
             ClientMessage::Stalled { user_id: 0x1234_5678_9abc_def0, tick: (3 << 20) + 77 },
+            ClientMessage::World { tick: 4242, data: vec![7; 300] },
+            ClientMessage::World { tick: 0, data: vec![] },
         ];
         for message in messages {
             assert_eq!(ClientMessage::decode(&message.encode()).unwrap(), message);
@@ -1166,6 +1191,7 @@ mod tests {
             ServerMessage::ChallengeLeave { user_id: 6 },
             ServerMessage::GameProposal { kind: proposal::BROADCAST, activity: 0x34, user_id: 6, timeout: 15_000 },
             ServerMessage::GameProposal { kind: proposal::MISSED, activity: 0x34, user_id: 0, timeout: 0 },
+            ServerMessage::RemoteWorld { slot: 3, tick: 4242, data: vec![7; 300] },
         ];
         for message in messages {
             assert_eq!(ServerMessage::decode(&message.encode()).unwrap(), message);
