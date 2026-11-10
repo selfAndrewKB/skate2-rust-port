@@ -17,7 +17,8 @@
 use super::{SelectedLiveError, SelectedLiveSession, error};
 use crate::coop::ownership::{self, Kind, Owner};
 use crate::coop::trace;
-use crate::coop::world_stream::{self as stream, Contact, Descriptor, EntityState, WorldRun, flags};
+use crate::coop::world_stream::{self as stream, Contact, Descriptor, EntityState, PropState, WorldRun, flags};
+use crate::living_world_grind_services::dmo_models::NULL_ASSET_ID;
 use crate::pedestrian_graph::colliding::{CollisionDirection, CollisionForce};
 use crate::pedestrian_puppet::PuppetDrive;
 use skate2_net::frames::INTERVAL;
@@ -63,15 +64,40 @@ struct Stats {
     runs: u32,
     bytes: u64,
     entities: u64,
+    props: u64,
     contacts_sent: u32,
     contacts_applied: u32,
     confirmed: u32,
     since: u32,
 }
 
+/// A prop (a dynamic object with a locator) the ownership table knows: who owns it by the
+/// last touch, with what claim, and this console's entity for it.
+#[derive(Debug)]
+struct PropOwner {
+    owner: Owner,
+    claim: u32,
+    /// The tick this console's skater last touched it, while it is this console's.
+    touched: u32,
+    /// The last sampled position, so a resting prop is not sent every run.
+    sent: Option<[f32; 3]>,
+    runs: u32,
+}
+
+/// Props at rest are repeated every this many runs, so a receiver that missed a run or
+/// joined late still gets them.
+const RESTING_REPEAT: u32 = 20;
+/// A prop is sampled this long after its last touch even at rest.
+const TOUCH_SAMPLES: u32 = 120;
+
 /// The session's shared-world state, one per campaign.
 #[derive(Debug, Default)]
 pub(in super::super) struct CoopWorld {
+    /// The props the ownership table knows, by locator id (M5).
+    props: BTreeMap<u64, PropOwner>,
+    /// The owners' prop samples received, applied at the next tick.
+    prop_updates: Vec<PropState>,
+    nudged: bool,
     puppets: BTreeMap<u32, Puppet>,
     spawns: BTreeMap<u32, Spawn>,
     /// The samples received for known puppets, applied at the next tick.
@@ -96,6 +122,14 @@ pub(in super::super) struct CoopWorld {
 fn diagnostic_shove_tick() -> Option<u32> {
     static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
     *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_SHOVE").ok().and_then(|tick| tick.parse().ok()))
+}
+
+/// `SKATE2_DIAGNOSTIC_COOP_NUDGE=<tick>`: at that tick the nearest prop with a locator within
+/// 30 m is given a velocity here as a push would, and counts as touched by this console's
+/// skater, so the bench proves a prop's claim and its stream without steering a skater into it.
+fn diagnostic_nudge_tick() -> Option<u32> {
+    static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_NUDGE").ok().and_then(|tick| tick.parse().ok()))
 }
 
 /// `SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>[;<tick>:<x>,<y>,<z>...]`: at each tick the
@@ -165,6 +199,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                 let since = self.completed_frames;
                 coop.spawns.entry(entity.id).and_modify(|spawn| spawn.state = entity.clone()).or_insert(Spawn { owner, descriptor, state: entity, since });
             }
+        }
+        for prop in run.props {
+            let known = coop.props.get(&prop.locator).map(|known| (known.claim, match known.owner { Owner::Local => local_slot, Owner::Remote(slot) => slot }));
+            if !ownership::claim_wins(known, prop.claim, owner) {
+                continue;
+            }
+            let old = coop.props.get(&prop.locator).map(|known| known.owner);
+            if old != Some(Owner::Remote(owner)) {
+                ownership::decide(Kind::Prop, prop.locator as u32, old, Owner::Remote(owner), &format!("its skater touched it last (claim {})", prop.claim));
+            }
+            coop.props.insert(prop.locator, PropOwner { owner: Owner::Remote(owner), claim: prop.claim, touched: 0, sent: None, runs: 0 });
+            coop.prop_updates.push(prop);
         }
         coop.despawns.extend(run.despawns.into_iter().filter(|&id| stream::owner_slot(id) == owner));
         coop.received_contacts.extend(run.contacts.into_iter().filter(|contact| stream::owner_slot(contact.id) == local_slot));
@@ -242,6 +288,69 @@ impl<T, C> SelectedLiveSession<T, C> {
                         coop.stats.contacts_applied += 1;
                         trace(format_args!("contact on {:08x} from another skater: {force:?} {direction:?} at {:.1} m/s applied at {tick}",
                             contact.id, (contact.velocity[0].powi(2) + contact.velocity[1].powi(2) + contact.velocity[2].powi(2)).sqrt()));
+                    }
+                }
+
+                // 2b. The owners' prop samples: the local object of each locator becomes a
+                // puppet driven to the sample (M5); this console's skater's touches claim.
+                {
+                    let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                    let objects = living.dmo_objects.as_deref_mut().ok_or("DMO roster absent")?;
+                    let ids = objects.ids();
+                    let by_locator: BTreeMap<u64, u32> = ids
+                        .iter()
+                        .filter_map(|&id| objects.object(id).filter(|object| object.locator_id != NULL_ASSET_ID && !object.is_static()).map(|object| (object.locator_id, id)))
+                        .collect();
+                    for sample in coop.prop_updates.drain(..) {
+                        let Some(&id) = by_locator.get(&sample.locator) else { continue };
+                        let Some(object) = objects.object_mut(id) else { continue };
+                        if !object.coop_puppet {
+                            object.coop_puppet = true;
+                            trace(format_args!("prop {:016x} (entity {id:#x}): a puppet here from {tick}, driven to its owner's samples", sample.locator));
+                        }
+                        object.target_transform = stream::transform_of(sample.position, sample.rotation);
+                        object.velocity = [sample.velocity[0], sample.velocity[1], sample.velocity[2], 0.];
+                        object.touched = false;
+                    }
+                    if let Some(at) = diagnostic_nudge_tick()
+                        && tick >= at
+                        && !coop.nudged
+                    {
+                        let nearest = by_locator
+                            .values()
+                            .filter_map(|&id| {
+                                let object = objects.object(id)?;
+                                let position = [object.transform[12], object.transform[13], object.transform[14], 1.];
+                                Some((distance_squared(position, centre), id))
+                            })
+                            .filter(|(d2, _)| *d2 <= 30. * 30.)
+                            .min_by(|a, b| a.0.total_cmp(&b.0));
+                        if let Some((d2, id)) = nearest {
+                            coop.nudged = true;
+                            let object = objects.object_mut(id).expect("listed");
+                            object.coop_puppet = false;
+                            object.touched = true;
+                            world.try_set_dmo_part_velocity(&object.body, 0, [0., 3., 4.])?;
+                            trace(format_args!("diagnostic: nudged prop {:016x} (entity {id:#x}) at {:.1} m at {tick}: a touch by this console's skater", object.locator_id, d2.sqrt()));
+                        } else if tick == at {
+                            trace(format_args!("diagnostic: no prop within 30 m to nudge at {tick}"));
+                        }
+                    }
+                    for (&locator, &id) in &by_locator {
+                        let Some(object) = objects.object_mut(id) else { continue };
+                        if !object.touched {
+                            continue;
+                        }
+                        object.touched = false;
+                        let known = coop.props.get(&locator);
+                        if known.is_some_and(|known| known.owner == Owner::Local) {
+                            coop.props.get_mut(&locator).expect("known").touched = tick;
+                            continue;
+                        }
+                        let claim = known.map_or(1, |known| known.claim + 1);
+                        ownership::decide(Kind::Prop, locator as u32, known.map(|known| known.owner), ownership::owner(Kind::Prop, Owner::Local), &format!("this console's skater touched it last (claim {claim})"));
+                        object.coop_puppet = false;
+                        coop.props.insert(locator, PropOwner { owner: Owner::Local, claim, touched: tick, sent: None, runs: 0 });
                     }
                 }
 
@@ -403,6 +512,29 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
                 owned.sort_by(|a, b| a.0.total_cmp(&b.0));
                 run.entities = owned.into_iter().map(|(_, entity)| entity).collect();
+                // 6b. This console's props: every one it owns, sampled while it moves, for a
+                // while after a touch, and now and then at rest.
+                {
+                    let living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                    let objects = living.dmo_objects.as_deref().ok_or("DMO roster absent")?;
+                    let ids = objects.ids();
+                    for (&locator, owner) in coop.props.iter_mut() {
+                        if owner.owner != Owner::Local || run.props.len() >= stream::MOST_PROPS {
+                            continue;
+                        }
+                        let Some(object) = ids.iter().find_map(|&id| objects.object(id).filter(|object| object.locator_id == locator)) else { continue };
+                        let position = [object.transform[12], object.transform[13], object.transform[14]];
+                        let velocity = [object.velocity[0], object.velocity[1], object.velocity[2]];
+                        let speed2 = velocity.iter().map(|v| v * v).sum::<f32>();
+                        let moved = owner.sent.is_none_or(|sent| (0..3).map(|lane| (position[lane] - sent[lane]).powi(2)).sum::<f32>() > 1e-4);
+                        owner.runs += 1;
+                        if !(moved || speed2 > 1e-4 || tick.saturating_sub(owner.touched) <= TOUCH_SAMPLES || owner.runs % RESTING_REPEAT == 0) {
+                            continue;
+                        }
+                        owner.sent = Some(position);
+                        run.props.push(PropState { locator, claim: owner.claim, position, rotation: stream::quaternion_of(&object.transform), velocity, resting: speed2 <= 1e-4 });
+                    }
+                }
                 run.despawns = coop.gone.keys().map(|&id| stream::world_id(local_slot, id)).collect();
                 coop.gone.retain(|_, left| {
                     *left -= 1;
@@ -428,12 +560,14 @@ impl<T, C> SelectedLiveSession<T, C> {
                 stats.runs += 1;
                 stats.bytes += bytes.len() as u64;
                 stats.entities += included as u64;
+                stats.props += run.props.len() as u64;
                 if tick.saturating_sub(stats.since) >= MEASURE_TICKS {
                     let seconds = f64::from(tick.saturating_sub(stats.since)) / 60.;
                     let per_entity = if stats.entities == 0 { 0. } else { stats.bytes as f64 / seconds / (stats.entities as f64 / f64::from(stats.runs.max(1))) };
                     trace(format_args!(
-                        "world stream at {tick}: {} runs, {} entity samples, {} B ({:.0} B/s, {:.0} B/s per streamed pedestrian), {} owned in range of {} pedestrians here, {} puppets, contacts sent {} applied {} confirmed {}",
-                        stats.runs, stats.entities, stats.bytes, stats.bytes as f64 / seconds, per_entity, run.entities.len(), roster_size, coop.puppets.len(),
+                        "world stream at {tick}: {} runs, {} entity samples, {} prop samples, {} B ({:.0} B/s, {:.0} B/s per streamed pedestrian), {} owned in range of {} pedestrians here, {} puppets, {} props owned of {} known, contacts sent {} applied {} confirmed {}",
+                        stats.runs, stats.entities, stats.props, stats.bytes, stats.bytes as f64 / seconds, per_entity, run.entities.len(), roster_size, coop.puppets.len(),
+                        coop.props.values().filter(|prop| prop.owner == Owner::Local).count(), coop.props.len(),
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed
                     ));
                     *stats = Stats { since: tick, ..Default::default() };

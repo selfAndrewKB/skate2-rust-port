@@ -5,11 +5,14 @@
 //! `ClientMessage::World` and must fit `MAX_WORLD` bytes.
 //!
 //! Format 1 (M1). Units: positions 1/256 m, velocities 1/64 m/s, yaw 1/65536 of a turn.
-//! A change of meaning raises `FORMAT`; a receiver drops a run of another format.
+//! Format 2 (M5) adds the props: the dynamic objects this console owns by its skater's last
+//! touch, named by their locator id, with a full rotation (a quaternion in 1/32767) and the
+//! claim number that decides the owner everywhere. A change of meaning raises `FORMAT`; a
+//! receiver drops a run of another format.
 
 use super::ownership::Kind;
 
-pub const FORMAT: u8 = 1;
+pub const FORMAT: u8 = 2;
 
 /// A world id names an entity across consoles: the owner's slot in the game (4 bits) over
 /// the owner's local entity id (its type nibble and 24-bit counter).
@@ -72,12 +75,32 @@ pub struct Contact {
     pub omega: [f32; 3],
 }
 
+/// A prop's state from its owner: the dynamic object named by its locator id.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PropState {
+    pub locator: u64,
+    /// The owner's claim: each touch that takes a prop over claims one higher than the claim
+    /// it knew; the highest wins everywhere, a tie the lower slot (`ownership::claim_wins`).
+    pub claim: u32,
+    pub position: [f32; 3],
+    /// The rotation as a unit quaternion (x, y, z, w).
+    pub rotation: [f32; 4],
+    pub velocity: [f32; 3],
+    /// The owner's body has come to rest.
+    pub resting: bool,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorldRun {
     pub despawns: Vec<u32>,
     pub contacts: Vec<Contact>,
+    pub props: Vec<PropState>,
     pub entities: Vec<EntityState>,
 }
+
+/// The most props one run carries; they come before the entities and always fit.
+pub const MOST_PROPS: usize = 32;
+const QUATERNION_SCALE: f32 = 32767.;
 
 fn varint(out: &mut Vec<u8>, mut value: u64) {
     loop {
@@ -198,6 +221,18 @@ pub fn encode(run: &WorldRun, budget: usize) -> (Vec<u8>, usize) {
         write_vector(&mut out, contact.velocity, VELOCITY_SCALE, i64::from(i16::MAX));
         write_vector(&mut out, contact.omega, VELOCITY_SCALE, i64::from(i16::MAX));
     }
+    let props = &run.props[..run.props.len().min(MOST_PROPS)];
+    varint(&mut out, props.len() as u64);
+    for prop in props {
+        out.extend_from_slice(&prop.locator.to_le_bytes());
+        varint(&mut out, u64::from(prop.claim));
+        out.push(u8::from(prop.resting));
+        write_vector(&mut out, prop.position, POSITION_SCALE, i64::from(i32::MAX));
+        for value in prop.rotation {
+            zigzag(&mut out, quantized(value, QUATERNION_SCALE, i64::from(i16::MAX)));
+        }
+        write_vector(&mut out, prop.velocity, VELOCITY_SCALE, i64::from(i16::MAX));
+    }
     let count_at = out.len();
     out.push(0);
     let mut included = 0_usize;
@@ -234,6 +269,22 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
             omega: read_vector(&mut r, VELOCITY_SCALE)?,
         });
     }
+    for _ in 0..r.count(MOST_PROPS)? {
+        let locator = r.u64()?;
+        let claim = r.varint()? as u32;
+        let resting = match r.u8()? {
+            0 => false,
+            1 => true,
+            _ => return Err("world run prop flag"),
+        };
+        let position = read_vector(&mut r, POSITION_SCALE)?;
+        let mut rotation = [0.; 4];
+        for value in &mut rotation {
+            *value = r.zigzag()? as f32 / QUATERNION_SCALE;
+        }
+        let velocity = read_vector(&mut r, VELOCITY_SCALE)?;
+        run.props.push(PropState { locator, claim, position, rotation, velocity, resting });
+    }
     for _ in 0..r.count(MOST_ENTITIES)? {
         let id = r.varint()? as u32;
         let kind = Kind::from_wire(r.u8()?).ok_or("world run entity kind")?;
@@ -261,6 +312,46 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
     Ok(run)
 }
 
+/// The rotation of a living-world transform (rows right, up, forward, translation; 16 floats)
+/// as a unit quaternion (x, y, z, w).
+pub fn quaternion_of(m: &[f32; 16]) -> [f32; 4] {
+    // Rows are the basis vectors, so m[row * 4 + column] is basis `row`'s component `column`.
+    let (r00, r01, r02) = (m[0], m[1], m[2]);
+    let (r10, r11, r12) = (m[4], m[5], m[6]);
+    let (r20, r21, r22) = (m[8], m[9], m[10]);
+    let trace = r00 + r11 + r22;
+    let q = if trace > 0. {
+        let s = (trace + 1.).sqrt() * 2.;
+        [(r12 - r21) / s, (r20 - r02) / s, (r01 - r10) / s, 0.25 * s]
+    } else if r00 > r11 && r00 > r22 {
+        let s = (1. + r00 - r11 - r22).sqrt() * 2.;
+        [0.25 * s, (r10 + r01) / s, (r20 + r02) / s, (r12 - r21) / s]
+    } else if r11 > r22 {
+        let s = (1. + r11 - r00 - r22).sqrt() * 2.;
+        [(r10 + r01) / s, 0.25 * s, (r21 + r12) / s, (r20 - r02) / s]
+    } else {
+        let s = (1. + r22 - r00 - r11).sqrt() * 2.;
+        [(r20 + r02) / s, (r21 + r12) / s, 0.25 * s, (r01 - r10) / s]
+    };
+    let n = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]).sqrt();
+    if n > 0. { q.map(|v| v / n) } else { [0., 0., 0., 1.] }
+}
+
+/// A living-world transform from a position and a unit quaternion (the inverse of
+/// [`quaternion_of`]).
+pub fn transform_of(position: [f32; 3], q: [f32; 4]) -> [f32; 16] {
+    let [x, y, z, w] = q;
+    let (xx, yy, zz) = (x * x, y * y, z * z);
+    let (xy, xz, yz) = (x * y, x * z, y * z);
+    let (wx, wy, wz) = (w * x, w * y, w * z);
+    [
+        1. - 2. * (yy + zz), 2. * (xy + wz), 2. * (xz - wy), 0.,
+        2. * (xy - wz), 1. - 2. * (xx + zz), 2. * (yz + wx), 0.,
+        2. * (xz + wy), 2. * (yz - wx), 1. - 2. * (xx + yy), 0.,
+        position[0], position[1], position[2], 1.,
+    ]
+}
+
 /// The yaw of a living-world transform (rows: right, up, forward, translation).
 pub fn yaw_of(transform: &[[f32; 4]; 4]) -> f32 {
     transform[2][0].atan2(transform[2][2])
@@ -280,6 +371,14 @@ mod tests {
         WorldRun {
             despawns: vec![world_id(1, 0x0200_0007)],
             contacts: vec![Contact { id: world_id(2, 0x0200_0001), force: 0, direction: 3, velocity: [6.5, -0.25, 1.], omega: [0., 2., 0.] }],
+            props: vec![PropState {
+                locator: 0x0123_4567_89ab_cdef,
+                claim: 3,
+                position: [1640.4, 100.7, -522.4],
+                rotation: quaternion_of(&transform_of([0.; 3], [0.1830127, 0.6830127, 0.1830127, 0.6830127])),
+                velocity: [0.5, 0., -2.],
+                resting: false,
+            }],
             entities: vec![
                 EntityState {
                     id: world_id(0, 0x0200_0003),
@@ -318,6 +417,16 @@ mod tests {
         for lane in 0..3 {
             assert!((back.contacts[0].velocity[lane] - run.contacts[0].velocity[lane]).abs() <= 1. / 64.);
         }
+        assert_eq!(back.props.len(), 1);
+        let (a, b) = (&back.props[0], &run.props[0]);
+        assert_eq!((a.locator, a.claim, a.resting), (b.locator, b.claim, b.resting));
+        for lane in 0..3 {
+            assert!((a.position[lane] - b.position[lane]).abs() <= 1. / 256.);
+            assert!((a.velocity[lane] - b.velocity[lane]).abs() <= 1. / 64.);
+        }
+        for lane in 0..4 {
+            assert!((a.rotation[lane] - b.rotation[lane]).abs() <= 1. / 32767. + 1e-6);
+        }
         assert_eq!(back.entities.len(), 2);
         for (a, b) in back.entities.iter().zip(&run.entities) {
             assert_eq!((a.id, a.kind, a.flags, a.motion, &a.descriptor), (b.id, b.kind, b.flags, b.motion, &b.descriptor));
@@ -333,13 +442,14 @@ mod tests {
     #[test]
     fn the_budget_cuts_entities_and_never_the_rest() {
         let run = run();
-        let (bytes, included) = encode(&run, 40);
-        assert_eq!(included, 0);
+        let (bytes, included) = encode(&run, 70);
+        assert_eq!(included, 0, "{} bytes", bytes.len());
         let back = decode(&bytes).expect("decodes");
         assert_eq!(back.despawns, run.despawns);
         assert_eq!(back.contacts.len(), 1);
+        assert_eq!(back.props.len(), 1, "the props always fit");
         assert!(back.entities.is_empty());
-        let (bytes, included) = encode(&run, 80);
+        let (bytes, included) = encode(&run, 110);
         assert_eq!(included, 1, "{} bytes", bytes.len());
     }
 
@@ -366,6 +476,26 @@ mod tests {
             assert!(turn < 1e-5 || turn > std::f32::consts::TAU - 1e-5);
             assert_eq!(t[3], [1., 2., 3., 1.]);
         }
+    }
+
+    #[test]
+    fn a_rotation_round_trips_through_its_transform() {
+        for q in [[0., 0., 0., 1.], [0.1830127, 0.6830127, 0.1830127, 0.6830127], [0.7071068, 0., 0., 0.7071068], [0., 0.7071068, 0., -0.7071068], [0.5, -0.5, 0.5, 0.5]] {
+            let t = transform_of([4., 5., 6.], q);
+            assert_eq!(&t[12..], &[4., 5., 6., 1.]);
+            let back = quaternion_of(&t);
+            // q and -q are the same rotation.
+            let sign = if (0..4).map(|i| back[i] * q[i]).sum::<f32>() < 0. { -1. } else { 1. };
+            for lane in 0..4 {
+                assert!((back[lane] * sign - q[lane]).abs() < 1e-5, "{q:?} -> {back:?}");
+            }
+            let again = transform_of([4., 5., 6.], back);
+            for lane in 0..16 {
+                assert!((again[lane] - t[lane]).abs() < 1e-5);
+            }
+        }
+        let (bytes, _) = encode(&WorldRun { props: vec![run().props[0].clone()], ..Default::default() }, 1024);
+        assert!(bytes.len() <= 40, "{} bytes for a prop", bytes.len());
     }
 
     #[test]

@@ -83,6 +83,14 @@ fn diagnostic_prompts() -> &'static [(u32, crate::coop::prompts::PromptAnswer)] 
     })
 }
 
+/// `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>`: at that round tick the security guard areas
+/// (world painter layer 6) within 600 m of the local skater are scanned at 8 m and the nearest
+/// point of each named region traced, so the bench can teleport into one (M5).
+fn diagnostic_zones() -> Option<u32> {
+    static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_ZONES").ok().and_then(|tick| tick.trim().parse().ok()))
+}
+
 /// `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<tick>:<name>`: at that round tick the named challenge is
 /// activated and executed, the same tick on every console (the bench's way into a mission).
 fn diagnostic_execute() -> Option<(u32, String)> {
@@ -186,6 +194,11 @@ impl<T, C> SelectedLiveSession<T, C> {
         {
             let completed = career.system.diagnostic_complete_active_objectives();
             trace(format_args!("diagnostic: completed the active objectives at round tick {tick}: {completed:?}"));
+        }
+        if let Some(at) = diagnostic_zones()
+            && tick == at
+        {
+            self.diagnostic_security_zones(600., 8.);
         }
         if let Some((at, radius)) = diagnostic_triggers()
             && tick == at

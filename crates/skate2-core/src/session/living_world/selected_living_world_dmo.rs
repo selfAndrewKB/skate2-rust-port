@@ -1267,7 +1267,8 @@ impl SelectedLivingWorldDmo {
                 let object=objects.object(id).expect("captured DMO collision roster");
                 // FillCollisionTargetTransforms82d36610 emits exactly one target
                 // for HandProp; free physics objects emit none and are not driven.
-                if !object.is_set_as_hand_prop(){continue;}
+                // Co-op fork: a puppet prop is driven to its owner's sample the same way.
+                if !object.is_set_as_hand_prop() && !object.coop_puppet {continue;}
                 world.try_drive_living_world_collision_body(
                     crate::simulation_assembly_backend::constraint_session::physical_island::vehicle::LivingWorldBodyKind::Dmo,
                     &object.body,&[object.target_transform],UPDATE_TIME,object.collision_ignore_gravity,cvars,

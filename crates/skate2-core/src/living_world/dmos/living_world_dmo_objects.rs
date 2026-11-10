@@ -581,6 +581,11 @@ pub(crate) struct DynamicObject {
     /// A static body `Dmo::SimManager::SpawnStatic` (0x825eb0a0) placed in an online game, which
     /// `Dmo::PresManager`'s `DmoPresentationEntity` draws without the living world's fade.
     pub(crate) online_static: bool,
+    /// Co-op fork (M5): another console owns this prop; its target transform is the owner's
+    /// last sample and its body is driven there (as a hand prop's is), never read back.
+    pub(crate) coop_puppet: bool,
+    /// Co-op fork (M5): a local skater's body touched it since the campaign last looked.
+    pub(crate) touched: bool,
 }
 
 impl DynamicObject {
@@ -1926,6 +1931,8 @@ impl<W: DmoWorld> DmoFrame<'_, W> {
             ),
             grind_splines: self.spline_ids.register_grinds(&model.grind_splines),
             online_static: false,
+            coop_puppet: false,
+            touched: false,
         };
         self.objects.spawn_unfinished=Some(object);
         self.objects
@@ -2018,6 +2025,8 @@ impl<W: DmoWorld> DmoFrame<'_, W> {
             grab_splines: BTreeMap::new(),
             grind_splines: self.spline_ids.register_grinds(&model.grind_splines),
             online_static: true,
+            coop_puppet: false,
+            touched: false,
         };
         self.objects.spawn_unfinished = Some(object);
         self.objects
@@ -2111,7 +2120,8 @@ impl<W: DmoWorld> DmoFrame<'_, W> {
         };
         // UpdateTargetTransform82d2e7c8/9dc: type1 retains the target just
         // supplied by its pedestrian; only type0 copies the physical Part.
-        if object.is_set_as_hand_prop() { return Ok(()); }
+        // Co-op fork: a puppet prop's target is its owner's sample.
+        if object.is_set_as_hand_prop() || object.coop_puppet { return Ok(()); }
         let body = object.body.clone();
         let transform = self
             .world

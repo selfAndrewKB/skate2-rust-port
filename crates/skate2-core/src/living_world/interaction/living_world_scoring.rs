@@ -86,6 +86,9 @@ impl LivingWorldGrindServices {
                             .try_player_index()
                             .map_err(query)?;
                         dmo.skater_collision_flags |= 1u32.checked_shl(player & 63).unwrap_or(0);
+                        // Co-op fork (M5): a touch claims the prop for this console (only a
+                        // local skater has a body).
+                        dmo.touched = true;
                     }
                     SimulationContactEntityOwner::LivingWorld(_) => dmo.add_entity_contact(part, force),
                 }

@@ -2596,6 +2596,40 @@ impl<T, C> SelectedLiveSession<T, C> {
         Some((key(layer::SECURITY_GUARD_AREAS), key(layer::SERVICES)))
     }
 
+    /// Co-op fork (M5), `SKATE2_DIAGNOSTIC_COOP_ZONES`: the security guard areas (layer 6)
+    /// within `radius` of the local skater, scanned at `step`, the nearest point of each
+    /// region traced.
+    pub(super) fn diagnostic_security_zones(&self, radius: f32, step: f32) {
+        use crate::challenge::world_painter::layer;
+        let Some(frame) = self.career.as_ref().and_then(|career| career.system.world().skaters.iter().find(|frame| frame.local).cloned()) else {
+            crate::coop::trace(format_args!("diagnostic: no local skater frame to scan the security zones around"));
+            return;
+        };
+        let [cx, _, cz] = frame.tester_base;
+        let Some(world) = self.inner.world.as_ref() else { return };
+        let Some(terrain) = self.inner.terrain.as_ref().and_then(|terrain| terrain.terrain_for(&world.world).ok()) else { return };
+        let Ok(layers) = terrain.layers.lock() else { return };
+        let mut nearest: std::collections::BTreeMap<&'static str, (f32, [f32; 2])> = std::collections::BTreeMap::new();
+        let mut scanned = 0_u32;
+        let steps = (radius / step) as i32;
+        for i in -steps..=steps {
+            for j in -steps..=steps {
+                let point = [cx + i as f32 * step, cz + j as f32 * step];
+                scanned += 1;
+                let Ok(Some(name)) = layers.try_region_name(layer::SECURITY_GUARD_AREAS, point) else { continue };
+                let d2 = (point[0] - cx).powi(2) + (point[1] - cz).powi(2);
+                let entry = nearest.entry(name).or_insert((d2, point));
+                if d2 < entry.0 {
+                    *entry = (d2, point);
+                }
+            }
+        }
+        crate::coop::trace(format_args!("diagnostic: security zones within {radius} m of [{cx:.1}, {cz:.1}]: {} regions in {scanned} points", nearest.len()));
+        for (name, (d2, point)) in nearest {
+            crate::coop::trace(format_args!("diagnostic: security zone {name}: nearest point x {:.1} z {:.1} at {:.0} m", point[0], point[1], d2.sqrt()));
+        }
+    }
+
     /// `SKATE2_DIAGNOSTIC_DUMP_TRIGGERS`: the challenge message group's trigger volumes within
     /// `radius` of the local skater's tester (ids, transforms, volumes), and the skater's root
     /// matrix.

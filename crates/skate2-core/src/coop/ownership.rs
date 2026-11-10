@@ -29,6 +29,9 @@ pub enum Kind {
     StoryCharacter = 1,
     /// A security guard of the census (`security_guard` set): streamed as a pedestrian.
     SecurityGuard = 2,
+    /// A dynamic object with a locator (a challenge prop, a movable box or rail): named across
+    /// consoles by its locator id, streamed in the run's prop list.
+    Prop = 3,
 }
 
 impl Kind {
@@ -51,6 +54,9 @@ pub enum Rule {
     /// that simulates it (a remote skater is a replay, not an actor), so until M6's migration
     /// that is its spawner; its puppets elsewhere perceive and chase nobody.
     Chasee,
+    /// The console whose skater touched it last: each touch claims it with a higher claim
+    /// number, the highest claim wins everywhere, a tie the lower slot.
+    LastToucher,
 }
 
 /// The rule for a kind. One table, read here and nowhere else.
@@ -59,13 +65,22 @@ pub fn rule(kind: Kind) -> Rule {
         Kind::Pedestrian => Rule::Spawner,
         Kind::StoryCharacter => Rule::EachConsole,
         Kind::SecurityGuard => Rule::Chasee,
+        Kind::Prop => Rule::LastToucher,
+    }
+}
+
+/// Whether a claim of `claim` by `slot` beats the known one.
+pub fn claim_wins(known: Option<(u32, u8)>, claim: u32, slot: u8) -> bool {
+    match known {
+        None => true,
+        Some((known_claim, known_slot)) => claim > known_claim || (claim == known_claim && slot < known_slot),
     }
 }
 
 /// The owner an entity gets under its kind's rule.
 pub fn owner(kind: Kind, spawner: Owner) -> Owner {
     match rule(kind) {
-        Rule::Spawner | Rule::Chasee => spawner,
+        Rule::Spawner | Rule::Chasee | Rule::LastToucher => spawner,
         Rule::EachConsole => Owner::Local,
     }
 }
@@ -73,7 +88,7 @@ pub fn owner(kind: Kind, spawner: Owner) -> Owner {
 /// Whether the owner streams a kind to the others.
 pub fn streamed(kind: Kind) -> bool {
     match rule(kind) {
-        Rule::Spawner | Rule::Chasee => true,
+        Rule::Spawner | Rule::Chasee | Rule::LastToucher => true,
         Rule::EachConsole => false,
     }
 }
@@ -90,6 +105,10 @@ mod tests {
         assert!(streamed(Kind::Pedestrian) && streamed(Kind::SecurityGuard) && !streamed(Kind::StoryCharacter));
         assert_eq!(Kind::from_wire(0), Some(Kind::Pedestrian));
         assert_eq!(Kind::from_wire(1), None, "a story character never travels");
+        assert!(claim_wins(None, 1, 1));
+        assert!(claim_wins(Some((1, 0)), 2, 1));
+        assert!(!claim_wins(Some((2, 0)), 2, 1), "a tie goes to the lower slot");
+        assert!(claim_wins(Some((2, 1)), 2, 0));
     }
 }
 
