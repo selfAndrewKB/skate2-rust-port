@@ -1211,13 +1211,48 @@ fn evaluate_group(lua: &mut Lua<World>, world: &mut World, group: u32, triggers:
     completed
 }
 
-/// `OnObjectiveCompleted` (`0x82d4c918`).
+/// `OnObjectiveCompleted` (`0x82d4c918`). Co-op fork: in a campaign the activity's groups are
+/// one per player, and the rule decides when the activity is complete (`Everyone`: every
+/// player's group; `Anyone` and the rest: the first); the message names the first player's
+/// group, the one the script holds, on every console alike.
 fn on_objective_completed(world: &mut World, group: u32, completed: &[usize]) {
     let Some(gi) = world.objectives.group_index(group) else { return };
     let g = &world.objectives.groups[gi];
     if g.objectives.iter().all(|o| o.state == Status::Complete) {
-        let handle = g.handle;
-        world.send(Event::Challenge(Message::new("cMsgAllObjectiveComplete", vec![("ObjectiveGroup", Field::Pointer(handle))])));
+        let activity = g.activity;
+        let player = g.player;
+        let (handle, send) = match super::coop_rule(world, activity) {
+            Some((rule, _, name)) => {
+                let siblings: Vec<&ObjectiveGroup> = world.objectives.groups.iter().filter(|x| x.activity == activity).collect();
+                let first = siblings.iter().min_by_key(|x| x.player).map_or(g.handle, |x| x.handle);
+                let complete_players: Vec<i32> = siblings.iter().filter(|x| x.objectives.iter().all(|o| o.state == Status::Complete)).map(|x| x.player).collect();
+                let all = complete_players.len() == siblings.len();
+                let send = match rule {
+                    crate::coop::rules::Rule::Everyone => all,
+                    _ => true,
+                };
+                crate::coop::trace(format_args!(
+                    "rule: {name}: player {player} completed its objectives; {} of {} players complete under {rule:?}: {}",
+                    complete_players.len(),
+                    siblings.len(),
+                    if send { "the activity completes" } else { "waiting for the others" }
+                ));
+                if send && !all {
+                    // The others' copies are done with: no second completion later.
+                    let retired: Vec<u32> = siblings.iter().filter(|x| x.handle != first || x.player != player).map(|x| x.id).collect();
+                    for id in retired {
+                        if let Some(i) = world.objectives.group_index(id) {
+                            world.objectives.groups[i].evaluate = false;
+                        }
+                    }
+                }
+                (first, send)
+            }
+            None => (g.handle, true),
+        };
+        if send {
+            world.send(Event::Challenge(Message::new("cMsgAllObjectiveComplete", vec![("ObjectiveGroup", Field::Pointer(handle))])));
+        }
     }
     if !completed.is_empty() {
         activate_objectives(world, group);

@@ -37,6 +37,19 @@ pub mod mission;
 pub mod mission_audio;
 mod natives;
 pub mod objective_data;
+
+/// Co-op fork: the completion rule for an activity's challenge while a campaign round runs, with
+/// the campaign's players and the challenge's name; `None` outside a campaign. The one place
+/// the rule table is asked (`coop::rules`).
+pub(crate) fn coop_rule(world: &system::World, activity: usize) -> Option<(crate::coop::rules::Rule, Vec<i32>, String)> {
+    const CHALLENGE_NAME: u64 = 0x942A_B8AE_E4B4_14ED;
+    const CHALLENGE_TYPE: u64 = 0x02b8_28cc_db47_85e4;
+    let campaign = world.coop.as_ref()?;
+    let key = world.activities.activities.get(activity)?.key;
+    let name = world.db.attribute(keys::class::CHALLENGES, key, CHALLENGE_NAME).and_then(|name| name.text(0)).unwrap_or_default();
+    let family = map_icons::global_i32(world, activity, CHALLENGE_TYPE);
+    Some((campaign.rules.rule_for(key, name, family), campaign.players.clone(), name.to_owned()))
+}
 mod objective_groups;
 pub mod objective_hud;
 mod objective_natives;

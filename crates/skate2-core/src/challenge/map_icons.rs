@@ -364,7 +364,7 @@ fn has_challenge_icon(world: &World, activity: usize) -> bool {
         .is_some_and(|(c, k)| world.db.has_collection(c, k))
 }
 
-fn global_i32(world: &World, activity: usize, key: u64) -> i32 {
+pub(crate) fn global_i32(world: &World, activity: usize, key: u64) -> i32 {
     world.activities.activities[activity]
         .global_data
         .and_then(|(c, k)| world.db.attribute(c, k, key))

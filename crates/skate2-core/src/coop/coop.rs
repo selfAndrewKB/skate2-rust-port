@@ -5,6 +5,8 @@
 
 #[path = "ownership.rs"]
 pub mod ownership;
+#[path = "rules.rs"]
+pub mod rules;
 #[path = "world_stream.rs"]
 pub mod world_stream;
 

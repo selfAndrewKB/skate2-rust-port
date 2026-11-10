@@ -281,6 +281,9 @@ pub(super) struct Round {
     released: BTreeSet<u32>,
     /// `ChallengeLoadState`'s Enter ran: the lobby's travel came first.
     load_entered: bool,
+    /// Co-op fork: the round is a campaign's, the whole session long: every player paces it,
+    /// its objective groups each read their own player, and it never completes.
+    pub(super) campaign: bool,
     /// `mWaitingForStreamer`: the loading screen is up.
     streamer: Option<StreamerWait>,
     /// `SKATE2_DIAGNOSTIC_ONLINE_VOTE` voted on the turn the HUD shows.
@@ -353,6 +356,7 @@ impl Round {
             sync: None,
             released: BTreeSet::new(),
             load_entered: false,
+            campaign: false,
             streamer: None,
             diagnostic_voted: false,
             diagnostic_entered: Vec::new(),
@@ -824,6 +828,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     _ => self.end_online_round()?,
                 }
             }
+            reset::CAMPAIGN => match local {
+                Some(local) if self.online_campaign() => self.start_campaign_round(seed, session, players, local)?,
+                _ => trace(format_args!("campaign reset ignored: local {local:?}, campaign {}", self.online_campaign())),
+            },
             _ => {
                 // The host's GameChange ends at a lobby reset at the new challenge.
                 let changed = self.online.changing_location.take().is_some();
@@ -970,7 +978,50 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// on every console: a freeskate activity's, and a Skate 3 game's that runs Skate 3's own
     /// graph (its 1-Up gives each competitor an objective group).
     pub(in super::super) fn online_round_per_player_objectives(&self) -> bool {
-        self.online.round.as_ref().is_some_and(|round| round.activity.is_some() || round.own_graph)
+        self.online.round.as_ref().is_some_and(|round| round.activity.is_some() || round.own_graph || round.campaign)
+    }
+
+    /// Co-op fork: the campaign round's next tick, while one runs.
+    pub(in super::super) fn campaign_round_tick(&self) -> Option<u32> {
+        self.online.round.as_ref().filter(|round| round.campaign).map(|round| round.processed)
+    }
+
+    /// Co-op fork, `GameReset(CAMPAIGN)`: the campaign's round starts on every console at the same
+    /// tick 0 with the server's seed and table. The career stays the career (`GM_SINGLE_PLAYER`,
+    /// progression on, autosaves); what changes is who paces its scripts: from here every
+    /// console runs them on every player's facts (scope "everything"), the players back end is the
+    /// table's, the career's random stream is the seeded one, the objective groups are per player
+    /// under the completion rules, and scenes run under the online rule.
+    fn start_campaign_round(&mut self, seed: u32, session: u32, players: Vec<u64>, local: usize) -> Result<(), SelectedLiveError> {
+        let stance = Arc::new(Mutex::new([true; MAX_PLAYERS]));
+        let backend = self.online_players_backend(&players, local, &stance)?;
+        let count = players.len();
+        let local_index = i32::try_from(local).unwrap_or(0);
+        let mut round = Round::loading(session, skate2_net::protocol::campaign::KEY, None, players.clone(), local_index, FactsScope::ALL, false, stance);
+        round.campaign = true;
+        round.start(players, local_index);
+        let mut random = self.inner.bound_input.as_mut().map(|input| input.simulation_random_mut().clone()).ok_or_else(|| error("input absent"))?;
+        random.set_seed_before_input_reset(seed);
+        let (rules, complaint) = crate::coop::rules::RuleTable::load();
+        if let Some(complaint) = complaint {
+            crate::coop::trace(format_args!("rules: {complaint}"));
+        }
+        let rules_hash = rules.hash();
+        let rules_source = rules.source.clone();
+        let career = self.career.as_mut().ok_or_else(|| error("campaign round without a career"))?;
+        let world = career.system.world_mut();
+        world.players = Some(Arc::new(backend));
+        world.local_player = local_index;
+        world.online = Some(OnlineChallenge { local_player: local_index, players: i32::try_from(count).unwrap_or(0), ..OnlineChallenge::default() });
+        world.coop = Some(crate::coop::rules::CampaignWorld { rules, players: (0..i32::try_from(count).unwrap_or(0)).collect() });
+        career.online_random = Some(random);
+        career.nis.set_online_game(true);
+        self.online.round = Some(round);
+        self.online.campaign_hold = false;
+        crate::coop::trace(format_args!(
+            "campaign round {session} started: seed {seed:08x}, {count} players, this console is player {local}, rules {rules_hash:016x} ({rules_source})"
+        ));
+        Ok(())
     }
 
     /// `GameReset(Challenge)` (`HandleLobbySkateReset` 0x82776f90): `PopAllStates`, then

@@ -96,17 +96,21 @@ fn diagnostic_shove_tick() -> Option<u32> {
     *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_SHOVE").ok().and_then(|tick| tick.parse().ok()))
 }
 
-/// `SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>`: at that tick the local skater is put
-/// there (the bench moves its seats into a populated street; the career's own diagnostics run
-/// only under the career demo).
-fn diagnostic_teleport() -> Option<(u32, [f32; 3])> {
-    static SPEC: std::sync::OnceLock<Option<(u32, [f32; 3])>> = std::sync::OnceLock::new();
-    *SPEC.get_or_init(|| {
-        let spec = std::env::var("SKATE2_DIAGNOSTIC_COOP_TELEPORT").ok()?;
-        let (at, position) = spec.split_once(':')?;
-        let values: Vec<f32> = position.split(',').filter_map(|v| v.trim().parse().ok()).collect();
-        let [x, y, z] = values[..] else { return None };
-        Some((at.trim().parse().ok()?, [x, y, z]))
+/// `SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>[;<tick>:<x>,<y>,<z>...]`: at each tick the
+/// local skater is put there (the bench moves its seats into a populated street or through a
+/// mission's volumes; the career's own diagnostics run only under the career demo).
+fn diagnostic_teleports() -> &'static [(u32, [f32; 3])] {
+    static SPEC: std::sync::OnceLock<Vec<(u32, [f32; 3])>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| {
+        let Ok(spec) = std::env::var("SKATE2_DIAGNOSTIC_COOP_TELEPORT") else { return Vec::new() };
+        spec.split(';')
+            .filter_map(|entry| {
+                let (at, position) = entry.split_once(':')?;
+                let values: Vec<f32> = position.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+                let [x, y, z] = values[..] else { return None };
+                Some((at.trim().parse().ok()?, [x, y, z]))
+            })
+            .collect()
     })
 }
 
@@ -173,10 +177,10 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
         let local_slot = game.local_slot;
         let tick = self.completed_frames;
-        if let Some((at, position)) = diagnostic_teleport()
-            && at == tick
-        {
-            trace(format_args!("diagnostic: teleport to {position:?} at {tick}: {}", self.diagnostic_teleport_local_player(position)));
+        for &(at, position) in diagnostic_teleports() {
+            if at == tick {
+                trace(format_args!("diagnostic: teleport to {position:?} at {tick}: {}", self.diagnostic_teleport_local_player(position)));
+            }
         }
         let mut coop = std::mem::take(&mut self.online.coop);
         let sent = self

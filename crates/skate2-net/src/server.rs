@@ -1261,13 +1261,16 @@ impl ServerCore {
     /// A participant's facts or vote, to the challenge's other participants.
     fn relay_to_participants(&mut self, game_id: u32, user_id: u64, message: &ServerMessage) {
         let Some(game) = self.games.get(&game_id) else { return };
-        if !matches!(game.phase, GamePhase::Challenge { .. }) || !game.participants().contains(&user_id) {
+        // Co-op fork: a campaign's round, once started, is every member's: its facts, votes and
+        // the rest reach them all.
+        let campaign = game.campaign.as_ref().is_some_and(|campaign| campaign.started.is_some());
+        if !campaign && (!matches!(game.phase, GamePhase::Challenge { .. }) || !game.participants().contains(&user_id)) {
             return;
         }
         let targets: Vec<u32> = game
             .members
             .iter()
-            .filter(|member| member.user_id != user_id && game.participants().contains(&member.user_id))
+            .filter(|member| member.user_id != user_id && (campaign || game.participants().contains(&member.user_id)))
             .map(|member| member.connection)
             .collect();
         let bytes = message.encode();

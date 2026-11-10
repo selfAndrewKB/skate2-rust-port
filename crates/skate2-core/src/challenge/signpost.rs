@@ -1212,6 +1212,15 @@ pub(crate) fn complete_challenge_by_key(world: &mut World, challenge: u64) {
 /// (`ConvertSignpostChallengeKeyToNeutrinoKey`), then outside a replay
 /// `WinChallenge` and `ProcessChallengeResults` (`CompleteChallenge`
 /// `0x825e1550`).
+/// Co-op fork, for the bench: the named challenge activated and executed as the progression's
+/// own `ActivateChallenge` and `ExecuteChallengeByTitle` do it; false for an unknown name.
+pub(crate) fn execute_challenge_by_name(world: &mut World, name: &str) -> bool {
+    let Some(signpost) = world.signpost.helper.names.get(&hash_value32(name)).copied() else { return false };
+    activate_challenge(world, signpost, true, false, true);
+    execute_challenge(world, signpost);
+    true
+}
+
 pub(crate) fn complete_challenge_by_name(world: &mut World, name: &str) {
     let Some(signpost) = world.signpost.helper.names.get(&hash_value32(name)).copied() else { return };
     let Some(challenge) = SignPost::challenge_key(&world.db, signpost) else { return };

@@ -616,33 +616,52 @@ fn make_objectives_helper(world: &mut World, call: &NativeCall, name: &str) -> R
     let display = db.attribute(c, key, cf::DISPLAY_STATUSES).and_then(|a| a.u32(0)).unwrap_or(u32::MAX);
     let notification = db.attribute(c, key, cf::NOTIFICATION_STATUSES).and_then(|a| a.u32(0)).unwrap_or(u32::MAX);
     let show_active = db.attribute(c, key, cf::SHOW_ACTIVE_WITH_NOTIFICATIONS).and_then(|a| a.bool(0)).unwrap_or(false);
-    let group =
-        super::objectives::add_objective_challenge(world, activity, player, (flow_type, max_active), (display, notification, show_active));
+    // Co-op fork, the ledger's "everyone" kind: under an `Everyone` rule every player of the
+    // campaign gets their own copy of the objectives, each read from that player's facts on every
+    // console; the script holds the first player's group, the same on every console, and the
+    // completion message names it (`objectives::on_objective_completed`).
+    let players: Vec<i32> = match super::coop_rule(world, activity) {
+        Some((crate::coop::rules::Rule::Everyone, players, name)) => {
+            crate::coop::trace(format_args!("rule: {name} ({key:016x}) is everyone's: objectives for players {players:?}"));
+            players
+        }
+        Some((rule, _, name)) => {
+            crate::coop::trace(format_args!("rule: {name} ({key:016x}) is {rule:?}: objectives for player {player}"));
+            vec![player]
+        }
+        None => vec![player],
+    };
     let objectives: Vec<u64> = db
         .attribute(c, key, super::keys::hash64(name))
         .map(|a| (0..a.len()).filter_map(|i| a.ref_spec(i)).map(|(_, k)| k).collect())
         .unwrap_or_default();
-    for objective in objectives {
-        super::objectives::add_objective(world, group, objective);
-    }
     // PointRequirement, the zeroed default area when the challenge has none: a requirement of
     // at least 0 adds the points objective.
     let points = db.attribute(c, key, cf::POINTS_REQUIREMENT).and_then(|a| a.i32(0)).unwrap_or(0);
-    if points >= 0 {
-        super::objectives::add_points_objective(world, group, points.cast_unsigned());
-    }
     let unique_trick_group = world.activities.activities[activity]
         .local_data
         .and_then(|(class, collection)| db.attribute(class, collection, UNIQUE_TRICK_GROUP))
         .and_then(|a| a.ref_spec(0))
         .map(|(_, collection)| collection)
         .filter(|&collection| collection != 0);
-    if let Some(unique_trick_group) = unique_trick_group
-        && let Some(i) = world.objectives.group_index(group)
-    {
-        world.objectives.groups[i].unique_trick_group = Some(unique_trick_group);
+    let mut first = None;
+    for player in players {
+        let group =
+            super::objectives::add_objective_challenge(world, activity, player, (flow_type, max_active), (display, notification, show_active));
+        first.get_or_insert(group);
+        for &objective in &objectives {
+            super::objectives::add_objective(world, group, objective);
+        }
+        if points >= 0 {
+            super::objectives::add_points_objective(world, group, points.cast_unsigned());
+        }
+        if let Some(unique_trick_group) = unique_trick_group
+            && let Some(i) = world.objectives.group_index(group)
+        {
+            world.objectives.groups[i].unique_trick_group = Some(unique_trick_group);
+        }
     }
-    let handle = world.objectives.group_index(group).map_or(0, |i| world.objectives.groups[i].handle);
+    let handle = first.and_then(|group| world.objectives.group_index(group)).map_or(0, |i| world.objectives.groups[i].handle);
     Ok(vec![Value::LightUserData(handle)])
 }
 

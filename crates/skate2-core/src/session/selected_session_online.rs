@@ -7,6 +7,8 @@
 mod activity;
 #[path = "online/online_challenge.rs"]
 mod online_challenge;
+#[path = "online/coop_campaign.rs"]
+mod coop_campaign;
 #[path = "online/coop_world.rs"]
 mod coop_world;
 #[path = "online/online_dmos.rs"]
@@ -163,6 +165,11 @@ pub(super) struct Online {
     pub(super) coop: coop_world::CoopWorld,
     /// Co-op fork: the campaign's offline-flags trace went out for this game.
     campaign_flags_told: bool,
+    /// Co-op fork: the career is loaded and waits for the server's campaign round start; its
+    /// scripts do not tick meanwhile, so every console starts them at the same tick 0.
+    pub(super) campaign_hold: bool,
+    /// Co-op fork: the round tick the bench's dialog answer saw the dialog open.
+    coop_dialog_opened: Option<u32>,
     /// `SKATE2_DIAGNOSTIC_ONLINE` made its request.
     diagnostic_requested: bool,
     /// Co-op fork: the last reason `SKATE2_DIAGNOSTIC_ONLINE` waited, traced when it changes.
@@ -727,7 +734,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // Co-op fork: a campaign's scenes load as the career's until M4 puts them under the online
         // rule (`docs/coop/design.md` §3.5).
         if let Some(career) = self.career.as_mut() {
-            career.nis.set_online_game(self.online.game.is_some() && !campaign);
+            career.nis.set_online_game(self.online.game.is_some() && (!campaign || self.online.round.is_some()));
         }
         Ok(())
     }
@@ -842,6 +849,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
             }
             ServerMessage::GameReset { kind, seed, session, participants, activity } => self.online_game_reset(kind, seed, session, &participants, activity)?,
+            ServerMessage::CampaignSave { slot, tick, hash, data } => crate::coop::trace(format_args!(
+                "the server holds a campaign save from slot {slot} at round tick {tick}: {} B, hash {hash:016x} (adopting it is M8's)",
+                data.len()
+            )),
             ServerMessage::GameProposal { kind, activity, user_id, timeout } => self.online_proposal(kind, activity, user_id, timeout)?,
             ServerMessage::Vote { user_id, score } => self.online_vote(user_id, score),
             ServerMessage::SyncPoint { round } => self.online_sync_point_released(round)?,
@@ -1240,6 +1251,11 @@ impl<T, C> SelectedLiveSession<T, C> {
         if let Some(game) = self.online.game.as_mut() {
             game.entered = true;
         }
+        // The career's scripts wait for the server's round start (M2): every console then
+        // runs them from the same tick on the same facts.
+        self.online.campaign_hold = true;
+        self.online.send(ClientMessage::ChallengeLoaded);
+        trace(format_args!("campaign lobby: career loaded, told the server; the scripts wait for the round's start"));
         self.online_build_held_recipes()
     }
 

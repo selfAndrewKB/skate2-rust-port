@@ -540,6 +540,9 @@ pub struct World {
     pub additional_world_location: Option<u64>,
     /// The players back end, installed by the session.
     pub players: Option<Arc<dyn PlayersBackEnd>>,
+    /// Co-op fork: set while a campaign round runs: the completion-rule table and the players
+    /// by challenge index, which the objective system reads at its one evaluation point.
+    pub coop: Option<crate::coop::rules::CampaignWorld>,
     /// The network game an online challenge runs in, installed by the session.
     pub online: Option<super::players::OnlineChallenge>,
     /// The skater manager's skaters' completed outputs this update, in index order.
@@ -873,6 +876,7 @@ impl ChallengeSystem {
                 game_mode: players::GM_SINGLE_PLAYER,
                 additional_world_location: None,
                 players: None,
+                coop: None,
                 skaters: Vec::new(),
                 skate: SkateChallengeManager::default(),
                 scoring: Arc::default(),
@@ -1488,6 +1492,54 @@ impl ChallengeSystem {
     /// Diagnostics: `cSignPostManager::CompleteChallenge(name)` (`0x825e3098`).
     pub fn diagnostic_complete_challenge(&mut self, name: &str) {
         super::signpost::complete_challenge_by_name(&mut self.world, name);
+    }
+
+    /// Co-op fork, for the bench: the named challenge activated and executed now.
+    pub fn diagnostic_execute_challenge(&mut self, name: &str) -> bool {
+        super::signpost::execute_challenge_by_name(&mut self.world, name)
+    }
+
+    /// Co-op fork, for the bench: each skater frame the scripts saw this tick: player, local,
+    /// tester validity and base.
+    pub fn diagnostic_skater_frames(&self) -> Vec<(i32, bool, bool, [f32; 3])> {
+        self.world.skaters.iter().map(|frame| (frame.player, frame.local, frame.tester_valid, frame.tester_base)).collect()
+    }
+
+    /// Co-op fork, for the bench: every objective group's player and its objectives' trigger
+    /// volume ids, to find where a go-to mission wants the skaters.
+    pub fn diagnostic_objective_volumes(&self) -> Vec<(i32, u64, Vec<u64>, Vec<String>)> {
+        self.world
+            .objectives
+            .groups
+            .iter()
+            .map(|group| {
+                (
+                    group.player,
+                    group.challenge,
+                    group.objectives.iter().flat_map(|objective| objective.trigger_volumes.iter().copied()).collect(),
+                    group
+                        .objectives
+                        .iter()
+                        .map(|objective| {
+                            let boundary = self
+                                .world
+                                .db
+                                .attribute(super::keys::class::CHALLENGE_OBJECTIVE, objective.key, super::objectives::field::SCORING_BOUNDARY)
+                                .and_then(|a| a.value_bytes(0))
+                                .map_or(0, |b| u64::from_be_bytes([b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]]));
+                            let mode = self.world.db.attribute(super::keys::class::CHALLENGE_OBJECTIVE, objective.key, super::objectives::field::ACTIVATION_MODE).and_then(|a| a.i32(0)).unwrap_or(0);
+                            format!(
+                                "{:?} mode {mode} boundary {boundary:016x} in {} {:016x}: {}",
+                                objective.state,
+                                objective.in_scoring_boundary,
+                                objective.key,
+                                objective.completion.source.chars().filter(|c| !c.is_whitespace()).take(120).collect::<String>()
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
     }
 
     /// Diagnostics: a progression message sent, after a text message setting stored.

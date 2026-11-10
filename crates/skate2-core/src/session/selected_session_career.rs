@@ -1206,6 +1206,24 @@ impl CareerSession {
     /// each move and A. `OpenProgressionPopupCallback` (`0x82897720`): option 0 sends
     /// `cMsgHUDNo`, option 1 `cMsgHUDYes`; `GenericPopupCallback` (`0x82897910`) sends the option;
     /// FE state 8's callbacks act on option 1. Returns whether a popup is open.
+    /// Co-op fork: whether the progression's Yes/No dialog is up (a script's `ShowDialog`).
+    pub(super) fn progression_dialog_open(&self) -> bool {
+        self.hud.dialog.is_some() && matches!(self.dialog_owner, DialogOwner::Progression)
+    }
+
+    /// Co-op fork: the progression's Yes/No dialog answered without a pad, as `popup_input`'s A
+    /// answers it; false when none is up.
+    pub(super) fn answer_progression_dialog(&mut self, yes: bool) -> bool {
+        if !self.progression_dialog_open() {
+            return false;
+        }
+        self.hud.dialog = None;
+        self.hud.dialog_options = None;
+        self.dialog_owner = DialogOwner::Progression;
+        self.system.post(if yes { Event::HudYes } else { Event::HudNo });
+        true
+    }
+
     fn popup_input(&mut self, input: crate::ui::pause_menu::PauseMenuInput) -> bool {
         let count = self.hud.dialog_options.as_ref().map_or(2, Vec::len).max(1);
         let Some((_, _, selected)) = self.hud.dialog.as_mut() else { return false };
@@ -2061,6 +2079,10 @@ impl<T, C> SelectedLiveSession<T, C> {
         let unlocks = career.system.world().unlockables.save();
         let hulls = career.system.world().dynamic_hulls.save();
         let cash = signpost_progress::cash(career.system.world());
+        // Co-op fork: the progression's bytes go to the server too, where every console's are
+        // compared (M2) and a joiner's adopted (M8).
+        self.online_campaign_saved(&leaves, &unlocks, &hulls);
+        let career = self.career.as_ref().ok_or_else(|| error("career absent"))?;
         let (oriented, orientation) = career.system.world().signpost.progress.orientation;
         let path = EditSkaterProfileStore::default_path().map_err(error)?;
         let mounts = Arc::clone(&self.inner.assets.as_ref().ok_or_else(|| error("career assets absent"))?.mounts);
@@ -2757,6 +2779,14 @@ impl<T, C> SelectedLiveSession<T, C> {
     }
 
     pub(super) fn try_update_career(&mut self) -> Result<(), SelectedLiveError> {
+        // Co-op fork: a campaign's scripts wait for the server's round start: no update, no
+        // event flushed (the events the load queued run at the round's tick 0 on every console);
+        // only the load's own outputs (its hulls) are applied and the HUD kept.
+        if self.online_campaign_holding() {
+            self.apply_career_outputs()?;
+            self.collect_career_hud();
+            return Ok(());
+        }
         if self.online_challenge_running() {
             return self.update_online_challenge();
         }
@@ -2768,6 +2798,8 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// system then reads the challenge's own random stream, and the local skater's simulation
     /// messages stay with it.
     pub(super) fn career_step(&mut self, online: Option<(Vec<MissionFrame>, i32, Option<MissionFrame>)>) -> Result<(), SelectedLiveError> {
+        // Co-op fork: what the campaign's bench puts in at a round tick, the same on every console.
+        self.coop_campaign_before_step()?;
         self.deliver_career_waypoint_groups()?;
         let challenge_messages = self.inner.try_take_challenge_messages().map_err(error)?;
         let Some(career) = self.career.as_mut() else { return self.try_update_free_skate_dynamic_hulls() };
@@ -2903,6 +2935,12 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
             if frame.local {
                 system.world_mut().player.colliding_triggers = pairs(&current);
+            }
+            // Co-op fork: a per-player state takes this tick's collisions as the local player's
+            // does, so the evaluation an enter event triggers sees the volume entered (built from
+            // the tick before, it missed it and a go-to objective never completed for anyone).
+            if let Some((_, state)) = system.world_mut().player_states.iter_mut().find(|(player, _)| *player == frame.player) {
+                state.colliding_triggers = pairs(&current);
             }
             previous.insert(frame.player, current);
         }
