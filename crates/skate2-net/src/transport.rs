@@ -12,7 +12,9 @@ use std::time::{Duration, Instant};
 /// Bytes identifying the protocol at the start of every datagram.
 pub const MAGIC: u16 = 0x5332;
 /// Raised whenever the wire format changes; a mismatch refuses the connection.
-pub const PROTOCOL_VERSION: u8 = 15;
+/// The co-op fork's own number (upstream's is 15), so an upstream client is refused rather than
+/// misparsed (`docs/coop/design.md` §4).
+pub const PROTOCOL_VERSION: u8 = 115;
 /// The largest datagram either side sends, below common path MTUs so no datagram fragments.
 pub const MAX_DATAGRAM: usize = 1200;
 /// The largest reliable fragment; longer messages are split.

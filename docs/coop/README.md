@@ -8,6 +8,8 @@ shared project knowledge for both. Upstream's rules in `AGENTS.md` still apply t
 
 - `design.md`: the analysis of the port's netcode, career and living world, the paradigms
   considered, the recommended architecture, method, milestones and the open decisions.
+- `bench.md`: the two-instance bench (`tools/coop/bench.sh`), the campaign lobby and what each
+  milestone proved on it, starting with M0.
 - `setup-macos.md`, `setup-windows.md`: per-machine notes.
 
 ## Branches

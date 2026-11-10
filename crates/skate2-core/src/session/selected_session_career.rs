@@ -1942,7 +1942,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         } else {
             self.place_new_career()?;
         }
-        Ok(())
+        // Co-op fork: in a campaign lobby the game is entered with the career.
+        self.online_campaign_entered()
     }
 
     /// A new profile's `FrontEndState_MainMenu::StartSinglePlayer` (`0x82678c20`) set the first

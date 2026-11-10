@@ -54,7 +54,12 @@ if [ "$programs" != server ]; then
     # instead of being started there (apps/skate2-pc/src/main.rs), because a bundle's app is
     # launched in "/".
     cp target/release/skate2-pc "$app/Contents/MacOS/Skate 2"
+    # Never copy over a binary that has run: macOS keeps the old file's signature identity and
+    # kills the new one at launch (SIGKILL, no output). A fresh file, then its own ad-hoc
+    # signature.
+    rm -f dist/macos/skate2-pc
     cp target/release/skate2-pc dist/macos/skate2-pc
+    codesign --force --sign - dist/macos/skate2-pc 2>/dev/null || true
     # The icon: the Windows icon's art as a Big Sur squircle, in the sizes an .icns holds. sips and
     # iconutil come with macOS, so the repository keeps the 1024 master and not the .icns.
     iconset=$(mktemp -d)/skate2.iconset
@@ -96,6 +101,8 @@ PLIST
 fi
 if [ "$programs" != game ]; then
     RUSTFLAGS="$remap" cargo build --release -p skate2-server -j 2
+    rm -f dist/macos/skate2-server
     cp target/release/skate2-server dist/macos/skate2-server
+    codesign --force --sign - dist/macos/skate2-server 2>/dev/null || true
     echo "Built dist/macos/skate2-server: run it as ./skate2-server [ip:port]"
 fi

@@ -76,6 +76,7 @@ pub const fn challenge_type_name(challenge_type: u8) -> &'static str {
         challenge::DEATH_RACE => "Deathrace",
         challenge::HALL_OF_MEAT => "Hall of Meat",
         challenge::ONLINE_FREE_SKATE => "Freeskate",
+        challenge::CAMPAIGN => "Campaign",
         _ => UNKNOWN,
     }
 }

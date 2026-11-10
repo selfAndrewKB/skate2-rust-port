@@ -159,6 +159,8 @@ pub(super) struct Online {
     notices: Vec<OnlineNotice>,
     /// `SKATE2_DIAGNOSTIC_ONLINE` made its request.
     diagnostic_requested: bool,
+    /// Co-op fork: the last reason `SKATE2_DIAGNOSTIC_ONLINE` waited, traced when it changes.
+    diagnostic_waiting: Option<&'static str>,
     /// The challenge round in progress.
     round: Option<online_challenge::Round>,
     /// `Net::ResumeGame` holds: no pause state stops the simulation.
@@ -270,6 +272,9 @@ impl Online {
 }
 
 const GM_ONLINE_FREE_SKATE: u32 = 4;
+/// Co-op fork: a campaign lobby's "start", which `start_online_campaign` never reads: the career
+/// places its own skater.
+const CAMPAIGN_START: [f32; 16] = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
 
 /// A presentation frame's header as replay frames carry it, without `peerId` (words 40 and 41):
 /// each console writes the sender's id there on receipt.
@@ -482,12 +487,22 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Whether the game's challenge is one of its type's online challenges in this build's data
     /// (the list the menus offer): any other is one this console cannot load.
     fn online_challenge_known(&mut self, attributes: &GameAttributes) -> Result<bool, SelectedLiveError> {
+        // Co-op fork: a campaign lobby is at its one key, known to every build of the fork.
+        if attributes.challenge_type == challenge::CAMPAIGN {
+            return Ok(attributes.challenge_key == skate2_net::protocol::campaign::KEY);
+        }
         self.online_data()?;
         let (db, _) = self.freeskate.data.as_ref().ok_or_else(|| error("data absent"))?;
         let challenges = crate::online::catalog::online_challenges(db, attributes.challenge_type, &|name| self.online_location_known(name), &|title| title.to_owned());
         // PC port: or one of the linked Skate 3 data's games of the type.
         Ok(challenges.iter().any(|challenge| challenge.key == attributes.challenge_key)
             || Self::skate3_online_spot(attributes.challenge_key).is_some_and(|spot| spot.net_type == attributes.challenge_type))
+    }
+
+    /// Co-op fork: the online game is a campaign lobby (`docs/coop/design.md`): the career plays
+    /// with the game attached rather than the online free skate.
+    pub(super) fn online_campaign(&self) -> bool {
+        self.online.game.as_ref().is_some_and(|game| game.attributes.challenge_type == challenge::CAMPAIGN)
     }
 
     /// PC port: the online challenges this build has, every type's, sent once signed in so the
@@ -504,6 +519,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         if let Some(data) = crate::skate3::linked() {
             challenges.extend(data.online.iter().map(|spot| spot.key));
         }
+        // Co-op fork: the campaign lobby's key, so campaign games are offered to this build.
+        challenges.push(skate2_net::protocol::campaign::KEY);
         challenges.sort_unstable();
         challenges.dedup();
         trace(format_args!("this build has {} online challenges", challenges.len()));
@@ -705,7 +722,19 @@ impl<T, C> SelectedLiveSession<T, C> {
         if self.online.diagnostic_requested || self.online.game.is_some() || self.online.searching.is_some() {
             return Ok(());
         }
-        if !self.main_menu.as_ref().is_some_and(|menu| menu.settled && !menu.leaving) {
+        // Co-op fork: the wait is named once per state, so a bench seat that never signs in says why.
+        let waiting = match self.main_menu.as_ref() {
+            None => Some("no main menu"),
+            Some(menu) if !menu.ready => Some("main menu not ready"),
+            Some(menu) if !menu.settled => Some("main menu not settled"),
+            Some(menu) if menu.leaving => Some("main menu leaving"),
+            Some(_) => None,
+        };
+        if waiting != self.online.diagnostic_waiting {
+            trace(format_args!("diagnostic {spec}: {}", waiting.unwrap_or("main menu gate passed")));
+            self.online.diagnostic_waiting = waiting;
+        }
+        if waiting.is_some() {
             return Ok(());
         }
         if spec == "list" {
@@ -730,6 +759,14 @@ impl<T, C> SelectedLiveSession<T, C> {
         let mut parts = spec.split(':');
         let create = parts.next() == Some("create");
         let challenge_type = parts.next().and_then(|text| text.parse().ok()).unwrap_or(challenge::SKATE);
+        // Co-op fork: `create:9` or `join:9` is the campaign lobby, at its one key.
+        if challenge_type == challenge::CAMPAIGN {
+            let key = skate2_net::protocol::campaign::KEY;
+            trace(format_args!("diagnostic {} of the campaign lobby", if create { "create" } else { "join" }));
+            self.online.diagnostic_requested = true;
+            self.online_play_now(MatchRequest { mode: PlayNowMode::Campaign, ranked: false, challenge_type, challenge_key: create.then_some(key), private: false, create, fallback_key: key });
+            return Ok(());
+        }
         let challenges = self.online_challenge_list_all(challenge_type)?;
         let named = parts.next().map(crate::challenge::keys::hash64);
         let key = challenges
@@ -838,7 +875,8 @@ impl<T, C> SelectedLiveSession<T, C> {
             .filter(|player| Some(player.user_id) != local)
             .map(|player| (player.user_id, RemoteSkater::new(player.user_id, player.slot)))
             .collect();
-        let start = self.online_location(&attributes, slot)?;
+        // Co-op fork: a campaign lobby starts where the career does (`start_online_campaign`).
+        let start = if attributes.challenge_type == challenge::CAMPAIGN { CAMPAIGN_START } else { self.online_location(&attributes, slot)? };
         self.online.game = Some(OnlineGame {
             id,
             local_slot: slot,
@@ -1108,6 +1146,9 @@ impl<T, C> SelectedLiveSession<T, C> {
     }
 
     pub(super) fn start_online_game(&mut self, start: [f32; 16]) -> Result<(), SelectedLiveError> {
+        if self.online_campaign() {
+            return self.start_online_campaign();
+        }
         self.set_game_mode(GM_ONLINE_FREE_SKATE, None)?;
         self.start_single_player_players()?;
         self.drop_career()?;
@@ -1141,11 +1182,47 @@ impl<T, C> SelectedLiveSession<T, C> {
         if let Some(game) = self.online.game.as_mut() {
             game.entered = true;
         }
+        self.online_build_held_recipes()
+    }
+
+    /// The recipes that arrived before the game was entered build now.
+    fn online_build_held_recipes(&mut self) -> Result<(), SelectedLiveError> {
         let recipes: Vec<(u64, Vec<u8>)> = self.online.game.as_mut().map(|game| std::mem::take(&mut game.recipes).into_iter().collect()).unwrap_or_default();
         for (user_id, data) in recipes {
             self.online_recipe(user_id, data)?;
         }
         Ok(())
+    }
+
+    /// Co-op fork: a campaign lobby entered from the main menu or the single player hub. The
+    /// career starts as New Career or Continue Career would, with the online game attached;
+    /// nothing of the online free skate (its area, its frozen hulls, its hub) applies, the
+    /// career's own stand. `start_career` then enters the game (`online_campaign_entered`).
+    pub(super) fn start_online_campaign(&mut self) -> Result<(), SelectedLiveError> {
+        let new_career = Self::profile_is_new()?;
+        trace(format_args!("campaign lobby: the career starts as {}", if new_career { "New Career" } else { "Continue Career" }));
+        if new_career {
+            // EnterGame's flow message 28: the intro movies, then Create-a-Skater, then the career.
+            self.begin_new_career_intro();
+        } else {
+            self.enter_single_player()?;
+            self.career_start_pending = true;
+        }
+        Ok(())
+    }
+
+    /// Co-op fork: the career is up in a campaign lobby: the game counts as entered (the
+    /// skater's frames flow, the other players' skaters show) and the recipes held meanwhile
+    /// build.
+    pub(super) fn online_campaign_entered(&mut self) -> Result<(), SelectedLiveError> {
+        if !self.online_campaign() {
+            return Ok(());
+        }
+        trace(format_args!("campaign lobby: entered with the career"));
+        if let Some(game) = self.online.game.as_mut() {
+            game.entered = true;
+        }
+        self.online_build_held_recipes()
     }
 
     /// `StateOnlineGame::OnMessage(MT_GameChange)` 0x8276b060: the host's change of challenge

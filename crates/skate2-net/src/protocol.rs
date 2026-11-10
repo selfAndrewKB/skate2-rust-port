@@ -32,7 +32,10 @@ pub mod challenge {
     pub const DEATH_RACE: u8 = 6;
     pub const HALL_OF_MEAT: u8 = 7;
     pub const ONLINE_FREE_SKATE: u8 = 8;
-    pub const COUNT: u8 = 9;
+    /// PC port, co-op fork: a campaign lobby, the career played with the game attached
+    /// (`docs/coop/design.md`); not one of the original's types.
+    pub const CAMPAIGN: u8 = 9;
+    pub const COUNT: u8 = 10;
 
     /// The fewest participants a game of `challenge_type` starts its challenge with: two
     /// (`GoToStartChallenge` 0x826617a0), or one for Spot Battle, Hall of Meat and Death Race,
@@ -44,6 +47,15 @@ pub mod challenge {
             _ => 2,
         }
     }
+}
+
+/// PC port, co-op fork: the campaign lobby (`challenge::CAMPAIGN`).
+pub mod campaign {
+    /// The one "challenge" key a campaign game is at. Every console of the fork sends it in its
+    /// content, so matchmaking offers campaign games to every build of the fork and to no other.
+    pub const KEY: u64 = 0x636F_6F70_2D63_616D;
+    /// The seats a campaign takes: designed for N, played with two (`docs/coop/design.md` §7).
+    pub const MAX_PLAYERS: u8 = 4;
 }
 
 /// `Sk8::Net::RequestType` of `GameRequest`.
@@ -202,6 +214,8 @@ pub enum PlayNowMode {
     Custom,
     /// `FrontEndState_UnrankedFreeskate`: an online free skate at a location.
     Freeskate,
+    /// PC port, co-op fork: a campaign lobby (`challenge::CAMPAIGN` at `campaign::KEY`).
+    Campaign,
 }
 
 /// `StateMessage_EnterOnlineGame` as `SendUnrankedMatchMessage` 0x826a85a0 builds it.
@@ -616,6 +630,7 @@ impl ClientMessage {
                     PlayNowMode::Quick => 0,
                     PlayNowMode::Custom => 1,
                     PlayNowMode::Freeskate => 2,
+                    PlayNowMode::Campaign => 3,
                 });
                 w.bool(play.ranked);
                 w.u8(play.challenge_type);
@@ -727,6 +742,7 @@ impl ClientMessage {
                     0 => PlayNowMode::Quick,
                     1 => PlayNowMode::Custom,
                     2 => PlayNowMode::Freeskate,
+                    3 => PlayNowMode::Campaign,
                     _ => return Err(DecodeError("play now mode")),
                 };
                 let ranked = r.bool()?;

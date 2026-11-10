@@ -265,8 +265,11 @@ pub(crate) fn run(root: &std::path::Path) -> RenderResult<()> {
     if completion_limit == Some(0) {
         return Err("completion limit must be positive".into());
     }
-    if capture.is_some() && frame_limit.is_none() && completion_limit.is_none() {
-        return Err("--live-capture requires --live-frames or --live-completions".into());
+    // Co-op fork: periodic captures (SKATE2_DIAGNOSTIC_CAPTURE_EVERY) need no bound, so a bench
+    // seat captures while it plays in the native frontend; it writes no completion capture.
+    let periodic_capture = std::env::var_os("SKATE2_DIAGNOSTIC_CAPTURE_EVERY").is_some();
+    if capture.is_some() && frame_limit.is_none() && completion_limit.is_none() && !periodic_capture {
+        return Err("--live-capture requires --live-frames, --live-completions or SKATE2_DIAGNOSTIC_CAPTURE_EVERY".into());
     }
     if hold_at_completion && completion_limit.is_none() {
         return Err("--live-hold requires --live-completions".into());

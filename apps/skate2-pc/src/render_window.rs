@@ -263,6 +263,14 @@ pub fn run_with_options(
         .ok()
         .and_then(|count| count.parse::<u32>().ok())
         .unwrap_or(u32::MAX);
+    // A periodic capture, <base>_<n>.png beside the completion capture; it renders to its own
+    // texture, so it needs no presented frame.
+    fn periodic_capture(renderer: &mut GpuRenderer, scene: &GpuScene, base: &std::path::Path, index: u32) {
+        let path = base.with_file_name(format!("{}_{index:03}.png", base.file_stem().and_then(|stem| stem.to_str()).unwrap_or("capture")));
+        if let Err(error) = renderer.render_capture(scene, &path) {
+            eprintln!("diagnostic capture {}: {error}", path.display());
+        }
+    }
     let mut alt = false;
     let mut focused = true;
     // Unfocused and its swapchain stalled: the client's frames run on the minimized timer and
@@ -425,9 +433,11 @@ pub fn run_with_options(
                             && if client.completion_bound_active() {
                                 completion_reached
                             } else {
+                                // Co-op fork: with no bound at all (periodic captures only) there is
+                                // no completion capture.
                                 options
                                     .frame_limit
-                                    .is_none_or(|limit| presented + 1 == limit)
+                                    .is_some_and(|limit| presented + 1 == limit)
                             };
                         if !capture_now
                             && periodic_index < periodic_count
@@ -436,13 +446,7 @@ pub fn run_with_options(
                         {
                             periodic_index += 1;
                             periodic_next = Some(next + every);
-                            let path = base.with_file_name(format!(
-                                "{}_{periodic_index:03}.png",
-                                base.file_stem().and_then(|stem| stem.to_str()).unwrap_or("capture")
-                            ));
-                            if let Err(error) = renderer.render_capture(&scene, &path) {
-                                eprintln!("diagnostic capture {}: {error}", path.display());
-                            }
+                            periodic_capture(&mut renderer, &scene, base, periodic_index);
                             client.frame_presented(&scene);
                             presented += 1;
                             window.request_redraw();
@@ -571,6 +575,17 @@ pub fn run_with_options(
                     return;
                 }
                 renderer.submit_uploads();
+                // Co-op fork: the periodic captures go on in the background (an off-screen or
+                // unfocused window, whose presents macOS stalls), so a bench seat that nobody
+                // looks at still leaves its pictures.
+                if periodic_index < periodic_count
+                    && let (Some(every), Some(next), Some(base)) = (periodic, periodic_next, periodic_base.as_ref())
+                    && Instant::now() >= next
+                {
+                    periodic_index += 1;
+                    periodic_next = Some(next + every);
+                    periodic_capture(&mut renderer, &scene, base, periodic_index);
+                }
                 client.frame_presented(&scene);
                 if client.exit_requested() {
                     target.exit();

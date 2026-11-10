@@ -1030,9 +1030,33 @@ impl GpuRenderer {
             if let Some(capture)=&self.media_capture {(config.width,config.height)=capture.window_size;}
             self.surface.configure(&self.device, &config);
         }
-        let frame = acquire(&self.surface)?;
+        // Co-op fork: a capture of an occluded window (a bench seat off-screen, whose presents
+        // macOS withholds) renders to an offscreen texture of the surface's shape and presents
+        // nothing, so the seat's pictures come without a visible window.
+        let (frame, offscreen) = match acquire(&self.surface) {
+            Ok(frame) => (Some(frame), None),
+            Err(SurfaceUnavailable::Occluded | SurfaceUnavailable::Timeout) if capture.is_some() && self.media_capture.is_none() => {
+                let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("occluded capture target"),
+                    size: wgpu::Extent3d { width: self.config.width, height: self.config.height, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.config.format,
+                    usage: self.config.usage | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                (None, Some(texture))
+            }
+            Err(error) => return Err(error.into()),
+        };
         let record_start = Instant::now();
-        let render_texture=self.media_capture.as_ref().map_or_else(||frame.texture.clone(),|c|c.texture.clone());
+        let render_texture = match (&self.media_capture, &frame, &offscreen) {
+            (Some(capture), _, _) => capture.texture.clone(),
+            (None, Some(frame), _) => frame.texture.clone(),
+            (None, None, Some(offscreen)) => offscreen.clone(),
+            (None, None, None) => unreachable!("a frame or an offscreen capture target"),
+        };
         let view=render_texture.create_view(&Default::default());
         let stereo=scene.stereoscopy && settings.postfx && scene.postfx.is_some() && scene.final_blit.is_some();
         let eyes=if stereo {
@@ -1113,7 +1137,7 @@ impl GpuRenderer {
         diagnostics=recorded_diagnostics;
         }
         self.stereo_objects_active=stereo;
-        if let Some(capture)=&self.media_capture {
+        if let (Some(capture), Some(frame)) = (&self.media_capture, &frame) {
             self.queue.submit(Some(capture.preview(&self.device,&self.queue,&frame.texture.create_view(&Default::default()))));
         }
         let record_duration=record_start.elapsed();
@@ -1122,7 +1146,9 @@ impl GpuRenderer {
             self.present_pacing.wait(due);
         }
         let present_start = Instant::now();
-        self.queue.present(frame);
+        if let Some(frame) = frame {
+            self.queue.present(frame);
+        }
         self.frame_cap.presented();
         let present = present_start.elapsed();
         self.fps.presented(&self.queue);

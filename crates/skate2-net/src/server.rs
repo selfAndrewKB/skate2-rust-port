@@ -700,11 +700,14 @@ impl ServerCore {
         let Some(version) = self.connections.get(&id).and_then(|c| c.user.as_ref()).map(|user| user.version.clone()) else { return };
         let Some(address) = self.address(id) else { return };
         let free_skate = play.challenge_type == challenge::ONLINE_FREE_SKATE;
+        // Co-op fork: a campaign lobby is searched for as itself, never by Quick or Custom.
+        let campaign = play.challenge_type == challenge::CAMPAIGN;
         let consistent = play.game_version == version
             && match play.mode {
-                PlayNowMode::Quick => true,
-                PlayNowMode::Custom => !free_skate,
+                PlayNowMode::Quick => !campaign,
+                PlayNowMode::Custom => !free_skate && !campaign,
                 PlayNowMode::Freeskate => free_skate,
+                PlayNowMode::Campaign => campaign,
             };
         if !consistent {
             (self.log)(&format!("connection {id} searched inconsistently (mode {:?}, type {})", play.mode, play.challenge_type));
@@ -714,7 +717,7 @@ impl ServerCore {
         if self.game_of(id).is_some() {
             self.leave_game(id, leave::QUIT, now);
         }
-        let ranked = play.ranked && !play.private && !free_skate;
+        let ranked = play.ranked && !play.private && !free_skate && !campaign;
         let content = self.connections.get(&id).and_then(|c| c.user.as_ref()).and_then(|user| user.content.as_ref());
         let found = if play.create || play.private {
             None
@@ -734,8 +737,8 @@ impl ServerCore {
                         && game.activity.is_none()
                         && content.is_none_or(|content| content.contains(&attributes.challenge_key))
                         && match play.mode {
-                            PlayNowMode::Quick => ranked || attributes.challenge_type != challenge::ONLINE_FREE_SKATE,
-                            PlayNowMode::Custom | PlayNowMode::Freeskate => {
+                            PlayNowMode::Quick => ranked || !matches!(attributes.challenge_type, challenge::ONLINE_FREE_SKATE | challenge::CAMPAIGN),
+                            PlayNowMode::Custom | PlayNowMode::Freeskate | PlayNowMode::Campaign => {
                                 attributes.challenge_type == play.challenge_type
                                     && play.challenge_key.is_none_or(|key| key == attributes.challenge_key)
                             }
@@ -765,7 +768,7 @@ impl ServerCore {
                             challenge_type: play.challenge_type,
                             challenge_key: location,
                             private: play.private,
-                            max_players: u8::try_from(MAX_PLAYERS).unwrap_or(u8::MAX),
+                            max_players: if campaign { crate::protocol::campaign::MAX_PLAYERS } else { u8::try_from(MAX_PLAYERS).unwrap_or(u8::MAX) },
                             ranked,
                         },
                         members: Vec::new(),
@@ -777,7 +780,7 @@ impl ServerCore {
                         activity: None,
                     },
                 );
-                (self.log)(&format!("game {game} created: type {} challenge {location:016x}", play.challenge_type));
+                (self.log)(&format!("game {game} created: type {}{} challenge {location:016x}", play.challenge_type, if campaign { " (campaign)" } else { "" }));
                 game
             }
         };
@@ -1174,6 +1177,11 @@ impl ServerCore {
                 {
                     return;
                 }
+                // Co-op fork: a campaign has no challenge to start; its missions run in the career.
+                if game.attributes.challenge_type == challenge::CAMPAIGN {
+                    (self.log)(&format!("game {game_id}: a campaign takes no challenge start"));
+                    return;
+                }
                 let seed = self.random.next_u32();
                 game.session = game.session.wrapping_add(1);
                 let session = game.session;
@@ -1564,14 +1572,19 @@ impl ServerCore {
         }
         // A game that stops sending replay frames, without saying it has none to send, is
         // frozen or paused: `KR_KickedForInactivity`.
-        let inactive: Vec<(u32, String)> = self
+        // Co-op fork: a campaign member streams its career's hulls on the game thread, a hitch of
+        // seconds in which it sends nothing, so a campaign allows the longer silence.
+        let inactive: Vec<(u32, String, Duration)> = self
             .games
             .values()
-            .flat_map(|game| game.members.iter().filter(|member| now.saturating_duration_since(member.alive) >= INACTIVITY))
-            .map(|member| (member.connection, member.name.clone()))
+            .flat_map(|game| {
+                let limit = if game.attributes.challenge_type == challenge::CAMPAIGN { CAMPAIGN_INACTIVITY } else { INACTIVITY };
+                game.members.iter().filter(move |member| now.saturating_duration_since(member.alive) >= limit).map(move |member| (member, limit))
+            })
+            .map(|(member, limit)| (member.connection, member.name.clone(), limit))
             .collect();
-        for (id, name) in inactive {
-            (self.log)(&format!("{name} sent nothing for {} s: kicked for inactivity", INACTIVITY.as_secs()));
+        for (id, name, limit) in inactive {
+            (self.log)(&format!("{name} sent nothing for {} s: kicked for inactivity", limit.as_secs()));
             self.send(id, &ServerMessage::Kicked { reason: leave::KICKED_FOR_INACTIVITY });
             self.leave_game(id, leave::KICKED_FOR_INACTIVITY, now);
         }
@@ -1747,6 +1760,8 @@ impl ServerCore {
 
 /// How long a member may send neither a replay frame nor `Busy` before it is kicked.
 const INACTIVITY: Duration = Duration::from_secs(2);
+/// Co-op fork: the same for a campaign member, whose career streams hulls on the game thread.
+const CAMPAIGN_INACTIVITY: Duration = Duration::from_secs(15);
 
 /// How long after a member's recipe the server takes another of it.
 const RECIPE_SPACING: Duration = Duration::from_secs(2);

@@ -4,8 +4,8 @@ use crate::client::{ClientCore, ClientEvent, Disconnect};
 use crate::crypto::{Build, Handshake, Session};
 use crate::frames::{HEADER_WORDS, INTERVAL, NetFrame};
 use crate::protocol::{
-    ClientMessage, FactsNotes, GameAttributes, GameResult, LobbyInfo, MAX_PLAYERS, Phase, PlayNow, PlayNowMode, ServerMessage, challenge, leave, play_now,
-    proposal, refuse, request, reset,
+    ClientMessage, FactsNotes, GameAttributes, GameResult, LobbyInfo, MAX_PLAYERS, Phase, PlayNow, PlayNowMode, ServerMessage, campaign, challenge, leave,
+    play_now, proposal, refuse, request, reset,
 };
 use crate::moderation::BanList;
 use crate::panel::{Action, Request};
@@ -1777,4 +1777,54 @@ fn an_accepted_activity_waits_a_little_for_a_member_on_its_way_in() {
     let participants = activity_reset(&net.messages(host), reset::LOAD_CHALLENGE).expect("then starts without it");
     assert_eq!(participants.len(), 2);
     assert!(proposals(&net.messages(late)).iter().any(|&(kind, ..)| kind == proposal::MISSED), "the joiner missed it");
+}
+
+/// Co-op fork: a campaign lobby search, Create or Join.
+fn campaign_lobby(create: bool) -> ClientMessage {
+    ClientMessage::PlayNow(PlayNow {
+        mode: PlayNowMode::Campaign,
+        ranked: false,
+        challenge_type: challenge::CAMPAIGN,
+        challenge_key: create.then_some(campaign::KEY),
+        private: false,
+        create,
+        fallback_key: campaign::KEY,
+        game_version: "test".into(),
+    })
+}
+
+#[test]
+fn a_campaign_lobby_takes_its_players_and_starts_no_challenge() {
+    assert_eq!(ClientMessage::decode(&campaign_lobby(true).encode()).expect("decodes"), campaign_lobby(true));
+    let mut net = Net::new();
+    let host = net.add("Host");
+    let guest = net.add("Guest");
+    let stranger = net.add("Stranger");
+    net.run(100);
+    net.send(host, &campaign_lobby(true));
+    net.run(100);
+    assert!(net.messages(host).iter().any(|message| matches!(message, ServerMessage::GameJoined { slot: 0, attributes, .. }
+        if attributes.challenge_type == challenge::CAMPAIGN && attributes.challenge_key == campaign::KEY && attributes.max_players == campaign::MAX_PLAYERS)));
+    // Neither a quick match nor a custom match lands in a campaign, and a campaign asked for as a
+    // custom match is refused.
+    net.send(stranger, &play(PlayNowMode::Quick, false, None));
+    net.run(100);
+    assert!(net.messages(stranger).contains(&ServerMessage::PlayNowResult { result: play_now::NO_MATCH }));
+    net.send(stranger, &ClientMessage::PlayNow(PlayNow { mode: PlayNowMode::Custom, ..match campaign_lobby(false) { ClientMessage::PlayNow(play) => play, _ => unreachable!() } }));
+    net.run(100);
+    assert!(net.messages(stranger).contains(&ServerMessage::PlayNowResult { result: play_now::NO_MATCH }));
+    // A campaign search joins the campaign.
+    net.send(guest, &campaign_lobby(false));
+    net.run(100);
+    assert!(net.messages(guest).iter().any(|message| matches!(message, ServerMessage::GameJoined { slot: 1, players, .. } if players.len() == 2)));
+    // The host's challenge start goes nowhere: a campaign's missions run in the career.
+    net.events(host);
+    net.events(guest);
+    net.send(host, &ClientMessage::GameRequest { request: request::START_GAME, value: 0 });
+    net.run(100);
+    for player in [host, guest] {
+        let events = net.events(player);
+        assert!(!events.iter().any(|event| matches!(event, ClientEvent::Message(ServerMessage::GameReset { .. }))), "no challenge loads");
+        assert!(!events.iter().any(|event| matches!(event, ClientEvent::Disconnected(_))), "nobody is dropped");
+    }
 }
