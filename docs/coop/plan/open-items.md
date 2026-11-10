@@ -51,10 +51,11 @@ Front page: [README](../README.md).
     99.95 %. The puppet's velocity is its drive's own (the coast, then the hold); carrying the
     owner's velocity through to the puppet's `core.velocity` and yaw target is the next
     improvement the audit will measure.
-40. The audit is offline (two seats' logs on one machine). A live digest in the world run
-    (the owner's quantized hash of each entity's shared fields every 60 round ticks, compared
-    by the receiver against its puppet and traced on divergence) makes it a bridge log that
-    works on two machines; agreed with the player, 2026-11-10, next.
+40. Retired: the live audit (the receiving end measures every sample against the puppet it
+    drives, traces a puppet 20 samples beyond 0.5 m once, and sums the agreement every ten
+    seconds in the `live audit` line) runs in play on any two machines; no wire change was
+    needed, the samples already carry the shared fields. The offline audit stays the long-form
+    report over the census dumps.
 
 ## Play (2026-11-10, the player, M5 build)
 

@@ -66,6 +66,8 @@ struct Tracked {
     runs: u32,
     /// How many ticks a peer has been nearer by the margin (an owned one's), and which.
     nearer: (u32, u8),
+    /// How many samples in a row this puppet has been beyond the position tolerance.
+    behind: u32,
 }
 
 #[derive(Debug)]
@@ -78,12 +80,33 @@ struct Spawn {
     promote: bool,
 }
 
+/// The live audit (the bridge's receiving end): each sample measured against the puppet it
+/// drives before it is applied, so divergence shows in play on any two machines, not only in
+/// two logs on one. Tolerances as `tools/coop/sync_audit.py`'s: position 0.5 m, yaw 5°, speed
+/// 0.5 m/s; flags exact.
+#[derive(Debug, Default)]
+struct LiveAudit {
+    samples: u64,
+    position_ok: u64,
+    yaw_ok: u64,
+    speed_ok: u64,
+    flags_ok: u64,
+    worst_position: (f32, u32),
+    worst_yaw: (f32, u32),
+}
+const AUDIT_POSITION: f32 = 0.5;
+const AUDIT_YAW_DEGREES: f32 = 5.;
+const AUDIT_SPEED: f32 = 0.5;
+/// A puppet this many samples in a row beyond the position tolerance is traced once.
+const AUDIT_BEHIND_SAMPLES: u32 = 20;
+
 #[derive(Debug, Default)]
 struct Stats {
     runs: u32,
     bytes: u64,
     entities: u64,
     props: u64,
+    audit: LiveAudit,
     contacts_sent: u32,
     contacts_applied: u32,
     confirmed: u32,
@@ -380,6 +403,37 @@ impl<T, C> SelectedLiveSession<T, C> {
                             coop.entities.remove(&sample.id);
                             continue;
                         };
+                        // The live audit: the puppet's state against the sample about to drive it.
+                        if let Some(core) = pedestrian.core.as_ref() {
+                            let audit = &mut coop.stats.audit;
+                            let position_gap = distance_squared(core.transform[3], [sample.position[0], sample.position[1], sample.position[2], 1.]).sqrt();
+                            let yaw_gap = {
+                                let turn = (stream::yaw_of(&core.transform) - sample.yaw).rem_euclid(std::f32::consts::TAU);
+                                turn.min(std::f32::consts::TAU - turn).to_degrees()
+                            };
+                            let speed = |v: [f32; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+                            let speed_gap = (speed([core.velocity[0], core.velocity[1], core.velocity[2]]) - speed(sample.velocity)).abs();
+                            let flags_here = entity_flags(pedestrian);
+                            audit.samples += 1;
+                            audit.position_ok += u64::from(position_gap <= AUDIT_POSITION);
+                            audit.yaw_ok += u64::from(yaw_gap <= AUDIT_YAW_DEGREES);
+                            audit.speed_ok += u64::from(speed_gap <= AUDIT_SPEED);
+                            audit.flags_ok += u64::from(flags_here == sample.flags);
+                            if position_gap > audit.worst_position.0 {
+                                audit.worst_position = (position_gap, sample.id);
+                            }
+                            if yaw_gap > audit.worst_yaw.0 {
+                                audit.worst_yaw = (yaw_gap, sample.id);
+                            }
+                            if position_gap > AUDIT_POSITION {
+                                puppet.behind += 1;
+                                if puppet.behind == AUDIT_BEHIND_SAMPLES {
+                                    trace(format_args!("live audit: puppet {:08x} {position_gap:.2} m from its owner's sample for {AUDIT_BEHIND_SAMPLES} samples at {tick} (yaw off {yaw_gap:.0}°, speed off {speed_gap:.2} m/s)", sample.id));
+                                }
+                            } else {
+                                puppet.behind = 0;
+                            }
+                        }
                         let Some(drive) = pedestrian.puppet.as_mut() else { continue };
                         drive.arrive(stream::transform(sample.position, sample.yaw), sample.velocity, sample.flags);
                         puppet.updated = tick;
@@ -525,7 +579,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     ownership::decide(kind, id, None, Owner::Remote(owner), "its census spawned it");
                     trace(format_args!("puppet {id:08x} of slot {owner} spawned as entity {entity:#x} (entity key {:016x}, model {:016x}, epoch {}) at {tick}",
                         spawn.descriptor.entity_key, spawn.descriptor.model_key, spawn.state.epoch));
-                    coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, runs: 0, nearer: (0, 0) });
+                    coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, runs: 0, nearer: (0, 0), behind: 0 });
                     if spawn.promote {
                         coop.promotions.push(id);
                     }
@@ -659,7 +713,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let tracked = coop.entities.entry(wid).or_insert_with(|| {
                             let reason = if guard { "this census spawned it; it chases this console's skater only" } else { "this census spawned it" };
                             ownership::decide(kind, wid, None, ownership::owner(kind, Owner::Local), reason);
-                            Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, runs: 0, nearer: (0, 0) }
+                            Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, runs: 0, nearer: (0, 0), behind: 0 }
                         });
                         // The handoff rule: a peer nearer by the margin for a second takes it.
                         let position = core.transform[3];
@@ -804,6 +858,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                         coop.props.values().filter(|prop| prop.owner == Owner::Local).count(), coop.props.len(),
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.stale
                     ));
+                    let audit = &stats.audit;
+                    if audit.samples > 0 {
+                        trace(format_args!(
+                            "live audit at {tick}: {} samples; position within {AUDIT_POSITION} m {} (worst {:.2} m, {:08x}), yaw within {AUDIT_YAW_DEGREES}° {} (worst {:.0}°, {:08x}), speed within {AUDIT_SPEED} m/s {}, flags equal {}",
+                            audit.samples, audit.position_ok, audit.worst_position.0, audit.worst_position.1, audit.yaw_ok, audit.worst_yaw.0, audit.worst_yaw.1, audit.speed_ok, audit.flags_ok
+                        ));
+                    }
                     *stats = Stats { since: tick, ..Default::default() };
                 }
                 Ok(Some((bytes, included)))

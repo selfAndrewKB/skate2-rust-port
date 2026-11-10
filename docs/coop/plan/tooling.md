@@ -185,7 +185,11 @@ tick and reports, per field, how many pairs agree within tolerance (position 0.5
 speed 0.5 m/s, flags, model and down exact), the worst gap and where, the divergences still
 open at the last dump (`--all` lists them), and for the fields the inventory calls local (the
 graph behaviour, the moods) how often they differ, by design. Run it on every recipe and on
-play.
+play. Live, in every build and on any two machines: the receiving end measures every sample
+against the puppet it drives before applying it and writes `live audit at <tick>: N samples;
+position within 0.5 m …, yaw within 5° …, speed within 0.5 m/s …, flags equal …` every ten
+seconds beside the stream's line, and `live audit: puppet X … from its owner's sample for 20
+samples` once per excursion (`SKATE2_TRACE_COOP=1`).
 
 ## Building
 
