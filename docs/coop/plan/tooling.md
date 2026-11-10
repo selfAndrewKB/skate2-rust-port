@@ -169,6 +169,20 @@ SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT=3000:792,-58,888 SKATE2_DIAGNOSTIC
 CAPTURE_FROM=100 CAPTURE_EVERY=20 CAPTURE_COUNT=6 ./tools/coop/bench.sh start 2
 ```
 
+## The synchronization audit
+
+What is shared and what is not, as data, not by eye: `tools/coop/sync_inventory.py` generates
+[sync-inventory.md](sync-inventory.md) from the structs (a field it does not know fails the
+check, so a new field cannot go unclassified); `SKATE2_TRACE_COOP_CENSUS=1` on every seat
+writes, every 60 round ticks, one line per pedestrian the seat knows (world id, owner, epoch,
+position, yaw, speed, flags, model, graph behaviour, moods, down); and
+`tools/coop/sync_audit.py seat-1.log seat-2.log` pairs the seats' lines by world id and round
+tick and reports, per field, how many pairs agree within tolerance (position 0.5 m, yaw 5°,
+speed 0.5 m/s, flags, model and down exact), the worst gap and where, the divergences still
+open at the last dump (`--all` lists them), and for the fields the inventory calls local (the
+graph behaviour, the moods) how often they differ, by design. Run it on every recipe and on
+play.
+
 ## Building
 
 `./build-release-macos.sh` (the fork removes the old binary before copying and ad-hoc signs it:

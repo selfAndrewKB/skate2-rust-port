@@ -42,6 +42,8 @@ M7 kinds → M8 the whole campaign, resume and reconnect. Milestones and their d
 - [plan/tooling.md](plan/tooling.md): the bench, the switches, building; per-machine notes in
   [setup-macos.md](plan/setup-macos.md) and [setup-windows.md](plan/setup-windows.md).
 - [plan/qa-matrix.md](plan/qa-matrix.md): seats × machines × situations, exercised or not.
+- [plan/sync-inventory.md](plan/sync-inventory.md): every field of a pedestrian's state, streamed,
+  derived or local, generated from the code; measured by `tools/coop/sync_audit.py`.
 - [plan/open-items.md](plan/open-items.md): seen and not yet fixed or explained.
 - Topics, each with Scope, State and History: [session](plan/topics/session.md),
   [world](plan/topics/world.md), [progression](plan/topics/progression.md),

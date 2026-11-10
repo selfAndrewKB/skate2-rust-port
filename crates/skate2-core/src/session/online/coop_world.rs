@@ -145,6 +145,18 @@ pub(in super::super) struct CoopWorld {
     stats: Stats,
 }
 
+/// `SKATE2_TRACE_COOP_CENSUS=1`: every 60 round ticks, one line per pedestrian this console
+/// knows (world id, owner and epoch, position, yaw, speed, flags, model, graph behaviour,
+/// moods, down), the same ticks on every seat, so `tools/coop/sync_audit.py` can pair the
+/// seats' lines by world id and say per field what agrees and what is each console's own
+/// (`docs/coop/plan/sync-inventory.md`). Per-pedestrian detail, so under its own switch.
+fn census_trace_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SKATE2_TRACE_COOP_CENSUS").is_some())
+}
+/// The census dump's period in round ticks.
+const CENSUS_EVERY: u32 = 60;
+
 /// `SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>`: at that tick the nearest puppet is knocked down here
 /// as if the local skater had hit it, and the contact goes to its owner, so the bench proves
 /// the round trip without steering a skater into a pedestrian.
@@ -330,6 +342,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 (peers, own)
             })
             .unwrap_or_default();
+        let round_tick = self.campaign_round_tick();
         let mut coop = std::mem::take(&mut self.online.coop);
         let sent = self
             .inner
@@ -578,6 +591,35 @@ impl<T, C> SelectedLiveSession<T, C> {
                         trace(format_args!("diagnostic: shoved puppet {id:08x} at {:.1} m: knockdown predicted here at {tick}, contact to its owner", d2.sqrt()));
                     } else if tick == at {
                         trace(format_args!("diagnostic: no puppet to shove at {tick}"));
+                    }
+                }
+
+                // 5b. The census dump for the synchronization audit, at round ticks the
+                // seats share.
+                if census_trace_on()
+                    && let Some(round_tick) = round_tick
+                    && round_tick % CENSUS_EVERY == 0
+                {
+                    let living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                    let roster = living.pedestrian_entities.as_deref().ok_or("pedestrian EntityMan absent")?;
+                    let by_entity: BTreeMap<u32, (u32, &Tracked)> = coop.entities.iter().map(|(&wid, tracked)| (tracked.entity, (wid, tracked))).collect();
+                    for id in roster.ids() {
+                        let Some(pedestrian) = roster.get(id) else { continue };
+                        let Some(core) = pedestrian.core.as_ref() else { continue };
+                        let Some(&(wid, tracked)) = by_entity.get(&id) else { continue };
+                        let owner = match tracked.owner {
+                            Owner::Local => "own".to_owned(),
+                            Owner::Remote(slot) => format!("puppet of {slot}"),
+                        };
+                        let speed = (core.velocity[0].powi(2) + core.velocity[1].powi(2) + core.velocity[2].powi(2)).sqrt();
+                        let down = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
+                        trace(format_args!(
+                            "census {round_tick}: {wid:08x} {owner} e{} {:.2} {:.2} {:.2} yaw {:.1} v {:.2} f{} m{:016x} g{} moods{} {}",
+                            tracked.epoch, core.transform[3][0], core.transform[3][1], core.transform[3][2],
+                            stream::yaw_of(&core.transform).to_degrees(), speed, entity_flags(pedestrian), core.model_key,
+                            pedestrian.graph.current, pedestrian.state.as_ref().map_or(0, |state| state.moods.len()),
+                            if down { "down" } else { "up" }
+                        ));
                     }
                 }
 

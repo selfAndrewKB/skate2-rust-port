@@ -42,10 +42,17 @@ fn diagnostic_triggers() -> Option<(u32, f32)> {
 /// objective of every group of the main challenge is completed as its script would complete it,
 /// the same tick on every console: the bench's way past the steps a teleport cannot prove (an
 /// ollie, a duck, a prop), after the ones it can.
-fn diagnostic_completes() -> &'static [u32] {
-    static SPEC: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+fn diagnostic_completes() -> &'static [(u32, Option<i32>)] {
+    static SPEC: std::sync::OnceLock<Vec<(u32, Option<i32>)>> = std::sync::OnceLock::new();
     SPEC.get_or_init(|| {
-        std::env::var("SKATE2_DIAGNOSTIC_COOP_COMPLETE").ok().map_or_else(Vec::new, |spec| spec.split(';').filter_map(|tick| tick.trim().parse().ok()).collect())
+        std::env::var("SKATE2_DIAGNOSTIC_COOP_COMPLETE").ok().map_or_else(Vec::new, |spec| {
+            spec.split(';')
+                .filter_map(|entry| {
+                    let (tick, player) = entry.split_once('@').map_or((entry, None), |(tick, player)| (tick, Some(player)));
+                    Some((tick.trim().parse().ok()?, player.map(|player| player.trim().parse().ok()).flatten()))
+                })
+                .collect()
+        })
     })
 }
 
@@ -189,11 +196,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                 trace(format_args!("diagnostic: teleport to {position:?} at round tick {tick}: {}", self.diagnostic_teleport_local_player(position)));
             }
         }
-        if diagnostic_completes().contains(&tick)
-            && let Some(career) = self.career.as_mut()
-        {
-            let completed = career.system.diagnostic_complete_active_objectives();
-            trace(format_args!("diagnostic: completed the active objectives at round tick {tick}: {completed:?}"));
+        for &(at, player) in diagnostic_completes() {
+            if at == tick
+                && let Some(career) = self.career.as_mut()
+            {
+                let completed = career.system.diagnostic_complete_active_objectives(player);
+                trace(format_args!("diagnostic: completed the active objectives of {} at round tick {tick}: {completed:?}", player.map_or("every player".to_owned(), |player| format!("player {player}"))));
+            }
         }
         if let Some(at) = diagnostic_zones()
             && tick == at

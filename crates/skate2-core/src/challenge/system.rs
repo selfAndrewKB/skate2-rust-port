@@ -1264,14 +1264,14 @@ impl ChallengeSystem {
     /// A diagnostic step through the main challenge: the first active objective of each of its
     /// groups completed as its completion script would complete it
     /// ([`objectives::diagnostic_complete`], highlights included). Returns the objectives completed.
-    pub fn diagnostic_complete_active_objectives(&mut self) -> Vec<String> {
+    pub fn diagnostic_complete_active_objectives(&mut self, player: Option<i32>) -> Vec<String> {
         let Some(main) = self.world.activities.main else { return Vec::new() };
         let targets: Vec<(u32, usize, u64)> = self
             .world
             .objectives
             .groups
             .iter()
-            .filter(|g| g.activity == main)
+            .filter(|g| g.activity == main && player.is_none_or(|player| g.player == player))
             .filter_map(|g| {
                 let index = g.objectives.iter().position(|o| o.state == objectives::Status::Active)?;
                 Some((g.id, index, g.objectives[index].key))

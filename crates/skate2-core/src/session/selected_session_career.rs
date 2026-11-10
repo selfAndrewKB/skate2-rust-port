@@ -2375,7 +2375,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Completes the main challenge's active objectives as their completion scripts would, for a
     /// diagnostic win (`SKATE2_DIAGNOSTIC_FILM_WIN`).
     pub fn diagnostic_complete_objectives(&mut self) -> Vec<String> {
-        self.career.as_mut().map_or_else(Vec::new, |career| career.system.diagnostic_complete_active_objectives())
+        self.career.as_mut().map_or_else(Vec::new, |career| career.system.diagnostic_complete_active_objectives(None))
     }
 
     /// The main challenge's current state name.
