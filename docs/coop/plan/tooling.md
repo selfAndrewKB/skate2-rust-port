@@ -16,6 +16,10 @@ SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 ./tools/coop/bench.sh start 2
 ./tools/coop/bench.sh stop
 ```
 
+`start` returns at once: every process it starts is detached from the caller's stdio, so a
+script or a tool that ran it never waits on the games (they lingered as background tasks until
+the games were closed by hand, 2026-11-10); `stop` reaches them by pid.
+
 The bench folder (`../bench` beside the repository, never a save root a person plays from) holds
 `server/server.log`, `seat-N/seat.log`, `seat-N/seat.env` (the seat's whole environment, so a
 switch that did not take is never a guess), `seat-N/prime.log`, `seat-N/SKATER.P` and the seats'

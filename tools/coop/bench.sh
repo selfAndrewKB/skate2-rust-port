@@ -92,7 +92,10 @@ start() {
     [ -f "$SKATE2_GAME_ROOT/default.xex" ] || { echo "no game at $SKATE2_GAME_ROOT"; exit 1; }
     mkdir -p "$BENCH/server"
     echo "server: $SERVER (log $BENCH/server/server.log)"
-    (cd "$BENCH/server" && exec "$GAME" --server "$SERVER" > server.log 2>&1) &
+    # Every process the bench starts is detached from the caller's stdio (nothing of it stays
+    # open on the caller's pipe), so a script or a tool that ran `start` returns at once and
+    # never waits on the games; `stop` reaches them by pid.
+    (cd "$BENCH/server" && exec "$GAME" --server "$SERVER" > server.log 2>&1) < /dev/null > /dev/null 2>&1 &
     echo $! > "$BENCH/server/pid"
     sleep 1
     i=1
@@ -118,9 +121,9 @@ start() {
         echo "seat $i: SKATE2_DIAGNOSTIC_ONLINE=$online ${SEAT_EXTRA:-} $extra (log $dir/seat.log)"
         # The seat's whole environment is kept beside its log (seat.env), so a switch that did
         # not take is never a guess.
-        (cd "$dir" && env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_DIAGNOSTIC_ONLINE="$online" \
+        (cd "$dir" && exec env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_DIAGNOSTIC_ONLINE="$online" \
             SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" $(window_env "$i") ${SEAT_EXTRA:-} $extra \
-            sh -c 'env | grep "^SKATE2_" | sort > seat.env; exec "$0" "$@"' "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) &
+            sh -c 'env | grep "^SKATE2_" | sort > seat.env; exec "$0" "$@"' "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) < /dev/null > /dev/null 2>&1 &
         echo $! > "$dir/pid"
         # The creator must hold the lobby before a joiner searches.
         [ "$i" -eq 1 ] && sleep 8
