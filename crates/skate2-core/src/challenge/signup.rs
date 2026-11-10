@@ -321,16 +321,27 @@ pub(crate) fn reevaluate_activity_prereqs(world: &mut World, flags: u32) {
 /// GenerateTesterBBox` (`0x82e20ee0`): the boxes the tester's base box meets,
 /// and whether that set changed.
 fn perform_bbox_tests(world: &mut World) -> bool {
-    let Some(base) = world.player.tester_base else { return false };
+    let bases = super::tester_bases(world);
+    if bases.is_empty() {
+        return false;
+    }
     let half = TRIGGER_AABB_CHARACTER_WIDTH * 0.5;
-    let tester = OctreeBounds {
-        minimum: [base[0] - half, base[1], base[2] - half, 0.0],
-        maximum: [base[0] + half, base[1] + TRIGGER_AABB_CHARACTER_HEIGHT, base[2] + half, 0.0],
-    };
+    let testers: Vec<OctreeBounds> = bases
+        .iter()
+        .map(|base| OctreeBounds {
+            minimum: [base[0] - half, base[1], base[2] - half, 0.0],
+            maximum: [base[0] + half, base[1] + TRIGGER_AABB_CHARACTER_HEIGHT, base[2] + half, 0.0],
+        })
+        .collect();
     let s = &mut world.signup;
     #[expect(clippy::cast_possible_truncation, reason = "512 entries")]
-    let colliding: Vec<u32> =
-        s.entries.iter().enumerate().filter(|(_, e)| e.is_some_and(|(_, b)| b.overlaps(tester))).map(|(i, _)| i as u32).collect();
+    let colliding: Vec<u32> = s
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.is_some_and(|(_, b)| testers.iter().any(|tester| b.overlaps(*tester))))
+        .map(|(i, _)| i as u32)
+        .collect();
     let changed = colliding != s.previous;
     s.previous = colliding;
     changed
@@ -350,7 +361,7 @@ fn is_allowed_to_sign_up(world: &World) -> bool {
         && super::living_world::is_signup_available(world)
         && !world.flow_loading
         && world.goto_allows_signup
-        && !(world.player.hom_bail_in_progress || world.player.hom_bail_completed)
+        && !super::any_player_hom_bailing(world)
         && super::ots_discovery::is_signup_available(world)
         && super::services::is_signup_available(world)
 }
@@ -419,6 +430,21 @@ fn output_prompt(world: &mut World) {
 /// opened, which also pushes `kPAUSE_STATE_FRONTEND` (`0x826bd738`).
 pub fn dpad_up(world: &mut World) -> bool {
     signup_hud::dpad_up(world)
+}
+
+/// Co-op fork, for the bench: every sign-up box with its activity's name and centre.
+pub(crate) fn diagnostic_entries(world: &World) -> Vec<(String, [f32; 3])> {
+    world
+        .signup
+        .entries
+        .iter()
+        .flatten()
+        .map(|&(activity, bounds)| {
+            let name = world.activities.activities.get(activity).map(|a| a.name.clone()).unwrap_or_default();
+            let centre = [0, 1, 2].map(|i| (bounds.minimum[i] + bounds.maximum[i]) * 0.5);
+            (name, centre)
+        })
+        .collect()
 }
 
 /// `SignUpHUD::UpdateInput(0x4000)`: the release.

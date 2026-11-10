@@ -385,8 +385,13 @@ fn reevaluate_global_activity_bboxes(world: &mut World) {
 /// is terminated and reset; each one whose box it is in runs (`kEnableGlobalTriggers`) unless it
 /// runs already or a main challenge suspends the globals.
 pub(crate) fn perform_bbox_tests(world: &mut World) {
-    let Some(base) = world.player.tester_base else { return };
-    let current = world.activities.global_tree.collisions(super::characters::tester_bounds(base));
+    let bases = super::tester_bases(world);
+    if bases.is_empty() {
+        return;
+    }
+    let mut current: Vec<u32> = bases.iter().flat_map(|&base| world.activities.global_tree.collisions(super::characters::tester_bounds(base))).collect();
+    current.sort_unstable();
+    current.dedup();
     let (_, exited) = super::trigger_tester::enter_exit(&world.activities.global_previous, &current);
     for index in exited {
         let Some(activity) = world.activities.global_tree.entry(index) else { continue };

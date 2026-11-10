@@ -326,7 +326,7 @@ pub(crate) fn update(world: &mut World) {
     if !world.dynamic_hulls.game_loaded || world.dynamic_hulls.teleport_hold {
         return;
     }
-    if let Some(base) = world.player.tester_base {
+    for base in super::tester_bases(world) {
         perform_bbox_tests(world, base);
     }
     for callback in std::mem::take(&mut world.dynamic_hulls.dispatch) {

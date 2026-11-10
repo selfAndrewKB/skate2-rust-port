@@ -67,6 +67,22 @@ fn diagnostic_round_teleports() -> &'static [(u32, [f32; 3])] {
     })
 }
 
+/// `SKATE2_DIAGNOSTIC_COOP_PROMPT=<tick>:<answer>[;...]`: at that round tick this console answers
+/// a prompt as a pad would (`PromptAnswer::parse`: yes, no, option:<n>, skate101, unlock, signup,
+/// release, choice:<n>, cancel, accept, decline); the answer travels as a note.
+fn diagnostic_prompts() -> &'static [(u32, crate::coop::prompts::PromptAnswer)] {
+    static SPEC: std::sync::OnceLock<Vec<(u32, crate::coop::prompts::PromptAnswer)>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| {
+        let Ok(spec) = std::env::var("SKATE2_DIAGNOSTIC_COOP_PROMPT") else { return Vec::new() };
+        spec.split(';')
+            .filter_map(|entry| {
+                let (at, answer) = entry.split_once(':')?;
+                Some((at.trim().parse().ok()?, crate::coop::prompts::PromptAnswer::parse(answer)?))
+            })
+            .collect()
+    })
+}
+
 /// `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<tick>:<name>`: at that round tick the named challenge is
 /// activated and executed, the same tick on every console (the bench's way into a mission).
 fn diagnostic_execute() -> Option<(u32, String)> {
@@ -149,6 +165,14 @@ impl<T, C> SelectedLiveSession<T, C> {
             let executed = career.system.diagnostic_execute_challenge(&name);
             trace(format_args!("diagnostic: execute {name} at round tick {tick}: {executed}"));
         }
+        for &(at, answer) in diagnostic_prompts() {
+            if at == tick
+                && let Some(career) = self.career.as_mut()
+            {
+                trace(format_args!("diagnostic: answering {answer:?} at round tick {tick}"));
+                career.prompt(answer);
+            }
+        }
         for &(at, position) in diagnostic_round_teleports() {
             if at == tick {
                 trace(format_args!("diagnostic: teleport to {position:?} at round tick {tick}: {}", self.diagnostic_teleport_local_player(position)));
@@ -165,6 +189,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         {
             self.diagnostic_dump_triggers(radius)?;
             if let Some(career) = self.career.as_ref() {
+                for (name, centre) in career.system.diagnostic_sign_up_entries() {
+                    trace(format_args!("diagnostic: sign-up box {name} at {centre:?}"));
+                }
                 for (player, local, valid, base) in career.system.diagnostic_skater_frames() {
                     trace(format_args!("diagnostic: skater frame of player {player}: local {local}, tester valid {valid} at {base:?}"));
                 }

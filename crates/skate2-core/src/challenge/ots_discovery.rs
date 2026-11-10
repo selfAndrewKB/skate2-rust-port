@@ -133,8 +133,13 @@ pub(crate) fn update(world: &mut World) {
     if !world.ots_discovery.game_loaded || !activity::can_start_main_challenge(world) {
         return;
     }
-    let Some(base) = world.player.tester_base else { return };
-    let current = world.ots_discovery.tree.collisions(super::characters::tester_bounds(base));
+    let bases = super::tester_bases(world);
+    if bases.is_empty() {
+        return;
+    }
+    let mut current: Vec<u32> = bases.iter().flat_map(|&base| world.ots_discovery.tree.collisions(super::characters::tester_bounds(base))).collect();
+    current.sort_unstable();
+    current.dedup();
     let (_, exited) = super::trigger_tester::enter_exit(&world.ots_discovery.previous, &current);
     for index in exited {
         let Some(activity) = world.ots_discovery.tree.entry(index) else { continue };

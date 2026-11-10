@@ -1499,6 +1499,11 @@ impl ChallengeSystem {
         super::signpost::execute_challenge_by_name(&mut self.world, name)
     }
 
+    /// Co-op fork, for the bench: every sign-up box, with its activity's name and centre.
+    pub fn diagnostic_sign_up_entries(&self) -> Vec<(String, [f32; 3])> {
+        super::signup::diagnostic_entries(&self.world)
+    }
+
     /// Co-op fork, for the bench: each skater frame the scripts saw this tick: player, local,
     /// tester validity and base.
     pub fn diagnostic_skater_frames(&self) -> Vec<(i32, bool, bool, [f32; 3])> {

@@ -38,6 +38,27 @@ pub mod mission_audio;
 mod natives;
 pub mod objective_data;
 
+/// Co-op fork, the ledger's "nearest player who is up" kind for the boxes the world tests the
+/// skater against (sign-up boxes, global activities, discovery volumes, dynamic hulls, story
+/// characters): in a campaign every player's tester, read from the facts alike on every
+/// console; otherwise the local player's. A box any player stands in counts.
+pub(crate) fn tester_bases(world: &system::World) -> Vec<[f32; 3]> {
+    if world.coop.is_some() && !world.player_states.is_empty() {
+        world.player_states.iter().filter_map(|(_, state)| state.tester_base).collect()
+    } else {
+        world.player.tester_base.into_iter().collect()
+    }
+}
+
+/// Co-op fork: whether any player the scripts read is in or just out of a Hall of Meat bail.
+pub(crate) fn any_player_hom_bailing(world: &system::World) -> bool {
+    if world.coop.is_some() && !world.player_states.is_empty() {
+        world.player_states.iter().any(|(_, state)| state.hom_bail_in_progress || state.hom_bail_completed)
+    } else {
+        world.player.hom_bail_in_progress || world.player.hom_bail_completed
+    }
+}
+
 /// Co-op fork: the completion rule for an activity's challenge while a campaign round runs, with
 /// the campaign's players and the challenge's name; `None` outside a campaign. The one place
 /// the rule table is asked (`coop::rules`).

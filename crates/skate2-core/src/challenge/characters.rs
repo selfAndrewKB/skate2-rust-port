@@ -987,7 +987,7 @@ pub(crate) fn update(world: &mut World) {
 /// `SpotTestCharactersAgainstLocalPlayer` (0x825ac7e8): the local skater's tester box, while
 /// its tester is valid.
 fn spot_test_characters_against_local_player(world: &mut World) {
-    if let Some(base) = world.player.tester_base {
+    for base in super::tester_bases(world) {
         test_bbox_against_tree(world, tester_bounds(base));
     }
 }

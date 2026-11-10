@@ -691,6 +691,11 @@ pub(crate) struct CareerSession {
     /// Change Game's next challenge, started once the running one completes.
     party_switch: Option<party_play::Location>,
     dialog_owner: DialogOwner,
+    /// Co-op fork: a campaign round runs, so a prompt's answer is queued as a note on the next
+    /// facts and applied at its tick on every console, never posted here at once.
+    pub(super) prompt_notes_on: bool,
+    /// Co-op fork: the answers given here since the last facts.
+    pending_prompts: Vec<crate::coop::prompts::PromptAnswer>,
     /// The career front-end states' `GlobalFEPlaySound` calls, in order.
     sounds: Vec<&'static str>,
     /// `QuitPopupCallback`'s `QuittingToFE` and `Sk8AppMan::EnterFE`, for the session.
@@ -835,6 +840,8 @@ impl CareerSession {
             frozen_skaters: Vec::new(),
             party_switch: None,
             dialog_owner: DialogOwner::Progression,
+            prompt_notes_on: false,
+            pending_prompts: Vec::new(),
             sounds: Vec::new(),
             quit_to_front_end: false,
             challenge_camera: None,
@@ -1145,9 +1152,8 @@ impl CareerSession {
                 }
             }
             Some(PausingState::Unlock) => {
-                if input.select && self.unlock_ready && self.cash_anim_done && self.hud.unlock_overlay.take().is_some() {
-                    self.pausing.pop();
-                    self.system.unlock_overlay_continue();
+                if input.select && self.unlock_ready && self.cash_anim_done && self.hud.unlock_overlay.is_some() {
+                    self.prompt(crate::coop::prompts::PromptAnswer::UnlockOverlayContinue);
                 }
             }
             Some(PausingState::HomResults) => self.hom_results_input(input),
@@ -1157,10 +1163,8 @@ impl CareerSession {
             Some(PausingState::Articles) => self.articles_input(input),
             Some(PausingState::Covers) => self.covers_input(input),
             Some(PausingState::Skate101) => {
-                if input.select && self.skate101_ready && self.hud.skate101.take().is_some() {
-                    self.pausing.pop();
-                    self.system.post(Event::HudContinue);
-                    eprintln!("career: cMsgPinPlayer(0) not applied");
+                if input.select && self.skate101_ready && self.hud.skate101.is_some() {
+                    self.prompt(crate::coop::prompts::PromptAnswer::Skate101Continue);
                 }
             }
             // ReceiveInput (0x8267c798) takes A, B and X of any pad; the port's front-end
@@ -1206,6 +1210,90 @@ impl CareerSession {
     /// each move and A. `OpenProgressionPopupCallback` (`0x82897720`): option 0 sends
     /// `cMsgHUDNo`, option 1 `cMsgHUDYes`; `GenericPopupCallback` (`0x82897910`) sends the option;
     /// FE state 8's callbacks act on option 1. Returns whether a popup is open.
+    /// Co-op fork, the ledger's "the one who did it": a prompt answered on this console. In a
+    /// campaign round it is queued for the next facts and applied at that tick everywhere
+    /// (`apply_prompt`); otherwise applied now.
+    pub(super) fn prompt(&mut self, answer: crate::coop::prompts::PromptAnswer) {
+        if self.prompt_notes_on {
+            self.pending_prompts.push(answer);
+        } else {
+            self.apply_prompt(answer);
+        }
+    }
+
+    /// Co-op fork: the answers given here since the last call.
+    pub(super) fn take_pending_prompts(&mut self) -> Vec<crate::coop::prompts::PromptAnswer> {
+        std::mem::take(&mut self.pending_prompts)
+    }
+
+    /// Co-op fork: a prompt's answer applied: what the pad's press did before, closing the
+    /// prompt where it is still up (on a console that mirrors it) and giving the scripts what
+    /// they were given.
+    pub(super) fn apply_prompt(&mut self, answer: crate::coop::prompts::PromptAnswer) {
+        use crate::coop::prompts::PromptAnswer as A;
+        match answer {
+            A::Yes | A::No => {
+                if self.hud.dialog.is_some() && matches!(self.dialog_owner, DialogOwner::Progression | DialogOwner::Script { generic: false, .. }) {
+                    self.hud.dialog = None;
+                    self.hud.dialog_options = None;
+                    self.dialog_owner = DialogOwner::Progression;
+                }
+                self.system.post(if answer == A::Yes { Event::HudYes } else { Event::HudNo });
+            }
+            A::Option(option) => {
+                if self.hud.dialog.is_some() && matches!(self.dialog_owner, DialogOwner::Script { generic: true, .. }) {
+                    self.hud.dialog = None;
+                    self.hud.dialog_options = None;
+                    self.dialog_owner = DialogOwner::Progression;
+                }
+                self.system.post(crate::challenge::teleporter::popup_option(usize::try_from(option).unwrap_or(0)));
+            }
+            A::Skate101Continue => {
+                if self.hud.skate101.take().is_some() && matches!(self.pausing.last(), Some(PausingState::Skate101)) {
+                    self.pausing.pop();
+                }
+                self.system.post(Event::HudContinue);
+                eprintln!("career: cMsgPinPlayer(0) not applied");
+            }
+            A::UnlockOverlayContinue => {
+                if self.hud.unlock_overlay.take().is_some() && matches!(self.pausing.last(), Some(PausingState::Unlock)) {
+                    self.pausing.pop();
+                }
+                self.system.unlock_overlay_continue();
+            }
+            A::SignUpDpadUp => self.sign_up_choice_paused |= self.system.sign_up_dpad_up(),
+            A::SignUpDpadReleased => self.system.sign_up_dpad_released(),
+            A::SignUpChoice(choice) => {
+                self.hud.sign_up_choice = None;
+                self.sign_up_choice_paused = false;
+                self.system.sign_up_choose(choice.and_then(|choice| usize::try_from(choice).ok()));
+            }
+            A::PosterAccept => match self.system.sign_up_accept() {
+                PosterAccept::Accepted => {
+                    self.poster_blocked = true;
+                    self.hud.poster = None;
+                }
+                // The accept blocked the state's input, then core_error and
+                // OpenPopup(eSk8FEPopup_ChallengeInfo_FeeFailed).
+                PosterAccept::FeeFailed => {
+                    self.poster_input_blocked = true;
+                    self.sounds.push("FE_SOUND_CORE_ERROR");
+                    self.dialog_owner = DialogOwner::FeeFailed;
+                    self.hud.dialog_options = Some(vec!["ID_COMMON_OK".to_owned()]);
+                    self.hud.dialog = Some(("ID_COMMON_WARNING_TITLE".to_owned(), "ID_CHALLENGEINFO_FEE_FAILED".to_owned(), 0));
+                    self.sounds.push("FE_SOUND_CORE_POPUP");
+                }
+                PosterAccept::NotEnoughForMinBet => self.sounds.push("FE_SOUND_CORE_ERROR"),
+                PosterAccept::Unported => {}
+            },
+            A::PosterDecline => {
+                self.system.sign_up_decline();
+                self.poster_blocked = true;
+                self.hud.poster = None;
+            }
+        }
+    }
+
     /// Co-op fork: whether the progression's Yes/No dialog is up (a script's `ShowDialog`).
     pub(super) fn progression_dialog_open(&self) -> bool {
         self.hud.dialog.is_some() && matches!(self.dialog_owner, DialogOwner::Progression)
@@ -1217,10 +1305,7 @@ impl CareerSession {
         if !self.progression_dialog_open() {
             return false;
         }
-        self.hud.dialog = None;
-        self.hud.dialog_options = None;
-        self.dialog_owner = DialogOwner::Progression;
-        self.system.post(if yes { Event::HudYes } else { Event::HudNo });
+        self.prompt(if yes { crate::coop::prompts::PromptAnswer::Yes } else { crate::coop::prompts::PromptAnswer::No });
         true
     }
 
@@ -1243,9 +1328,9 @@ impl CareerSession {
             self.hud.dialog_options = None;
             match std::mem::take(&mut self.dialog_owner) {
                 DialogOwner::Progression | DialogOwner::Script { generic: false, .. } => {
-                    self.system.post(if yes { Event::HudYes } else { Event::HudNo });
+                    self.prompt(if yes { crate::coop::prompts::PromptAnswer::Yes } else { crate::coop::prompts::PromptAnswer::No });
                 }
-                DialogOwner::Script { generic: true, .. } => self.system.post(crate::challenge::teleporter::popup_option(option)),
+                DialogOwner::Script { generic: true, .. } => self.prompt(crate::coop::prompts::PromptAnswer::Option(i32::try_from(option).unwrap_or(0))),
                 DialogOwner::Rematch if yes => self.confirm_rematch(),
                 DialogOwner::Quit if yes => self.confirm_quit(),
                 DialogOwner::LeaveOnline if yes => {
@@ -3494,13 +3579,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             // MultipleSignupsCallback (0x826b5430) pulls kPAUSE_STATE_FRONTEND either way.
             if input.select {
                 career.sounds.push("FE_SOUND_CORE_A_BUTTON");
-                career.hud.sign_up_choice = None;
-                career.sign_up_choice_paused = false;
-                career.system.sign_up_choose(Some(chosen));
+                career.prompt(crate::coop::prompts::PromptAnswer::SignUpChoice(Some(i32::try_from(chosen).unwrap_or(0))));
             } else if input.cancel {
-                career.hud.sign_up_choice = None;
-                career.sign_up_choice_paused = false;
-                career.system.sign_up_choose(None);
+                career.prompt(crate::coop::prompts::PromptAnswer::SignUpChoice(None));
             }
             return;
         }
@@ -3515,29 +3596,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             // state (PopState).
             if !career.poster_blocked {
                 if input.select {
-                    match career.system.sign_up_accept() {
-                        PosterAccept::Accepted => {
-                            career.poster_blocked = true;
-                            career.hud.poster = None;
-                        }
-                        // The accept blocked the state's input, then core_error and
-                        // OpenPopup(eSk8FEPopup_ChallengeInfo_FeeFailed).
-                        PosterAccept::FeeFailed => {
-                            career.poster_input_blocked = true;
-                            career.sounds.push("FE_SOUND_CORE_ERROR");
-                            career.dialog_owner = DialogOwner::FeeFailed;
-                            career.hud.dialog_options = Some(vec!["ID_COMMON_OK".to_owned()]);
-                            career.hud.dialog =
-                                Some(("ID_COMMON_WARNING_TITLE".to_owned(), "ID_CHALLENGEINFO_FEE_FAILED".to_owned(), 0));
-                            career.sounds.push("FE_SOUND_CORE_POPUP");
-                        }
-                        PosterAccept::NotEnoughForMinBet => career.sounds.push("FE_SOUND_CORE_ERROR"),
-                        PosterAccept::Unported => {}
-                    }
+                    career.prompt(crate::coop::prompts::PromptAnswer::PosterAccept);
                 } else if input.cancel {
-                    career.system.sign_up_decline();
-                    career.poster_blocked = true;
-                    career.hud.poster = None;
+                    career.prompt(crate::coop::prompts::PromptAnswer::PosterDecline);
                 } else if input.misc {
                     career.poster_tutorial_video();
                 }
@@ -3547,14 +3608,14 @@ impl<T, C> SelectedLiveSession<T, C> {
             return;
         }
         if hud_dpad[4] {
-            career.system.sign_up_dpad_released();
+            career.prompt(crate::coop::prompts::PromptAnswer::SignUpDpadReleased);
         }
         if career.system.world().signup_hud.prop_bound {
             if career.system.world().signup_hud.visible {self.queue_prop_input(hud_dpad);}
             return;
         }
         if hud_dpad[0] {
-            career.sign_up_choice_paused |= career.system.sign_up_dpad_up();
+            career.prompt(crate::coop::prompts::PromptAnswer::SignUpDpadUp);
         }
     }
 
