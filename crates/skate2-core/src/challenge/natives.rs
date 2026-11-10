@@ -629,18 +629,16 @@ fn make_objectives_helper(world: &mut World, call: &NativeCall, name: &str) -> R
     let display = db.attribute(c, key, cf::DISPLAY_STATUSES).and_then(|a| a.u32(0)).unwrap_or(u32::MAX);
     let notification = db.attribute(c, key, cf::NOTIFICATION_STATUSES).and_then(|a| a.u32(0)).unwrap_or(u32::MAX);
     let show_active = db.attribute(c, key, cf::SHOW_ACTIVE_WITH_NOTIFICATIONS).and_then(|a| a.bool(0)).unwrap_or(false);
-    // Co-op fork, the ledger's "everyone" kind: under an `Everyone` rule every player of the
-    // campaign gets their own copy of the objectives, each read from that player's facts on every
-    // console; the script holds the first player's group, the same on every console, and the
-    // completion message names it (`objectives::on_objective_completed`).
+    // Co-op fork: in a campaign every player gets their own copy of the objectives under every
+    // rule, each read from that player's facts on every console, so every console evaluates
+    // every player alike and the rule decides at the one evaluation point
+    // (`objectives::on_objective_completed`); the script holds the first player's group, the
+    // same on every console. (M7: with one copy per console under `Anyone`, the console whose
+    // player completed ended the mission alone and the round split.)
     let players: Vec<i32> = match super::coop_rule(world, activity) {
-        Some((crate::coop::rules::Rule::Everyone, players, name)) => {
-            crate::coop::trace(format_args!("rule: {name} ({key:016x}) is everyone's: objectives for players {players:?}"));
+        Some((rule, players, name)) => {
+            crate::coop::trace(format_args!("rule: {name} ({key:016x}) is {rule:?}: objectives for players {players:?}"));
             players
-        }
-        Some((rule, _, name)) => {
-            crate::coop::trace(format_args!("rule: {name} ({key:016x}) is {rule:?}: objectives for player {player}"));
-            vec![player]
         }
         None => vec![player],
     };
