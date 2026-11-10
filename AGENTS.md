@@ -143,7 +143,7 @@ These apply on top of everything above, to every co-op change.
     that still reads live play stays.
   - Hygiene: no personal data, paths or player names on the wire-side logs that may be shared.
 - **Measured, not assumed.** A claim about determinism, pacing or what a script does reaches
-  the design record (`docs/coop/design.md`) only with the layer of proof that established it
+  the design record (`docs/coop/plan/design.md`) only with the layer of proof that established it
   (static reading, pure test, headless career test, two-instance bench, field play).
 - **Build on the port's netcode.** New needs become new facts groups, notes, messages and
   barriers added the documented way; never a second transport, never a server that simulates
