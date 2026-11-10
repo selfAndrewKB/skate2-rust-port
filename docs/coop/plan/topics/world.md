@@ -8,9 +8,19 @@ Front page: [README](../../README.md). Design: [design](../design.md) §3.6. Res
 [the mission-required world](../../research/RE-mission-world.md),
 [the city: population, puppets, handoff, coding](../../research/RE-city-ownership-and-puppets.md).
 
-## State (2026-11-10, M6 in progress) [CONFIRMED on the bench unless marked]
+## State (2026-11-10, M6) [CONFIRMED on the bench unless marked]
 
-**M6 so far [ASSUMPTION: built and tested in units, not yet run on the bench]:**
+**What M6 proved** (`../bench/evidence/2026-11-10-m6a-*.log`, both seats at the waterfront,
+seat 2 skating 70 m east at round tick 2400 and back at 4200): six pedestrians seat 2's census
+had spawned near seat 1 were handed over as seat 2 left ("that player is nearer by 15 m for 60
+ticks (epoch 1)" on seat 2; "handed to this console: its player is nearer" and "promoted: entity
+… runs its own graph" on seat 1 at its ticks 3055, 3484, 4279 and 4297); none came back when
+seat 2 returned to 6 m (the margin holds); every puppet spawned with its owner's model key
+(the trace names it). The shared street held 18 pedestrians between the two censuses where
+M1's held 24 (12 own and 12 puppets per seat). The stream's cost: about 555 B/s per owned
+pedestrian, 6.6 KB/s a seat with twelve owned, 1.9 KB/s with four.
+
+**M6's mechanisms:**
 
 - **A puppet is its owner's copy.** Spawned with the owner's model key and recipe id (the
   descriptor's, which the census's own draw ignored before: the player saw different models
@@ -31,7 +41,9 @@ Front page: [README](../../README.md). Design: [design](../design.md) §3.6. Res
   against this console's allowance, and a pedestrian within a peer's cull radius is not
   culled here, only one beyond every player's.
 - **Not yet:** delta coding against acknowledged runs (the design is in the research note;
-  the budget is measured first); cars and AI skaters; the puppet's stumble and mood gestures.
+  at 6.6 KB/s a seat with twelve owned pedestrians the budget holds without it, so it waits
+  for a reason: [open items](../open-items.md) 33); cars and AI skaters; the puppet's stumble
+  and mood gestures.
 
 ## State (2026-11-10, M5)
 

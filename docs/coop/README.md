@@ -6,14 +6,14 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.6.0-mission-world`**
-(2026-11-10): M5, the mission-required world. The ownership table knows story characters (each
-console's own), props (the last touch claims one, its owner streams it, the other console drives
-a puppet) and guards (the chased player's console); a chase is a fact every console's scripts
-read alike; the phone's services are notes ([world](plan/topics/world.md),
-[prompts](plan/topics/prompts.md)). Over `coop-v0.5.0-scenes-in-step` (M4, scenes under the
-online rule, [scenes](plan/topics/scenes.md)), `coop-v0.4.0-prompts-as-notes` (M3, a pad's
-answer as a note, [prompts](plan/topics/prompts.md)),
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.7.0-city`**
+(2026-11-10): M6, the city. A pedestrian belongs to the player nearer to it and is handed over
+when the other comes nearer, the puppet on the other console is its owner's copy in look and
+motion, and the two censuses populate a shared street once ([world](plan/topics/world.md)).
+Over `coop-v0.6.0-mission-world` (M5, story characters, props, guards and services,
+[world](plan/topics/world.md), [prompts](plan/topics/prompts.md)), `coop-v0.5.0-scenes-in-step`
+(M4, scenes under the online rule, [scenes](plan/topics/scenes.md)),
+`coop-v0.4.0-prompts-as-notes` (M3, a pad's answer as a note, [prompts](plan/topics/prompts.md)),
 `coop-v0.3.0-shared-progression` (M2, the campaign round and the shared save,
 [progression](plan/topics/progression.md)), `coop-v0.2.0-world-stream` (M1, puppet pedestrians,
 [world](plan/topics/world.md)) and `coop-v0.1.0-campaign-lobby` (M0, the bench and the lobby,
@@ -22,15 +22,16 @@ bench's ([versions](plan/versions.md)).
 
 ## Current focus (2026-11-10)
 
-M6, the city: ambient pedestrians, cars and AI skaters on, ownership by the nearest player with
-hysteresis and migration, the shared region populated once, contacts as facts, delta coding
-against acknowledged runs, the puppets' locomotion from the owner's motion state, the budget
-held in a busy street ([world](plan/topics/world.md)).
+M7, kinds: the completion rule per mission family across every family (`Everyone`, `Anyone`,
+`Combined`, `BestOf`, `Compete`), the table read from `coop-rules.json`, changed from the lobby
+and by `SKATE2_COOP_RULES`; the AI photographer and cameraman kept for photo and film with
+both players skating ([kinds](plan/topics/kinds.md)). Beside it, what play on the M6 build
+says about the puppets.
 
 ## What's next
 
-M6 the city → M7 kinds → M8 the whole campaign, resume and reconnect. Milestones and their
-done-when: [design](plan/design.md) §5.
+M7 kinds → M8 the whole campaign, resume and reconnect. Milestones and their done-when:
+[design](plan/design.md) §5.
 
 ## Documents
 

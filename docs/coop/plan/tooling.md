@@ -129,6 +129,18 @@ SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1000:792,-58,888;1600:640,-5
 CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
 ```
 
+**A typical M6 run** (shown, so a person can take the pads afterwards: both seats at the
+waterfront, seat 2 skating 70 m east and back; the logs show the handoffs on seat 2 and the
+promotions on seat 1):
+
+```
+BENCH_VISIBLE=1 WINDOW_SIZE=720x405 SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
+SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no" \
+SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=600:786,-58,882" \
+SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=600:792,-58,888;2400:856,-58,888;4200:792,-58,888" \
+CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
+```
+
 **A typical M1 run:**
 
 ```

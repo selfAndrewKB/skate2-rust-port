@@ -27,7 +27,8 @@ Front page: [README](../README.md).
     pedestrian walking through walls after a handoff.
 33. The world stream is still self-contained (no acknowledgement): a descriptor every 20
     runs, a despawn 3 times, every sample absolute. The in-run ack design is in the research
-    note; the measured budget in a busy street decides whether it is built.
+    note; measured at the waterfront with twelve owned pedestrians, 6.6 KB/s a seat (M6), so
+    it is not built until a busier street or a slower link asks for it.
 34. A puppet's startle, stumble and mood gestures do not travel: its intents are its owner's
     velocity through the speed table, so a startled run shows as a run and nothing else. The
     owner's graph behaviour (a small index) is the next thing to stream if play wants it.
