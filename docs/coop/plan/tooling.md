@@ -42,7 +42,11 @@ named challenge; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[;...]` completes 
 challenge's active objective of every group as its script would; `SKATE2_DIAGNOSTIC_COOP_ANSWER=
 yes|no[:<round ticks>]` answers the progression's Yes/No dialog; `SKATE2_DIAGNOSTIC_COOP_TRIGGERS=
 <round tick>:<radius>` lists the trigger volumes around the skater and every objective's state,
-boundary and condition (the volume ids match the conditions' floats through `skate3::id_float`).
+boundary and condition (the volume ids match the conditions' floats through `skate3::id_float`),
+with the sign-up boxes and every player's tester; `SKATE2_DIAGNOSTIC_COOP_PROMPT=<round tick>:
+<answer>[;...]` presses as the pad would (`yes`, `no`, `option:<n>`, `skate101`, `unlock`,
+`signup` for the D-pad press, `release`, `choice:<n>`, `cancel`, `accept`, `decline`), so the
+press goes through the same funnel as a player's and the answer rides the facts as a note.
 The career's own `SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a
 seat.
 
@@ -55,6 +59,20 @@ SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
 SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
 SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G" \
 SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G" \
+CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
+```
+
+**A typical M3 run** (M2's opening tutorial, then both at the flip-tricks sign-up box, seat 2
+signing up with a press, a release and a press after the mission's end phase, seat 1 accepting
+the poster; the sign-up is withheld until the main challenge ends, around round tick 3500 to
+5300, so the presses are late):
+
+```
+R="1516.5,110.6,-719.6"; M="1569.5,109.3,-693.9"; G="1598.6,107.1,-662.0"; B="1640.4,100.7,-522.4"
+SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
+SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
+SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G;3300:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=6300:accept" \
+SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G;3400:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=5500:signup;5520:release;5560:signup" \
 CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
 ```
 

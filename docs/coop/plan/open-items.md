@@ -43,6 +43,16 @@ Front page: [README](../README.md).
     the shared save carries progression, unlockables and hulls only (the design's "mirrored on
     both, the server holding the blob" holds for those).
 
+## Prompts ([topic](topics/prompts.md))
+
+15. A note is applied one to two seconds after the press on the bench (the round's processed
+    tick runs that far behind the facts produced); measure in play, and tune the ready lead if
+    it shows.
+16. The results screen's options, the Hall of Meat results, the blog, the sponsor and covers
+    screens still apply their continue locally.
+17. The sign-up HUD's own D-pad hold and delay are kept as the original's: a press is a note, a
+    release is a note; holding is not modelled across the link.
+
 ## Scenes ([topic](topics/scenes.md))
 
 9. `career.nis.set_online_game` stays false in a campaign: scenes pause the simulation as

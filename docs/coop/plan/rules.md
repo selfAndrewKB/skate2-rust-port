@@ -25,6 +25,10 @@ own skater, never both.
   that names it (ownership: entity, old owner, new owner, reason).
 - **Rules are data, swappable without a rebuild** (the player, 2026-11-10): completion rules, the
   ledger's kinds, the ownership table each live in one place.
+- **A prompt's answer is a note on the facts** (M3, 2026-11-10): no pad press that answers a
+  dialog, a sign-up, a poster, Skate 101 or an unlock overlay acts locally in a campaign; it
+  rides the presser's facts and every console applies it at the note's tick. Any player may
+  answer any open prompt; a rule per surface waits for play ([prompts](topics/prompts.md)).
 - **Seats, not "player 2"**: state indexed by seat, designed for N, played with two.
 - **Claims with their proof layer**: static reading, pure tests, headless career tests, the
   two-instance bench, field play. A claim is promoted only as far as its layer reaches. Markers in
@@ -71,3 +75,4 @@ stream as pedestrians do or through the replay recorder's living-world record
   of 2026-11-09 and 2026-11-10 (no attribution, commit as you go, no images, logging alongside).
 - 2026-11-10 (M2): the round's start, the everyone kind in the objective system and the scenes'
   online rule added to Decided.
+- 2026-11-10 (M3): prompts as notes added to Decided.
