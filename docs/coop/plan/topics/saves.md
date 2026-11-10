@@ -26,6 +26,14 @@ waits, signing in again to rejoin", tried every three seconds while it was down 
 refused"), and when it came back signed in with their player ids; the server read the save
 file, made the campaign lobby, seated both, and round 1064924775 started with 2 players.
 
+**What M8 proved, the crawl's first slice** (`../bench/evidence/2026-11-10-crawl-m1a.md`): the
+eight opening missions, one bench start each with the saves carried forward (`BENCH_KEEP`),
+each executed by name at round tick 900 and won by diagnostic at 1800: `m_1a_01` to `m_1a_04`,
+`tutorial_scoring` and `tutorial_offboard` reached `challenge_cleanup` on both seats at the
+same tick with the saves agreeing (the tutorials autosave nothing: "no save"); the two photo
+missions stopped at the port's AI-skater blocker ([kinds](kinds.md)). Sixty seconds a mission
+on the bench.
+
 - **The blob.** Every autosave sends the progression leaves (SignPost's data and messages, the
   unlockables, the dynamic hulls; never the skater's own orientation) as one byte string with
   its FNV-1a hash, the round's session and tick (`CampaignSave`); the server keeps the newest

@@ -6,34 +6,29 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.8.0-kinds`**
-(2026-11-10): M7, kinds. Every completion rule decides at the objective system's one
-evaluation point, with one copy of the objectives per player under every rule; the built-in
-table names the families; and synchronization is measured, not assumed: an inventory of every
-pedestrian field generated from the code, a census dump, an offline audit, and a live audit in
-every build ([kinds](plan/topics/kinds.md), [sync-inventory](plan/sync-inventory.md)). The
-first milestone reviewed before its tag. Over `coop-v0.7.0-city` (M6, ownership by the nearer
-player, puppets as the owner's copy, [world](plan/topics/world.md)),
-`coop-v0.6.0-mission-world` (M5, story characters, props, guards and services,
-[world](plan/topics/world.md), [prompts](plan/topics/prompts.md)), `coop-v0.5.0-scenes-in-step`
-(M4, scenes under the online rule, [scenes](plan/topics/scenes.md)),
-`coop-v0.4.0-prompts-as-notes` (M3, a pad's answer as a note, [prompts](plan/topics/prompts.md)),
-`coop-v0.3.0-shared-progression` (M2, the campaign round and the shared save,
-[progression](plan/topics/progression.md)), `coop-v0.2.0-world-stream` (M1, puppet pedestrians,
-[world](plan/topics/world.md)) and `coop-v0.1.0-campaign-lobby` (M0, the bench and the lobby,
-[session](plan/topics/session.md)). None has been played by a person yet; every claim is the
-bench's ([versions](plan/versions.md)).
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.9.0-whole-campaign`**
+(2026-11-10): M8, the whole campaign. The progression lives on the server and survives its
+restart; a console joining a running campaign brings every other member onto the newest save
+and the round starts again with everyone; a console whose connection drops keeps its career
+and rejoins by its player id, trying every three seconds; the mission crawl runs the campaign
+mission by mission on the bench. The crawl's first slice passed six of the eight opening
+missions; the two photo missions stop where the port itself stops (AI skaters not ported).
+Reviewed (six findings, all applied). The milestone pages: [saves](plan/topics/saves.md),
+[kinds](plan/topics/kinds.md), [tooling](plan/tooling.md), the ledger in
+[versions](plan/versions.md).
 
 ## Current focus (2026-11-10)
 
-M8, the whole campaign: the mission crawl from the tutorial to the ender on two consoles,
-resume from the server's blob, a member joining a running campaign, reconnect, Training
-Facility travel ([saves](plan/topics/saves.md), [session](plan/topics/session.md)); and what
-the audits say in play (the puppet's speed, open item 39).
+Play: the M8 build in the player's hands (every milestone so far was proven on the bench,
+M5's build alone was played); what the audits say in play (the puppet's speed, open item 39);
+the crawl beyond the opening missions once the port's AI skaters land (open item 45); Training
+Facility travel ([session](plan/topics/session.md)); the open items a person's play decides
+(New Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-M8 the whole campaign, then play. Milestones and their done-when: [design](plan/design.md) §5.
+Play, and what it finds. Milestones and their done-when: [design](plan/design.md) §5; M0 to M8 are
+tagged ([versions](plan/versions.md)).
 
 ## Documents
 

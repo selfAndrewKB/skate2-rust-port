@@ -18,7 +18,11 @@ claim is never wider than its run. Front page: [README](../README.md).
 | 2 | one Mac | the synchronization audit over two hours of the M6 build: ownership never doubled, models identical, position within 0.5 m in 99.95 % | 2026-11-10 [CONFIRMED on the bench] |
 | 2 | Mac + Windows over the internet | any | not run; needs the same commit and `release-secret.txt` on both |
 | 3-4 | one machine | lobby | not run (the lobby takes 4) |
-| 2 | one Mac | a seat leaves and rejoins; the server restarted | not run |
+| 2 | one Mac | everything stopped after a saved mission, the server alone restarted, both seats back at the same progression from the server's file | M8, 2026-11-10 [CONFIRMED on the bench] |
+| 3 | one Mac | a third seat joins a running campaign round: the others reload from the newest save, the round restarts with three | M8, 2026-11-10 [CONFIRMED on the bench] (that run reloaded the joiner too; the review's fix is by net test) |
+| 2 | one Mac | the server killed under a round and restarted: both seats keep their careers held, retry every three seconds, rejoin by player id, the round restarts | M8, 2026-11-10 [CONFIRMED on the bench] |
+| 2 | one Mac | the mission crawl's first slice, the eight opening missions one bench start each with the saves carried forward | M8, 2026-11-10 [CONFIRMED on the bench]: 6 PASS, the two photo missions STOPPED at the port's AI-skater blocker ([open items](open-items.md) 45) |
+| 2 | one Mac | a seat leaves (quits) and rejoins a running campaign by choice | not run; the lost-connection path is the same code [ASSUMPTION] |
 | 2 | one Mac, two windows side by side, one pad | played by the player (M5 build, the waterfront): "synchronization appears to be very solid foundation-wise"; pedestrians' positions and the dodge when run into synced; their models, their startled runs and their falls not ([open items](open-items.md) 31) | 2026-11-10 [CONFIRMED in play] |
 
 Transitions to play in each row: a hull reload (the 160-tick stall at Continue Career), a map

@@ -128,6 +128,11 @@ Front page: [README](../README.md).
 43. One campaign per server: the save file is keyed by the lobby's constant key, so two campaign
     lobbies on one server would share a file. Fine for one server per group of friends; a key
     per lobby (the host's player id) if a public server is ever wanted.
+45. The crawl stops at the photo missions (`m_1a_05_photo_rail`, `m_1a_06_photo_puzzle`): the
+    script loops `check_ai` → `wait` every 16 ticks from `spawn_player` on, on both seats alike,
+    waiting for an AI skater the port has not ported (`docs/career/HANDOFF.md`). Not co-op's;
+    the crawl past them (`--from m_1a_07_...`) says how far the rest goes, and the photo family's
+    rules are proven only when the port's AI skaters land.
 44. No notice is shown to the player while the rejoin runs (the career sits held behind the
     fade); a HUD line is to add.
 

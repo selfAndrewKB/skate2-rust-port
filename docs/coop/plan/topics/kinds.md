@@ -28,7 +28,10 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
 - **`BestOf` beyond completion:** the best run's score on the results screen and the
   leaderboard stay each console's own display [open item].
 - **The AI photographer and cameraman** are each console's, as every AI is; both players skate
-  [ASSUMPTION: no photo or film mission reached on the bench].
+  [ASSUMPTION]. The crawl reached `m_1a_05_photo_rail` and `m_1a_06_photo_puzzle` and both
+  stopped on both seats alike in the script's `check_ai` wait, before the objectives: the
+  port has no AI skaters yet (`docs/career/HANDOFF.md`, "AI skaters: the career blocker"), so
+  the photo family waits on the port, not on co-op ([open items](../open-items.md) 45).
 - **Not done:** the lobby's settings page for the table (the file and the switch suffice on the
   bench; a page is play's to ask for).
 
