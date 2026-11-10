@@ -26,10 +26,12 @@ Research: [the objective system per player](../../research/RE-objectives-per-pla
   copy; `on_objective_completed` asks the rule at the one evaluation point: `Everyone` completes
   the activity when every player's copy is complete, `Anyone` at the first (the other copies
   retired). A per-player state takes the tick's own trigger collisions (it was a tick stale).
-- **The save.** Each autosave sends the progression savables (SignPost's three leaves, the
-  unlockables, the dynamic hulls) to the server with their hash and the round tick; the server
-  keeps the newest beside itself (`campaign-<key>.save`), logs whether every member's hash
-  agrees, and hands it to a member joining later (adopting it is M8's).
+- **The save.** Each autosave sends the progression savables (SignPost's data and messages
+  leaves, the unlockables, the dynamic hulls) to the server with their hash and the round tick;
+  the server keeps the newest beside itself (`campaign-<key>.save`), logs whether every
+  member's hash agrees, and hands it to a member joining later (adopting it is M8's). The
+  skater's own orientation leaf (`cSignPost::Position`) is each console's and stays out of the
+  blob (M4): it is in each seat's `SKATER.P` as before.
 
 **What M2 proved** (`../bench/evidence/2026-11-10-m2-*.log`): the round started on both seats at
 tick 0 with seed `d4407991`; `m_1a_01_goto_slappys` executed at round tick 900 on both; each
@@ -50,6 +52,11 @@ back on Continue with a mission done, so the bench did not pass through it (its 
 
 ## History
 
+- 2026-11-10 M4: the two seats' saves of M3's and M4's runs disagreed (the server: "Seat 2
+  differs") by one leaf, `cSignPost::Position`, whose rotation floats differed in their low bits
+  (each seat's own physics; `cmp` of the two `SKATER.P`, the dump tool's `Position` row); M2's
+  agreement was the identical teleports'. The leaf left out of the blob and the hash
+  (`coop_campaign.rs`, tested).
 - 2026-11-10 M2 (commits `1917acc` server, `da0e21d` client, then the fixes): the round would
   not tick until the server relayed facts outside a challenge phase; the hold leaked queued
   events through `flush` (one seat's global activities started early); the go-to objectives

@@ -260,6 +260,12 @@ pub fn start(world: &mut World, group: u32) {
     if let Some(active) = director.active {
         if (!director.queued.is_empty() || active != group) && director.queued.last() != Some(&group) && director.queued.len() < 8 {
             director.queued.push(group);
+        } else if world.coop.is_some() {
+            crate::coop::trace(format_args!(
+                "presentation group {group} not queued behind {active}: {} queued{}",
+                director.queued.len(),
+                if director.queued.len() >= 8 { " (the queue is full: this start is lost)" } else { "" }
+            ));
         }
         return;
     }
@@ -299,6 +305,9 @@ pub fn play_next(world: &mut World, group: u32) {
             g.counter = 0;
             g.status = GroupStatus::Finished;
             let handle = g.handle;
+            if world.coop.is_some() {
+                crate::coop::trace(format_args!("presentation group {group} finished: the script hears it"));
+            }
             world.send(Event::Challenge(Message::new(
                 "cMsgPresentationEventGroupFinished",
                 vec![("ChallengePresentationGroup", Field::Pointer(handle))],
@@ -313,7 +322,18 @@ pub fn play_next(world: &mut World, group: u32) {
         let event = g.events[g.counter].clone();
         let hud_group = g.hud_group.clone();
         g.counter += 1;
-        if !play_event(world, &event, &hud_group) {
+        let (counter, total) = (g.counter, g.events.len());
+        let continues = play_event(world, &event, &hud_group);
+        if world.coop.is_some() {
+            crate::coop::trace(format_args!(
+                "presentation group {group}: event {counter} of {total}, kind {} {:?} {:?}: {}",
+                event.kind,
+                event.arg1,
+                event.arg2,
+                if continues { "played on" } else { "waiting for its end" }
+            ));
+        }
+        if !continues {
             return;
         }
     }

@@ -3,8 +3,9 @@
 # seat with its own scratch save root, nickname and log, driven without a human through the
 # port's diagnostic switches (docs/online/implementation.md, "Diagnostics").
 #
-#   tools/coop/bench.sh prime [N]    give N seats a scratch profile with the first mission done (Continue Career)
-#   tools/coop/bench.sh start [N]    start the server and N seats (default 2)
+#   tools/coop/bench.sh prime [N]    give N seats a scratch profile with the first mission done (Continue Career),
+#                                    kept as SKATER.P.primed
+#   tools/coop/bench.sh start [N]    start the server and N seats (default 2), each from its primed profile
 #   tools/coop/bench.sh stop         stop everything the last start began
 #   tools/coop/bench.sh logs         tail every log
 #   tools/coop/bench.sh status       pids and the last line of each log
@@ -72,7 +73,7 @@ prime() {
                 SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" SKATE2_DIAGNOSTIC_MOVIE_SKIP=120 SKATE2_DIAGNOSTIC_COMPLETE_CHALLENGES="${PRIME_TICK:-1200}:m_1a_01_goto_slappys" \
                 SKATE2_DIAGNOSTIC_CAREER_QUIT_END="${PRIME_END:-6000}" $(window_env) \
                 "$GAME" --live-skating --live-controls-demo career --live-completions 600000 --live-capture "$dir/prime.png" > prime.log 2>&1
-             [ -f "$dir/SKATER.P" ] && echo "seat $i: primed" || echo "seat $i: no save was written (read $dir/prime.log)") &
+             if [ -f "$dir/SKATER.P" ]; then cp "$dir/SKATER.P" "$dir/SKATER.P.primed"; echo "seat $i: primed (SKATER.P.primed kept)"; else echo "seat $i: no save was written (read $dir/prime.log)"; fi) &
         fi
         i=$((i + 1))
     done
@@ -91,6 +92,14 @@ start() {
     while [ "$i" -le "$seats" ]; do
         dir="$BENCH/seat-$i"
         mkdir -p "$dir"
+        # Every run starts from the primed profile: a run's autosaves (the mission's progress, the
+        # dynamic hull states the outro set, a sign-up) would otherwise change what the next run's
+        # scripts do (2026-11-10: a replayed opening tutorial waited forever on a hull state the
+        # previous run had saved).
+        if [ -f "$dir/SKATER.P.primed" ]; then
+            cp "$dir/SKATER.P.primed" "$dir/SKATER.P"
+            rm -f "$dir"/SKATER.P.*.bak
+        fi
         # The save root is the seat's folder: config.json, online-config.json, saves/ live here,
         # never in the player's own folder.
         printf '{\n  "nickname": "Seat %s",\n  "server": "%s",\n  "show_lobby_chat": true,\n  "show_ghost_players": true\n}\n' "$i" "$SERVER" > "$dir/online-config.json"

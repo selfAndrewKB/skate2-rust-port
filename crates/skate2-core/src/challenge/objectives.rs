@@ -609,7 +609,9 @@ pub fn set_status(world: &mut World, group: u32, index: usize, state: Status) {
         Status::Complete => o.completion_group,
         _ => None,
     };
-    if let Some(p) = start {
+    if let Some(p) = start
+        && presentation_plays(world, group, index, state)
+    {
         presentation::start(world, p);
     }
     // An Auto objective's indicators show while it is active or enabled and its
@@ -656,10 +658,84 @@ fn activate_objective(world: &mut World, group: u32, index: usize) -> bool {
 }
 
 fn objective_message(world: &mut World, class_name: &str, handle: usize, index: usize, extra: Vec<(&'static str, Field)>) {
+    let Some(handle) = script_hears(world, class_name, handle, index) else { return };
     #[expect(clippy::cast_precision_loss, reason = "index")]
     let mut fields = vec![("ObjectiveGroup", Field::Pointer(handle)), ("ObjectiveIndex", Field::Number(index as f32))];
     fields.extend(extra);
     world.send(Event::Challenge(Message::new(class_name, fields)));
+}
+
+/// Co-op fork: whether a copy's objective plays its activation or completion presentation (the
+/// go-to's pin and speech, the outro scene): as the script hears the status ([`script_hears`]),
+/// the activation from the first copy to activate, the completion from the last under `Everyone`
+/// (the first otherwise). Every copy's groups hold the same events, so whichever copy's plays,
+/// the console sees it once; with one copy, or outside a campaign, every status plays.
+fn presentation_plays(world: &World, group: u32, index: usize, status: Status) -> bool {
+    let Some(gi) = world.objectives.group_index(group) else { return true };
+    let g = &world.objectives.groups[gi];
+    let Some((rule, _, name)) = super::coop_rule(world, g.activity) else { return true };
+    let siblings: Vec<&ObjectiveGroup> = world.objectives.groups.iter().filter(|x| x.activity == g.activity).collect();
+    if siblings.len() < 2 {
+        return true;
+    }
+    let count = siblings.iter().filter(|x| x.objectives.get(index).is_some_and(|o| o.state == status)).count();
+    let plays = match status {
+        Status::Complete if matches!(rule, crate::coop::rules::Rule::Everyone) => count == siblings.len(),
+        _ => count == 1,
+    };
+    crate::coop::trace(format_args!(
+        "{name}: the {status:?} presentation of objective {index} from player {}: {count} of {} copies: {}",
+        g.player,
+        siblings.len(),
+        if plays { "plays" } else { "withheld" }
+    ));
+    plays
+}
+
+/// Co-op fork: a copy's failure or hint presentation is that player's feedback, so only the
+/// local player's copy plays it; with one copy, or outside a campaign, it plays.
+fn feedback_plays(world: &World, group: u32) -> bool {
+    let Some(gi) = world.objectives.group_index(group) else { return true };
+    let g = &world.objectives.groups[gi];
+    if super::coop_rule(world, g.activity).is_none() || world.objectives.groups.iter().filter(|x| x.activity == g.activity).count() < 2 {
+        return true;
+    }
+    g.player == world.local_player
+}
+
+/// Co-op fork: in a campaign an activity's groups are one per player and the script holds the
+/// first player's, so it hears an objective's message once, naming that group: the activation
+/// when the first player's copy activates, the completion when every player's copy is complete
+/// under `Everyone` (the first under any other rule), a failure from any copy. Outside a
+/// campaign, or with one group, the message goes as it is.
+fn script_hears(world: &World, class_name: &str, handle: usize, index: usize) -> Option<usize> {
+    let Some(g) = world.objectives.groups.iter().find(|g| g.handle == handle) else { return Some(handle) };
+    let Some((rule, _, name)) = super::coop_rule(world, g.activity) else { return Some(handle) };
+    let siblings: Vec<&ObjectiveGroup> = world.objectives.groups.iter().filter(|x| x.activity == g.activity).collect();
+    if siblings.len() < 2 {
+        return Some(handle);
+    }
+    let first = siblings.iter().min_by_key(|x| x.player).map_or(handle, |x| x.handle);
+    let with = |status: Status| siblings.iter().filter(|x| x.objectives.get(index).is_some_and(|o| o.state == status)).count();
+    let (count, send) = match class_name {
+        "cMsgObjectiveComplete" => {
+            let count = with(Status::Complete);
+            (count, if matches!(rule, crate::coop::rules::Rule::Everyone) { count == siblings.len() } else { count == 1 })
+        }
+        "cMsgObjectiveActivate" => (with(Status::Active), with(Status::Active) == 1),
+        _ => (1, true),
+    };
+    // The activations and failures come every tick from a script that resets its objectives
+    // each tick (the go-to missions'); only the completions are worth a line.
+    if class_name == "cMsgObjectiveComplete" {
+        crate::coop::trace(format_args!(
+            "{name}: {class_name} of objective {index} from player {}: {count} of {} copies under {rule:?}: {}",
+            g.player,
+            siblings.len(),
+            if send { "the script hears it" } else { "withheld" }
+        ));
+    }
+    send.then_some(first)
 }
 
 /// `cChallengeObjectiveGroup::ActivateObjectives` (`0x82d4c508`).
@@ -1031,7 +1107,9 @@ fn evaluate_failures(lua: &mut Lua<World>, world: &mut World, group: u32, index:
     for i in 0..with_events {
         if run_handler(lua, world, group, index, Which::FailureWithEvents(i), vars) {
             let gi = world.objectives.group_index(group).unwrap_or(0);
-            if let Some(Some(p)) = world.objectives.groups.get(gi).and_then(|g| g.objectives[index].failure_groups.get(i).copied()) {
+            if let Some(Some(p)) = world.objectives.groups.get(gi).and_then(|g| g.objectives[index].failure_groups.get(i).copied())
+                && feedback_plays(world, group)
+            {
                 presentation::start(world, p);
             }
             return i32::try_from(i).unwrap_or(i32::MAX);
@@ -1040,7 +1118,9 @@ fn evaluate_failures(lua: &mut Lua<World>, world: &mut World, group: u32, index:
     for i in 0..plain {
         if run_handler(lua, world, group, index, Which::Failure(i), vars) {
             let gi = world.objectives.group_index(group).unwrap_or(0);
-            if let Some(p) = world.objectives.groups.get(gi).and_then(|g| g.objectives[index].failure_group) {
+            if let Some(p) = world.objectives.groups.get(gi).and_then(|g| g.objectives[index].failure_group)
+                && feedback_plays(world, group)
+            {
                 presentation::start(world, p);
             }
             return i32::try_from(i).unwrap_or(i32::MAX);
@@ -1056,7 +1136,9 @@ fn execute_hints(lua: &mut Lua<World>, world: &mut World, group: u32, index: usi
     for i in 0..count {
         if run_handler(lua, world, group, index, Which::Hint(i), vars) {
             let gi = world.objectives.group_index(group).unwrap_or(0);
-            if let Some(Some(p)) = world.objectives.groups.get(gi).and_then(|g| g.objectives[index].hint_groups.get(i).copied()) {
+            if let Some(Some(p)) = world.objectives.groups.get(gi).and_then(|g| g.objectives[index].hint_groups.get(i).copied())
+                && feedback_plays(world, group)
+            {
                 presentation::start(world, p);
             }
             return;

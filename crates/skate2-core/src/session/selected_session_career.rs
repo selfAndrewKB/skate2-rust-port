@@ -606,6 +606,8 @@ pub(super) enum HeldPresentation {
     Nis(u8),
     /// `cMsgSpeechEnded`.
     Speech { character: i32, id: i32 },
+    /// Co-op fork: `cMsgFMVFinishedPlaying`.
+    Fmv,
 }
 
 pub(crate) struct CareerSession {
@@ -991,6 +993,9 @@ impl CareerSession {
     /// pacing leader.
     fn present(&mut self, event: HeldPresentation) {
         if self.hold_presentation {
+            if self.system.world().coop.is_some() {
+                crate::coop::trace(format_args!("presentation {event:?} ended here: held for the round"));
+            }
             self.held_presentation.push(event);
         } else {
             self.deliver_presentation(event);
@@ -1006,6 +1011,7 @@ impl CareerSession {
             }
             HeldPresentation::Nis(notification) => self.system.post(Event::NisChallengeNotify { notification: i32::from(notification) }),
             HeldPresentation::Speech { character, id } => self.system.post(Event::SpeechEnded { character, id }),
+            HeldPresentation::Fmv => self.system.post(Event::FmvFinishedPlaying),
         }
     }
 
@@ -3312,8 +3318,16 @@ impl<T, C> SelectedLiveSession<T, C> {
                 // The challenge system keeps the presentation's icons (World::map_icons).
                 Output::ChallengeMapIcon { .. } => {}
                 // NISManager::RunBasicNIS(scene, transition, false, true).
-                Output::PlayNis { scene, transition, .. } => career.nis.run_basic_nis(&scene, transition, false, true),
+                Output::PlayNis { scene, transition, .. } => {
+                    if let Some(online) = career.system.world().online.as_ref().filter(|_| career.system.world().coop.is_some()) {
+                        crate::coop::trace(format_args!("scene {scene} starts at tick {}", online.tick));
+                    }
+                    career.nis.run_basic_nis(&scene, transition, false, true);
+                }
                 Output::RunNisDefinition { scene, ignore_breadcrumb, transition, hold_camera, skip_enabled, location, restore_streamer } => {
+                    if let Some(online) = career.system.world().online.as_ref().filter(|_| career.system.world().coop.is_some()) {
+                        crate::coop::trace(format_args!("scene {scene} (definition) starts at tick {}", online.tick));
+                    }
                     // GetRestorePosition (0x828a1418): the local skater's position.
                     let stream_position = match self.inner.player.as_ref().and_then(|player| player.selected.actor.as_deref()) {
                         Some(actor) if restore_streamer => Some(super::local_skater_position(self.inner.world.as_ref().map(|world| &world.world), actor)?),
@@ -3431,7 +3445,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                     career.open_slappys_blog(true, male, profile.unwrap_or_default());
                 }
                 // cSignPostUtil::HandleCaughtMessage: mMovieKey, then PushState(28).
-                Output::PlayMovie { key, .. } => career.movie.push(key),
+                Output::PlayMovie { key, movie, .. } => {
+                    if let Some(online) = career.system.world().online.as_ref().filter(|_| career.system.world().coop.is_some()) {
+                        crate::coop::trace(format_args!("movie {movie} ({key:016x}) starts at tick {}", online.tick));
+                    }
+                    career.movie.push(key);
+                }
                 Output::ResetTriggerVolumeState { volume } => {
                     let matches = |id: u64| crate::skate3::id_float(id) == volume;
                     for entries in career.previous.values_mut() {

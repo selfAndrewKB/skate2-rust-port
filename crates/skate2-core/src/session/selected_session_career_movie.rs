@@ -6,7 +6,7 @@ use crate::challenge::{
     attrib_db::AttribDb,
     keys::class,
     signup::SlowDown,
-    system::{Event, Output},
+    system::Output,
 };
 use std::sync::Arc;
 
@@ -39,9 +39,10 @@ impl CareerSession {
     }
 
     /// `cMsgFMVFinishedPlaying` to the challenge system: `ReceiveFMVFinishedPlayingMessage`
-    /// (`0x825d2f18`) runs every running state machine's `FMVFinishedPlaying` script.
+    /// (`0x825d2f18`) runs every running state machine's `FMVFinishedPlaying` script. Co-op
+    /// fork: in an online round it is held for the pacing leader like a scene's end.
     pub(crate) fn fmv_finished_playing(&mut self) {
-        self.system.post(Event::FmvFinishedPlaying);
+        self.present(super::HeldPresentation::Fmv);
     }
 
     /// The challenge system's Attrib database.

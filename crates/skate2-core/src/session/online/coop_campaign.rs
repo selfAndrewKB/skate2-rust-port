@@ -96,10 +96,13 @@ fn diagnostic_execute() -> Option<(u32, String)> {
 }
 
 /// The progression savables as one byte string, for the server's store and the hash every
-/// console's log can compare: each leaf's name, version and tuples.
+/// console's log can compare: each leaf's name, version and tuples. The skater's own
+/// orientation leaf (`cSignPost::Position`) is each console's, not the career's: two seats
+/// that completed the same mission at the same tick differed in its low bits alone (M4,
+/// `2026-11-10-m4d-*.log`), so it stays out of the blob and of the hash.
 fn progression_blob(leaves: &[Leaf]) -> Vec<u8> {
     let mut out = Vec::new();
-    for (name, version, tuples) in leaves {
+    for (name, version, tuples) in leaves.iter().filter(|leaf| leaf.0 != crate::challenge::signpost_progress::POSITION) {
         out.extend_from_slice(&(name.len() as u32).to_le_bytes());
         out.extend_from_slice(name.as_bytes());
         out.extend_from_slice(&version.to_le_bytes());
@@ -201,5 +204,25 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_blob_leaves_the_skaters_own_orientation_out() {
+        let shared: Vec<Leaf> = vec![
+            (crate::challenge::signpost_progress::DATA, 7, vec![vec![1, 2, 3]]),
+            (crate::challenge::signpost_progress::MESSAGES, 1, vec![]),
+        ];
+        let mut with_position = shared.clone();
+        with_position.insert(1, (crate::challenge::signpost_progress::POSITION, 1, vec![vec![0x3f, 0x2a, 0xc6, 0xaa]]));
+        let mut other_position = shared.clone();
+        other_position.insert(1, (crate::challenge::signpost_progress::POSITION, 1, vec![vec![0x3f, 0x2a, 0xc6, 0xae]]));
+        assert_eq!(progression_blob(&with_position), progression_blob(&shared));
+        assert_eq!(fnv1a(&progression_blob(&with_position)), fnv1a(&progression_blob(&other_position)));
+        assert_ne!(fnv1a(&progression_blob(&shared)), fnv1a(&progression_blob(&shared[..1])));
     }
 }

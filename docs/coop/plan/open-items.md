@@ -42,6 +42,10 @@ Front page: [README](../README.md).
 14. Statistics (Hall of Meat, achievements, service stats) stay each console's own backend;
     the shared save carries progression, unlockables and hulls only (the design's "mirrored on
     both, the server holding the blob" holds for those).
+24. The shared blob carried the skater's own orientation leaf until M4, so the seats' hashes
+    disagreed from M3 on by its low bits; left out now ([progression](topics/progression.md)
+    History). The session marker and the camera are not in the blob either; whether any other
+    per-console leaf hides in `cSignPost::Data` shows at the next disagreement.
 
 ## Prompts ([topic](topics/prompts.md))
 
@@ -55,5 +59,25 @@ Front page: [README](../README.md).
 
 ## Scenes ([topic](topics/scenes.md))
 
-9. `career.nis.set_online_game` stays false in a campaign: scenes pause the simulation as
-   offline. M4 decides the online rule.
+9. Retired by M4: a campaign round sets `career.nis.set_online_game` and the scenes run under
+   the online rule ([scenes](topics/scenes.md)).
+18. "Each console shows its own skater" rests on reading (`SceneCharacterSource::local_player`):
+    the go-to outros the bench reaches instance no characters. To be seen in a story scene
+    [ASSUMPTION].
+19. A movie's end as a note (`Presented::Fmv`) and the refused skip are converted but not
+    reached on the bench [ASSUMPTION].
+20. An end only a non-leader console saw (a speech line the leader's audio cut short) is never
+    delivered to its scripts: it stays in the round's log. The port's rule, kept; watch for a
+    script waiting on it in play.
+21. The presentation director's queue is 8 deep and a ninth start is dropped (the port's
+    rule). The bench's `COOP_COMPLETE` diagnostic completes objectives while an outro scene
+    holds the director, so some activation and completion presentations are lost there
+    (`not queued ... lost` in the trace); a person cannot complete objectives during a scene,
+    so this is the bench's, not play's. A callout start retried every tick by the go-to script
+    traces the same line each tick while a scene holds the director.
+22. The go-to script resets its objectives every tick, so `cMsgObjectiveActivate` and
+    `cMsgObjectiveFailed` reach it every tick; heard once per tick now, not traced (it would be
+    a line a tick).
+23. The mission's end phase waits for its outro scene now (about 700 ticks longer than M3's
+    run, whose outro was unpresented), so a bench recipe's sign-up teleports must follow it
+    ([tooling](tooling.md), "A typical M4 run").

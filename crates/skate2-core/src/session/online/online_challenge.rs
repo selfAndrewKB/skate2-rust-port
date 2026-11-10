@@ -306,6 +306,9 @@ pub(super) struct Round {
     speech_seen: BTreeMap<(i32, i32), u32>,
     nis_delivered: u32,
     speech_delivered: BTreeMap<(i32, i32), u32>,
+    /// Co-op fork: movie ends, counted as the NIS events are.
+    fmv_seen: u32,
+    fmv_delivered: u32,
 }
 
 impl Round {
@@ -374,6 +377,8 @@ impl Round {
             speech_seen: BTreeMap::new(),
             nis_delivered: 0,
             speech_delivered: BTreeMap::new(),
+            fmv_seen: 0,
+            fmv_delivered: 0,
         }
     }
 
@@ -448,7 +453,18 @@ impl Round {
                 *seen += 1;
                 Presented::Speech { character, id, seq: *seen }
             }
+            HeldPresentation::Fmv => {
+                self.fmv_seen += 1;
+                Presented::Fmv { seq: self.fmv_seen }
+            }
         };
+        if self.campaign {
+            crate::coop::trace(format_args!(
+                "presentation {presented:?} seen here at tick {} ({})",
+                self.processed,
+                if self.presentation_leader() { "this console leads: its facts will announce it" } else { "waiting for the leader's facts to deliver it" }
+            ));
+        }
         self.presentation_log.push((presented, false));
     }
 
@@ -464,6 +480,9 @@ impl Round {
                 *sent = true;
                 announced.push(*presented);
             }
+        }
+        if self.campaign && !announced.is_empty() {
+            crate::coop::trace(format_args!("presentation {announced:?} announced with the facts of tick {}", self.produced));
         }
         announced
     }
@@ -482,12 +501,21 @@ impl Round {
                 *delivered = (*delivered).max(seq);
                 new
             }
+            Presented::Fmv { seq } => {
+                let new = seq > self.fmv_delivered;
+                self.fmv_delivered = self.fmv_delivered.max(seq);
+                new
+            }
         };
-        let (nis, speech) = (self.nis_delivered, &self.speech_delivered);
+        let (nis, speech, fmv) = (self.nis_delivered, &self.speech_delivered, self.fmv_delivered);
         self.presentation_log.retain(|(presented, _)| match *presented {
             Presented::Nis { seq, .. } => seq > nis,
             Presented::Speech { character, id, seq } => speech.get(&(character, id)).is_none_or(|&delivered| seq > delivered),
+            Presented::Fmv { seq } => seq > fmv,
         });
+        if self.campaign && !new {
+            crate::coop::trace(format_args!("presentation {presented:?} announced again at tick {}: already delivered", self.processed));
+        }
         new
     }
 
@@ -1048,6 +1076,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         world.coop = Some(crate::coop::rules::CampaignWorld { rules, players: (0..i32::try_from(count).unwrap_or(0)).collect() });
         career.online_random = Some(random);
         career.nis.set_online_game(true);
+        // The design's online rule for scenes: no skip, so every console sees a scene end at the
+        // tick the leader's facts announce.
+        career.nis.set_skip_blocked(true);
         career.prompt_notes_on = true;
         self.online.round = Some(round);
         self.online.campaign_hold = false;
@@ -1712,10 +1743,15 @@ impl<T, C> SelectedLiveSession<T, C> {
                     }
                     self.update_online_round_nis()?;
                     if let Some(career) = self.career.as_mut() {
+                        let campaign = career.system.world().coop.is_some();
                         for presented in presented {
+                            if campaign {
+                                crate::coop::trace(format_args!("presentation {presented:?} delivered to the scripts at tick {tick}"));
+                            }
                             career.deliver_presentation(match presented {
                                 Presented::Nis { notification, .. } => HeldPresentation::Nis(notification),
                                 Presented::Speech { character, id, .. } => HeldPresentation::Speech { character, id },
+                                Presented::Fmv { .. } => HeldPresentation::Fmv,
                             });
                         }
                         for (player, prompt) in prompts {

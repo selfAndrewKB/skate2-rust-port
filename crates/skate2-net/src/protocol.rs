@@ -386,7 +386,14 @@ pub enum Presented {
     Nis { seq: u32, notification: u8 },
     /// The `seq`-th end of the speech line (`cMsgSpeechEnded`).
     Speech { character: i32, id: i32, seq: u32 },
+    /// Co-op fork: the round's `seq`-th end of a movie (`cMsgFMVFinishedPlaying`), so a
+    /// campaign's FMVs end at the same tick on every console as its scenes do.
+    Fmv { seq: u32 },
 }
+
+/// The notification byte that marks a movie's end on the wire (a NIS notification is 1 to 3,
+/// a speech line 0).
+const FMV_PRESENTED: u8 = 0xf0;
 
 /// At most this many presentation events go with one tick's facts.
 pub const MAX_PRESENTED: usize = 15;
@@ -455,6 +462,10 @@ impl FactsNotes {
                     w.signed(i64::from(character));
                     w.signed(i64::from(id));
                 }
+                Presented::Fmv { seq } => {
+                    w.u8(FMV_PRESENTED);
+                    w.varint(u64::from(seq));
+                }
             }
         }
         for prompt in self.prompts.iter().take(MAX_PROMPTS) {
@@ -483,6 +494,9 @@ impl FactsNotes {
             .map(|_| {
                 let notification = r.u8()?;
                 let seq = r.varint_u32()?;
+                if notification == FMV_PRESENTED {
+                    return Ok(Presented::Fmv { seq });
+                }
                 if notification != 0 {
                     return Ok(Presented::Nis { seq, notification });
                 }
@@ -1182,7 +1196,7 @@ mod tests {
             ClientMessage::Complete,
             ClientMessage::Results(GameResult { event_time: 12.5, score: -3, finish_reason: 1, ranking: 2, players_choice: true }),
             ClientMessage::Facts { tick: 600, stint: 2, notes: FactsNotes::default(), data: vec![9; 40] },
-            ClientMessage::Facts { tick: 601, stint: 3, notes: FactsNotes { votes: vec![(1, 3), (2, -1)], left: vec![4], syncing: false, presented: vec![Presented::Nis { seq: 7, notification: 1 }, Presented::Speech { character: 40, id: -4004, seq: 2 }], prompts: vec![Prompt { seq: 1, kind: 1, value: 0 }, Prompt { seq: 2, kind: 8, value: -1 }] }, data: vec![] },
+            ClientMessage::Facts { tick: 601, stint: 3, notes: FactsNotes { votes: vec![(1, 3), (2, -1)], left: vec![4], syncing: false, presented: vec![Presented::Nis { seq: 7, notification: 1 }, Presented::Speech { character: 40, id: -4004, seq: 2 }, Presented::Fmv { seq: 1 }], prompts: vec![Prompt { seq: 1, kind: 1, value: 0 }, Prompt { seq: 2, kind: 8, value: -1 }] }, data: vec![] },
             ClientMessage::Frames(EncodedRun { tick: 70, count: 3, frame: Some(66), frame_before: Some(65), sample: None, sample_before: Some(60), payload: vec![5, 6, 7] }),
             ClientMessage::FrameAcks(vec![(1, 500, 0xffff), (3, 2, 0)]),
             ClientMessage::Ping { time: 123_456 },

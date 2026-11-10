@@ -374,6 +374,15 @@ fn perform_bbox_tests(world: &mut World, positions: &[[f32; 3]]) {
         if let Some(callback) = callback {
             world.dynamic_hulls.pending.push((hull, callback));
         }
+        if world.coop.is_some() {
+            crate::coop::trace(format_args!(
+                "dynamic hull {} ({}) loaded for state {} by the box test{}",
+                world.activities.activities[activity].name,
+                mapping.hull,
+                mapping.state,
+                if callback.is_some() { ", with the waiting callback" } else { "" }
+            ));
+        }
         world.output(Output::LoadDynamicHull { hull, file_name: mapping.hull.clone(), callback: callback.is_some(), asset_flags });
         world.dynamic_hulls.loaded.insert(key, mapping);
     }
@@ -473,10 +482,17 @@ pub(crate) fn set_state(world: &mut World, key: u64, state: &str, callback: Opti
     }
     world.dynamic_hulls.lookup_values.insert(key, hash);
     let challenge = world.activities.find(key).map_or_else(|| format!("{key:#018x}"), |a| world.activities.activities[a].name.clone());
-    world.output(Output::DynamicHullState { challenge, state: state.to_owned() });
+    world.output(Output::DynamicHullState { challenge: challenge.clone(), state: state.to_owned() });
     let Some(callback) = callback else { return };
     let Some(activity) = world.activities.find(key) else { return };
-    if requires_hull_load(world, activity).is_some() && !world.dynamic_hulls.load_callbacks.contains_key(&key) {
+    let waits = requires_hull_load(world, activity).is_some() && !world.dynamic_hulls.load_callbacks.contains_key(&key);
+    if world.coop.is_some() {
+        crate::coop::trace(format_args!(
+            "dynamic hull {challenge} set to {state}: {}",
+            if waits { "its callback waits for the box test to load the state's hull" } else { "its callback runs at the next update (no hull to load, or one already waiting)" }
+        ));
+    }
+    if waits {
         world.dynamic_hulls.load_callbacks.insert(key, callback);
     } else {
         world.dynamic_hulls.dispatch.push(callback);

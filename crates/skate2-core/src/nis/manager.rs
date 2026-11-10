@@ -1090,6 +1090,8 @@ pub struct NisSystem {
     audio_clock: AudioClock,
     /// `Sk8::Net::IsInOnlineGame` (`0x82559b80`): the flow's `STATE_OnlineGame` is active.
     online_game: bool,
+    /// Co-op fork: a campaign's scenes cannot be skipped (`docs/coop/plan/topics/scenes.md`).
+    skip_blocked: bool,
 }
 
 impl NisSystem {
@@ -1189,6 +1191,7 @@ impl NisSystem {
             audio: None,
             audio_clock: AudioClock::default(),
             online_game: false,
+            skip_blocked: false,
         }
     }
 
@@ -1312,6 +1315,12 @@ impl NisSystem {
     /// focus (`UpdateLoadState` states 1, 2 and 6).
     pub fn set_online_game(&mut self, online: bool) {
         self.online_game = online;
+    }
+
+    /// Co-op fork: whether a player's skip is refused (a forced skip, the results screen's,
+    /// still ends the scene).
+    pub fn set_skip_blocked(&mut self, blocked: bool) {
+        self.skip_blocked = blocked;
     }
 
     /// The local skater's hips as its presentation restored them
@@ -1663,6 +1672,10 @@ impl NisSystem {
 
     /// `SkipNIS(force)` (`0x828a2f10`).
     pub fn skip_nis(&mut self, force: bool) {
+        if self.skip_blocked && !force && self.sim.in_nis {
+            crate::coop::trace(format_args!("scene {}: a skip refused, the campaign's scenes run to their end", self.sim.scene_name));
+            return;
+        }
         if (self.sim.allow_skip || force) && self.sim.in_nis {
             self.to_presentation.push_back(ToPresentation::Skip);
         }
@@ -2344,6 +2357,14 @@ impl NisSystem {
             let locations: Vec<_> = self.pres.locations.iter().map(|&(location, _)| location).collect();
             let players = &self.pres.overrides.player_indexes;
             scene.characters = instance_characters(self.directory.characters(&props), &locations, players, source.as_ref());
+            if self.skip_blocked {
+                crate::coop::trace(format_args!(
+                    "scene {:08x} instanced {} characters for this console's local player index {:?} (player indexes {players:?})",
+                    hash,
+                    scene.characters.len(),
+                    source.local_index()
+                ));
+            }
             let m = compute_transform(scene.frame.location, scene.frame.orientation, scene.frame.normal);
             let transform = std::array::from_fn(|i| m[i / 4][i % 4]);
             for character in &mut scene.characters {

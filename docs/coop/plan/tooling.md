@@ -24,6 +24,10 @@ writes them; `sips -s format png` converts one on macOS). What proves a mileston
 `../bench/evidence/<date>-<milestone>-<what>` and named by path from the docs; nothing of it
 enters the repository.
 
+Every `start` restores each seat's `SKATER.P` from `SKATER.P.primed` (kept by `prime`) and
+removes the run's `SKATER.P.*.bak`, so a run never continues from the autosaves of the last one
+(a replayed opening tutorial once waited forever on a hull state the previous run had saved).
+
 Seat windows open inactive and off-screen (`SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW`), so the
 desktop stays the person's; `BENCH_VISIBLE=1` shows them. Every seat traces online, career and
 coop decisions. Priming needs the career demo (`--live-controls-demo career`) with
@@ -48,7 +52,10 @@ with the sign-up boxes and every player's tester; `SKATE2_DIAGNOSTIC_COOP_PROMPT
 `signup` for the D-pad press, `release`, `choice:<n>`, `cancel`, `accept`, `decline`), so the
 press goes through the same funnel as a player's and the answer rides the facts as a note.
 The career's own `SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a
-seat.
+seat. `COOP_EXECUTE` and `COOP_COMPLETE` act on the seat that carries them only (a mission a
+diagnostic starts is not a note, unlike a sign-up's accept), so a mission run belongs in
+`SEAT_EXTRA`, every seat's: with it on one seat alone the mission ran there alone while the
+other seat idled in the same round (2026-11-10, a run not kept).
 
 **A typical M2 run** (the opening tutorial, the three go-to exits by each player's own entry,
 the rest at the same tick):
@@ -73,6 +80,20 @@ SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
 SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
 SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G;3300:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=6300:accept" \
 SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G;3400:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=5500:signup;5520:release;5560:signup" \
+CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
+```
+
+**A typical M4 run** (M3's, with the sign-up teleports after the mission's end phase, which
+now waits for its outro scene and ends around round tick 4240; the seats' logs then show every
+scene and speech end `seen here`, `announced with the facts of tick N` and `delivered to the
+scripts at tick N+1` on both seats, and each objective's presentation `plays` once):
+
+```
+R="1516.5,110.6,-719.6"; M="1569.5,109.3,-693.9"; G="1598.6,107.1,-662.0"; B="1640.4,100.7,-522.4"
+SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
+SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
+SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G;4600:$B;5300:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=6500:accept" \
+SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G;4700:$B;5400:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=5700:signup;5720:release;5760:signup" \
 CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
 ```
 

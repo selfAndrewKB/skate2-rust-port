@@ -63,7 +63,11 @@ own skater, never both.
   first player's group on every console and its group operations reach every copy; the rule
   decides completion at the one evaluation point (2026-11-10, M2; [progression](topics/progression.md)).
 - Scenes run under the online rule once a campaign round runs (no pause, no skip, ends from the
-  pacing leader), each console showing its own skater (2026-11-10, M2; M4 proves it).
+  pacing leader), each console showing its own skater (2026-11-10, M2; proven on the bench in
+  M4 for scenes and speech, own skater and movies by reading: [scenes](topics/scenes.md)).
+- An objective's presentation plays once per activity, by the same decision as the message
+  the script hears (activation from the first copy, completion from the last under `Everyone`);
+  failure and hint feedback from the local player's copy only (2026-11-10, M4).
 
 **Open:** the completion rule per mission family beyond the defaults; whether cars and props
 stream as pedestrians do or through the replay recorder's living-world record
@@ -76,3 +80,4 @@ stream as pedestrians do or through the replay recorder's living-world record
 - 2026-11-10 (M2): the round's start, the everyone kind in the objective system and the scenes'
   online rule added to Decided.
 - 2026-11-10 (M3): prompts as notes added to Decided.
+- 2026-11-10 (M4): the scenes decision marked proven; one presentation per activity added.

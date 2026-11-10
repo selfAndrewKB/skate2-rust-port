@@ -6,27 +6,29 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.4.0-prompts-as-notes`**
-(2026-11-10): M3, prompts and sign-up. A pad's answer on one console (a dialog, a sign-up press,
-a poster's accept) rides that player's facts as a note and every console applies it at the same
-tick; one seat's sign-up opened the poster on both and the other's accept started the next
-tutorial on both ([prompts](plan/topics/prompts.md)). Over `coop-v0.3.0-shared-progression` (M2,
-the campaign round and identical saves, [progression](plan/topics/progression.md)),
-`coop-v0.2.0-world-stream` (M1, puppet pedestrians, [world](plan/topics/world.md)) and
-`coop-v0.1.0-campaign-lobby` (M0, the bench and the lobby, [session](plan/topics/session.md)).
-None has been played by a person yet; every claim is the bench's ([versions](plan/versions.md)).
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.5.0-scenes-in-step`**
+(2026-11-10): M4, scenes in step. Cutscenes, speech and movies run under the port's online rule
+in a campaign (no pause, no skip, the same round ticks on every console, their ends delivered
+from the pacing leader's facts), and a mission's presentation plays once per activity, not once
+per player's copy; the opening tutorial's three outro scenes started and ended at the same ticks
+on both seats and its end phase waited for them ([scenes](plan/topics/scenes.md)). Over
+`coop-v0.4.0-prompts-as-notes` (M3, a pad's answer as a note, [prompts](plan/topics/prompts.md)),
+`coop-v0.3.0-shared-progression` (M2, the campaign round and the shared save,
+[progression](plan/topics/progression.md)), `coop-v0.2.0-world-stream` (M1, puppet pedestrians,
+[world](plan/topics/world.md)) and `coop-v0.1.0-campaign-lobby` (M0, the bench and the lobby,
+[session](plan/topics/session.md)). None has been played by a person yet; every claim is the
+bench's ([versions](plan/versions.md)).
 
 ## Current focus (2026-11-10)
 
-M4, scenes in step: cutscenes, FMVs and speech under the online rule (no pause, no skip, the same
-ticks on every console, their ends delivered from the pacing leader), each console showing its
-own skater ([scenes](plan/topics/scenes.md)). A first sighting: the "welcome back" cutscene after
-the opening tutorial already ran under that rule on both seats in M3's bench.
+M5, the mission-required world: story characters, challenge props, guards and chases owned by
+rule and streamed, so the `Security` and `Service` kinds play ([world](plan/topics/world.md),
+[kinds](plan/topics/kinds.md)). Each console shows its own skater in a scene by reading only;
+a story scene with the players in it is the first thing M5's missions will show.
 
 ## What's next
 
-M4 scenes in step → M5 the mission-required world
-(story characters, props, guards) → M6 the city (ownership by nearest, migration, delta coding,
+M5 the mission-required world → M6 the city (ownership by nearest, migration, delta coding,
 population) → M7 kinds → M8 the whole campaign, resume and reconnect. Milestones and their
 done-when: [design](plan/design.md) §5.
 
