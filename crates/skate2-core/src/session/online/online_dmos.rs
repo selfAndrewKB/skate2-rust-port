@@ -52,6 +52,15 @@ impl<T, C> SelectedLiveSession<T, C> {
         if !self.online.game.as_ref().is_some_and(|game| game.entered) {
             return Ok(());
         }
+        // Co-op fork: a campaign keeps the career's own living world (its census spawns, its
+        // hulls are the career's); the network game's reset and static objects are not its.
+        if self.online_campaign() {
+            if !self.online.dmos.reset {
+                self.online.dmos.reset = true;
+                trace(format_args!("campaign lobby: the living world stays the career's (no network-game reset)"));
+            }
+            return Ok(());
+        }
         if !self.online.dmos.reset {
             self.online.dmos.reset = true;
             self.online.dmos.spawned.clear();
