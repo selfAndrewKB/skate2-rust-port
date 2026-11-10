@@ -20,6 +20,18 @@ Front page: [README](../README.md).
 6. A `controlled host backlog` of about 160 ticks at Continue Career (a hull reload) stalls
    both seats; the campaign's inactivity window (15 s) absorbs it.
 
+## City ([topic](topics/world.md), M6)
+
+32. A promoted puppet keeps the navigation cell it was spawned in; a re-seat at the
+    promotion (`set_cell` at its position, as the spawn does) is owed if it shows as a
+    pedestrian walking through walls after a handoff.
+33. The world stream is still self-contained (no acknowledgement): a descriptor every 20
+    runs, a despawn 3 times, every sample absolute. The in-run ack design is in the research
+    note; the measured budget in a busy street decides whether it is built.
+34. A puppet's startle, stumble and mood gestures do not travel: its intents are its owner's
+    velocity through the speed table, so a startled run shows as a run and nothing else. The
+    owner's graph behaviour (a small index) is the next thing to stream if play wants it.
+
 ## Play (2026-11-10, the player, M5 build)
 
 31. Pedestrians' positions and the dodge when run into are synced; their models differ per

@@ -74,6 +74,10 @@ own skater, never both.
   animation only ([world](topics/world.md)).
 - A chase is a fact of each player, read by every console's scripts as "any player chased";
   the phone's service purchase is a note, the shared cash paying once (2026-11-10, M5).
+- A world id is fixed at an entity's first spawn and never changes; ownership moves by
+  epoch (the highest wins), handed to a peer nearer by 15 m for a second; a puppet is its
+  owner's copy (its look and its locomotion); a region is populated by the nearer console
+  (2026-11-10, M6).
 
 **Open:** the completion rule per mission family beyond the defaults; whether cars and props
 stream as pedestrians do or through the replay recorder's living-world record
@@ -89,3 +93,5 @@ stream as pedestrians do or through the replay recorder's living-world record
 - 2026-11-10 (M4): the scenes decision marked proven; one presentation per activity added.
 - 2026-11-10 (M5): the ownership table's three new kinds, the chase as a fact and the service
   as a note added to Decided.
+- 2026-11-10 (M6): world ids for life, the handoff by epoch, the puppet as the owner's copy
+  and the population by the nearer console added to Decided.

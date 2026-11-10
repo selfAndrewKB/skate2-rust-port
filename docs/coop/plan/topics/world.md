@@ -5,9 +5,35 @@ streams it, how the others drive puppets, how a contact reaches the owner, and w
 Front page: [README](../../README.md). Design: [design](../design.md) §3.6. Research:
 [pedestrians](../../research/RE-living-world-pedestrians.md),
 [transport](../../research/RE-frame-transport.md),
-[the mission-required world](../../research/RE-mission-world.md).
+[the mission-required world](../../research/RE-mission-world.md),
+[the city: population, puppets, handoff, coding](../../research/RE-city-ownership-and-puppets.md).
 
-## State (2026-11-10, M5) [CONFIRMED on the bench unless marked]
+## State (2026-11-10, M6 in progress) [CONFIRMED on the bench unless marked]
+
+**M6 so far [ASSUMPTION: built and tested in units, not yet run on the bench]:**
+
+- **A puppet is its owner's copy.** Spawned with the owner's model key and recipe id (the
+  descriptor's, which the census's own draw ignored before: the player saw different models
+  per screen); its walk, run and stand come from the owner's velocity through the animation
+  data's own speed table (`update_puppet_intent`), with no navigation and no turn stage; its
+  own graph and navigation run only while it collides, so a knockdown still plays. A startled
+  run shows as a run; the stumble and the mood's gestures do not travel yet.
+- **One world id for life, a table of owners.** A world id is the first spawner's slot and
+  local id and never changes; every console keeps `Tracked` by world id (the local entity,
+  the owner, the epoch, the kind), and samples, despawns and contacts route through it.
+- **The handoff.** An owned pedestrian a peer is nearer to by 15 m for 60 ticks, within the
+  peer's stream radius, is handed over: this console's copy becomes a puppet, the record
+  names the new owner with the epoch raised (three runs, with the descriptor), the new owner
+  promotes its puppet (its graph and navigation take over where it stood); the highest epoch
+  wins everywhere. World stream format 3.
+- **The population rule.** The peers' positions reach the census each tick: a spawn point
+  nearer a peer is that peer's census's to fill, a puppet in a peer's half does not count
+  against this console's allowance, and a pedestrian within a peer's cull radius is not
+  culled here, only one beyond every player's.
+- **Not yet:** delta coding against acknowledged runs (the design is in the research note;
+  the budget is measured first); cars and AI skaters; the puppet's stumble and mood gestures.
+
+## State (2026-11-10, M5)
 
 **Ownership** (`crates/skate2-core/src/coop/ownership.rs`): one rule per kind, one funnel that
 traces every decision (entity, old owner, new owner, reason). The table:
