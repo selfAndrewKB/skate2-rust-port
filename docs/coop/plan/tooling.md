@@ -49,8 +49,13 @@ yes|no[:<round ticks>]` answers the progression's Yes/No dialog; `SKATE2_DIAGNOS
 boundary and condition (the volume ids match the conditions' floats through `skate3::id_float`),
 with the sign-up boxes and every player's tester; `SKATE2_DIAGNOSTIC_COOP_PROMPT=<round tick>:
 <answer>[;...]` presses as the pad would (`yes`, `no`, `option:<n>`, `skate101`, `unlock`,
-`signup` for the D-pad press, `release`, `choice:<n>`, `cancel`, `accept`, `decline`), so the
-press goes through the same funnel as a player's and the answer rides the facts as a note.
+`signup` for the D-pad press, `release`, `choice:<n>`, `cancel`, `accept`, `decline`,
+`service:<n>`, `service_cancel`), so the press goes through the same funnel as a player's and
+the answer rides the facts as a note; `SKATE2_DIAGNOSTIC_COOP_NUDGE=<tick>` gives the nearest
+prop within 30 m a velocity and counts it as touched by this seat's skater (its claim and
+stream follow); `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>` scans the security guard areas
+within 1500 m of the skater and traces the nearest point of each (the bench's way into a
+chase).
 The career's own `SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a
 seat. `COOP_EXECUTE` and `COOP_COMPLETE` act on the seat that carries them only (a mission a
 diagnostic starts is not a note, unlike a sign-up's accept), so a mission run belongs in
@@ -94,6 +99,20 @@ SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
 SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
 SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G;4600:$B;5300:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=6500:accept" \
 SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G;4700:$B;5400:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=5700:signup;5720:release;5760:signup" \
+CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
+```
+
+**A typical M5 run** (M4's, with a prop nudged on seat 1 while both stand at the tutorial's
+third go-to, the zone scan, and a service bought by seat 2 after the flip-tricks sign-up; the
+seats' logs show the prop's claim on seat 1, its puppet on seat 2, and the service decision at
+the same tick on both):
+
+```
+R="1516.5,110.6,-719.6"; M="1569.5,109.3,-693.9"; G="1598.6,107.1,-662.0"; B="1640.4,100.7,-522.4"
+SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
+SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
+SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G;4600:$B;5300:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=6500:accept SKATE2_DIAGNOSTIC_COOP_NUDGE=2700 SKATE2_DIAGNOSTIC_COOP_ZONES=1000" \
+SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G;4700:$B;5400:$B SKATE2_DIAGNOSTIC_COOP_PROMPT=5700:signup;5720:release;5760:signup;7200:service:0" \
 CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
 ```
 

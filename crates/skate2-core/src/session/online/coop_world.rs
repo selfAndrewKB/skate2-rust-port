@@ -308,6 +308,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                             object.coop_puppet = true;
                             trace(format_args!("prop {:016x} (entity {id:#x}): a puppet here from {tick}, driven to its owner's samples", sample.locator));
                         }
+                        let owner = coop.props.get_mut(&sample.locator).expect("a sample of a known prop");
+                        owner.runs += 1;
+                        if owner.runs % 60 == 1 {
+                            let here = [object.transform[12], object.transform[13], object.transform[14]];
+                            let gap = (0..3).map(|lane| (here[lane] - sample.position[lane]).powi(2)).sum::<f32>().sqrt();
+                            trace(format_args!("prop {:016x}: sample {} at {:?}, the puppet at {here:?}, {gap:.2} m behind, at {tick}", sample.locator, owner.runs, sample.position));
+                        }
                         object.target_transform = stream::transform_of(sample.position, sample.rotation);
                         object.velocity = [sample.velocity[0], sample.velocity[1], sample.velocity[2], 0.];
                         object.touched = false;

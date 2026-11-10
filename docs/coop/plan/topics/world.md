@@ -1,17 +1,44 @@
 # World: the shared living world (route D)
 
-**Scope:** who owns each pedestrian, car, prop and guard, how the owner streams it, how the
-others drive puppets, how a contact reaches the owner, and what it costs. Front page:
-[README](../../README.md). Design: [design](../design.md) §3.6. Research:
+**Scope:** who owns each pedestrian, story character, prop, guard and car, how the owner
+streams it, how the others drive puppets, how a contact reaches the owner, and what it costs.
+Front page: [README](../../README.md). Design: [design](../design.md) §3.6. Research:
 [pedestrians](../../research/RE-living-world-pedestrians.md),
-[transport](../../research/RE-frame-transport.md).
+[transport](../../research/RE-frame-transport.md),
+[the mission-required world](../../research/RE-mission-world.md).
 
-## State (2026-11-10, M1) [CONFIRMED on the bench unless marked]
+## State (2026-11-10, M5) [CONFIRMED on the bench unless marked]
 
 **Ownership** (`crates/skate2-core/src/coop/ownership.rs`): one rule per kind, one funnel that
-traces every decision (entity, old owner, new owner, reason). M1 knows `Rule::Spawner`: the
-census that spawned a pedestrian owns it for life. Nearest-player ownership with hysteresis and
-migration: M6.
+traces every decision (entity, old owner, new owner, reason). The table:
+
+| Kind | Rule | Streamed |
+| --- | --- | --- |
+| ambient pedestrian | `Spawner`: the census that spawned it, for life (M1) | yes |
+| story character (a pedestrian a challenge placed) | `EachConsole`: every console spawns and simulates its own copy where its own skater is (M5) | no |
+| security guard | `Chasee`: the console of the player it chases, which is its spawner until M6's migration (a guard chases only the skater of the console that simulates it) (M5) | yes, as a pedestrian |
+| prop (a dynamic object with a locator) | `LastToucher`: the console whose skater touched it last, by claim number, the highest claim winning everywhere and a tie the lower slot (M5) | yes, in the run's prop list |
+
+Nearest-player ownership with hysteresis and migration: M6.
+
+**Props (M5).** A prop is named across consoles by its locator id (the asset's guid). The owner
+samples it in the run's prop list (format 2: locator, claim, position, a unit quaternion,
+velocity, resting; 38 B) while it moves, for 120 ticks after a touch and every 20th run at
+rest; the receiver's object becomes a puppet: its target transform is the owner's sample and its
+body is driven there as a hand prop's is, never read back. A touch (the scoring pass's skater
+contact, the bench's nudge) claims it. Proof (`../bench/evidence/2026-11-10-m5a-*.log`): the
+nudge on seat 1 at its frame 2700 claimed the tutorial's prop (locator `ccf33c75656ac459`, claim
+1); seat 2 took it as a puppet at its frame 2231; 44 samples in the next 600 frames while it
+moved, 10 per 600 at rest. The puppet's convergence (its distance behind the sample) is traced
+every 60th sample [ASSUMPTION: not yet read in a run].
+
+**Story characters (M5):** each console's own, never streamed; the box test is the local
+tester's again (M3's test per player released and re-queued an entry every tick while the
+skaters stood apart). [ASSUMPTION: the bench's stretch placed no challenge character; the
+pedestrians around the flip-trick box are the census's.]
+
+**Puppets' AI (M5):** a puppet perceives no threats, wants nothing, chases and guards nobody;
+its graph still animates it (the locomotion from the owner's motion state stays M6's).
 
 **The stream** (`coop/world_stream.rs`, format 1; `ClientMessage::World` relayed as it is to the
 campaign's other members): every third tick a seat sends the pedestrians it owns within 80 m of
@@ -43,11 +70,15 @@ seat 2 at 4805 (five ticks); the puppet up again with the owner's 420 ticks late
 in range of 12 in its roster and sent 3.4-5.3 KB/s; seat 2 held 9-10 puppets, owned 2-3 of its
 own and sent 0.7-1.6 KB/s. Logs: `../bench/evidence/2026-11-10-m1-seat-{1,2}.log`.
 
-**Not done:** the puppet's locomotion from the owner's motion state (it runs its own AI; [open
-items](../open-items.md) 1); delta coding; cars, props, guards; migration; the
-population rule for a shared region (M6).
+**Not done:** the puppet's locomotion from the owner's motion state (it walks its own way; [open
+items](../open-items.md) 1); delta coding; cars; migration; the population rule for a shared
+region (M6); a guard's chase of a remote skater (a remote skater has no actor to chase).
 
 ## History
+
+- 2026-11-10 M5: the table grew by story characters, guards and props; the stream by the
+  props (format 2); a puppet's AI cut to its animation
+  ([research](../../research/RE-mission-world.md)).
 
 - 2026-11-10 M1 (commit `0918b45`): the module, the format, the puppets and the contacts; the
   net message (`a7859ad`, protocol 116). The bench first showed zero pedestrians on both seats:

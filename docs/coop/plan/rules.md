@@ -68,6 +68,12 @@ own skater, never both.
 - An objective's presentation plays once per activity, by the same decision as the message
   the script hears (activation from the first copy, completion from the last under `Everyone`);
   failure and hint feedback from the local player's copy only (2026-11-10, M4).
+- The ownership table (2026-11-10, M5): a story character is every console's own and never
+  travels; a prop belongs to the console whose skater touched it last, by claim; a guard to the
+  console of the player it chases (its spawner until migration); a puppet's AI is its
+  animation only ([world](topics/world.md)).
+- A chase is a fact of each player, read by every console's scripts as "any player chased";
+  the phone's service purchase is a note, the shared cash paying once (2026-11-10, M5).
 
 **Open:** the completion rule per mission family beyond the defaults; whether cars and props
 stream as pedestrians do or through the replay recorder's living-world record
@@ -81,3 +87,5 @@ stream as pedestrians do or through the replay recorder's living-world record
   online rule added to Decided.
 - 2026-11-10 (M3): prompts as notes added to Decided.
 - 2026-11-10 (M4): the scenes decision marked proven; one presentation per activity added.
+- 2026-11-10 (M5): the ownership table's three new kinds, the chase as a fact and the service
+  as a note added to Decided.

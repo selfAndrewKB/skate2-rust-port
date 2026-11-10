@@ -7,4 +7,7 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
 
 ## State (2026-11-10)
 
-Not started. Decided: start at tutorials `Everyone`, everything else `Anyone`, tune in play.
+Not started as a table beyond the defaults (tutorials `Everyone`, everything else `Anyone`,
+tune in play). M5 gave the `Security` and `Service` kinds their world: a chase is any player's
+(the facts), a service bought by anyone is everyone's ([prompts](prompts.md),
+[world](world.md)).

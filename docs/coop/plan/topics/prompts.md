@@ -30,6 +30,15 @@ acts and mirrored on the others through notes on the facts. Front page:
   goes through the same funnel (the bench's `COOP_ANSWER`), [ASSUMPTION] for Skate 101 and the
   unlock overlay, converted but not reached on the bench.
 
+- **The phone's services are notes (M5).** Security, uncapping and draining bought from the
+  phone, and the cancel of a hired Big Black, ride the facts as `Service(n)` and `ServiceCancel`
+  and are applied on every console at the note's tick with the same availability and cash check,
+  so the shared cash pays once and every console's scripts start the service; Big Black is each
+  console's own protector. Proof (`../bench/evidence/2026-11-10-m5a-*.log`): seat 2's
+  `service:0` at round tick 7200 was applied on both at 7201 and both decided alike ("not
+  bought here: available true, cash 300 of 500": the primed profile cannot afford it). The
+  purchase itself and Big Black's spawn on both: [ASSUMPTION].
+
 **Not done:** the results screen's options (Leave, Retry, Adjust Settings), the Hall of Meat
 results, the blog, the sponsor and covers screens still apply their continue locally (every
 player presses their own, which the scripts tolerate while the facts pace them, but it is not
@@ -38,6 +47,8 @@ make ([open items](../open-items.md)).
 
 ## History
 
+- 2026-11-10 M5: the phone's purchase added to the funnel (`World::coop_prompts`: the phone
+  answers inside the challenge world, the session queues).
 - 2026-11-10 M3 (commits `af6b504`, `7ad7f51` and the M3 docs): the first press did nothing
   because the sign-up HUD is a hold with a delay (a press, a release, a press), then because the
   prompt is withheld while the mission's end phase (speech lines, a cutscene) is still the main

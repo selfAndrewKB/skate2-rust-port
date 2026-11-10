@@ -2598,7 +2598,7 @@ impl<T, C> SelectedLiveSession<T, C> {
 
     /// Co-op fork (M5), `SKATE2_DIAGNOSTIC_COOP_ZONES`: the security guard areas (layer 6)
     /// within `radius` of the local skater, scanned at `step`, the nearest point of each
-    /// region traced.
+    /// region traced (1500 m at 12 m is 62 501 lookups, a moment once).
     pub(super) fn diagnostic_security_zones(&self, radius: f32, step: f32) {
         use crate::challenge::world_painter::layer;
         let Some(frame) = self.career.as_ref().and_then(|career| career.system.world().skaters.iter().find(|frame| frame.local).cloned()) else {
@@ -2609,7 +2609,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         let Some(world) = self.inner.world.as_ref() else { return };
         let Some(terrain) = self.inner.terrain.as_ref().and_then(|terrain| terrain.terrain_for(&world.world).ok()) else { return };
         let Ok(layers) = terrain.layers.lock() else { return };
-        let mut nearest: std::collections::BTreeMap<&'static str, (f32, [f32; 2])> = std::collections::BTreeMap::new();
+        // Per region: the nearest point, the points, and the box they span.
+        let mut regions: std::collections::BTreeMap<&'static str, (f32, [f32; 2], u32, [f32; 4])> = std::collections::BTreeMap::new();
         let mut scanned = 0_u32;
         let steps = (radius / step) as i32;
         for i in -steps..=steps {
@@ -2618,15 +2619,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                 scanned += 1;
                 let Ok(Some(name)) = layers.try_region_name(layer::SECURITY_GUARD_AREAS, point) else { continue };
                 let d2 = (point[0] - cx).powi(2) + (point[1] - cz).powi(2);
-                let entry = nearest.entry(name).or_insert((d2, point));
+                let entry = regions.entry(name).or_insert((d2, point, 0, [point[0], point[1], point[0], point[1]]));
                 if d2 < entry.0 {
-                    *entry = (d2, point);
+                    entry.0 = d2;
+                    entry.1 = point;
                 }
+                entry.2 += 1;
+                entry.3 = [entry.3[0].min(point[0]), entry.3[1].min(point[1]), entry.3[2].max(point[0]), entry.3[3].max(point[1])];
             }
         }
-        crate::coop::trace(format_args!("diagnostic: security zones within {radius} m of [{cx:.1}, {cz:.1}]: {} regions in {scanned} points", nearest.len()));
-        for (name, (d2, point)) in nearest {
-            crate::coop::trace(format_args!("diagnostic: security zone {name}: nearest point x {:.1} z {:.1} at {:.0} m", point[0], point[1], d2.sqrt()));
+        crate::coop::trace(format_args!("diagnostic: security zones within {radius} m of [{cx:.1}, {cz:.1}]: {} regions in {scanned} points", regions.len()));
+        for (name, (d2, point, count, [x0, z0, x1, z1])) in regions {
+            crate::coop::trace(format_args!("diagnostic: security zone {name}: nearest point x {:.1} z {:.1} at {:.0} m; {count} points spanning x {x0:.0}..{x1:.0} z {z0:.0}..{z1:.0}", point[0], point[1], d2.sqrt()));
         }
     }
 

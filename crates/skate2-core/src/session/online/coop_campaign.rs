@@ -198,7 +198,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         if let Some(at) = diagnostic_zones()
             && tick == at
         {
-            self.diagnostic_security_zones(600., 8.);
+            self.diagnostic_security_zones(1500., 12.);
         }
         if let Some((at, radius)) = diagnostic_triggers()
             && tick == at

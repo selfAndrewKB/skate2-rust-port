@@ -47,6 +47,23 @@ Front page: [README](../README.md).
     History). The session marker and the camera are not in the blob either; whether any other
     per-console leaf hides in `cSignPost::Data` shows at the next disagreement.
 
+## Mission world ([topic](topics/world.md), M5)
+
+25. The career's host answers the objectives' DMO queries with nothing (`CareerHost`:
+    `dmo_locator_from_lua_id`, `is_dmo_in_volume`), the port's own gap: a "moved object"
+    objective completes only by diagnostic, offline too. When it is answered, the answer must
+    be the owner's fact (a note), not each console's body, or the lockstep splits.
+26. No challenge character spawned in the bench's stretch, so "each console's own Slappy" is
+    by reading; a mission that places one (Slappy's shop) is the first to look at.
+27. `big_black_active` is each console's readback of its own spawn; a console whose spawn
+    failed would branch alone. A deterministic flag set by the lockstep is the fix if it shows.
+28. A prop at rest is repeated every 20th run (about 38 B every second per owned prop); a
+    busy hull with many touched props adds up. Delta coding and an acknowledged baseline are
+    M6's.
+29. A guard chases only the skater of the console that simulates it; a remote skater has no
+    actor. A guard between two players chases one; the other player sees it as a puppet. To be
+    judged in play; migration by the chased player's console is M6's.
+
 ## Prompts ([topic](topics/prompts.md))
 
 15. A note is applied one to two seconds after the press on the bench (the round's processed

@@ -6,13 +6,14 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.5.0-scenes-in-step`**
-(2026-11-10): M4, scenes in step. Cutscenes, speech and movies run under the port's online rule
-in a campaign (no pause, no skip, the same round ticks on every console, their ends delivered
-from the pacing leader's facts), and a mission's presentation plays once per activity, not once
-per player's copy; the opening tutorial's three outro scenes started and ended at the same ticks
-on both seats and its end phase waited for them ([scenes](plan/topics/scenes.md)). Over
-`coop-v0.4.0-prompts-as-notes` (M3, a pad's answer as a note, [prompts](plan/topics/prompts.md)),
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.6.0-mission-world`**
+(2026-11-10): M5, the mission-required world. The ownership table knows story characters (each
+console's own), props (the last touch claims one, its owner streams it, the other console drives
+a puppet) and guards (the chased player's console); a chase is a fact every console's scripts
+read alike; the phone's services are notes ([world](plan/topics/world.md),
+[prompts](plan/topics/prompts.md)). Over `coop-v0.5.0-scenes-in-step` (M4, scenes under the
+online rule, [scenes](plan/topics/scenes.md)), `coop-v0.4.0-prompts-as-notes` (M3, a pad's
+answer as a note, [prompts](plan/topics/prompts.md)),
 `coop-v0.3.0-shared-progression` (M2, the campaign round and the shared save,
 [progression](plan/topics/progression.md)), `coop-v0.2.0-world-stream` (M1, puppet pedestrians,
 [world](plan/topics/world.md)) and `coop-v0.1.0-campaign-lobby` (M0, the bench and the lobby,
@@ -21,15 +22,14 @@ bench's ([versions](plan/versions.md)).
 
 ## Current focus (2026-11-10)
 
-M5, the mission-required world: story characters, challenge props, guards and chases owned by
-rule and streamed, so the `Security` and `Service` kinds play ([world](plan/topics/world.md),
-[kinds](plan/topics/kinds.md)). Each console shows its own skater in a scene by reading only;
-a story scene with the players in it is the first thing M5's missions will show.
+M6, the city: ambient pedestrians, cars and AI skaters on, ownership by the nearest player with
+hysteresis and migration, the shared region populated once, contacts as facts, delta coding
+against acknowledged runs, the puppets' locomotion from the owner's motion state, the budget
+held in a busy street ([world](plan/topics/world.md)).
 
 ## What's next
 
-M5 the mission-required world → M6 the city (ownership by nearest, migration, delta coding,
-population) → M7 kinds → M8 the whole campaign, resume and reconnect. Milestones and their
+M6 the city → M7 kinds → M8 the whole campaign, resume and reconnect. Milestones and their
 done-when: [design](plan/design.md) §5.
 
 ## Documents
