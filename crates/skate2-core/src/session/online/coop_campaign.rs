@@ -98,16 +98,33 @@ fn diagnostic_zones() -> Option<u32> {
     *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_ZONES").ok().and_then(|tick| tick.trim().parse().ok()))
 }
 
-/// `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<tick>:<name>`: at that round tick the named challenge is
-/// activated and executed, the same tick on every console (the bench's way into a mission).
-fn diagnostic_execute() -> Option<(u32, String)> {
-    static SPEC: std::sync::OnceLock<Option<(u32, String)>> = std::sync::OnceLock::new();
+/// `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<tick>:<name>[;...]`: at each round tick the named challenge
+/// is activated and executed, the same tick on every console (the bench's way into a mission;
+/// a list for the crawl, M8).
+fn diagnostic_execute() -> &'static [(u32, String)] {
+    static SPEC: std::sync::OnceLock<Vec<(u32, String)>> = std::sync::OnceLock::new();
     SPEC.get_or_init(|| {
-        let spec = std::env::var("SKATE2_DIAGNOSTIC_COOP_EXECUTE").ok()?;
-        let (tick, name) = spec.split_once(':')?;
-        Some((tick.trim().parse().ok()?, name.trim().to_owned()))
+        std::env::var("SKATE2_DIAGNOSTIC_COOP_EXECUTE").ok().map_or_else(Vec::new, |spec| {
+            spec.split(';')
+                .filter_map(|entry| {
+                    let (tick, name) = entry.split_once(':')?;
+                    Some((tick.trim().parse().ok()?, name.trim().to_owned()))
+                })
+                .collect()
+        })
     })
-    .clone()
+}
+
+/// `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>[;...]`: at each round tick every objective of the
+/// main challenge's groups that is not complete is completed as a win would complete it
+/// (`force_complete`, points objectives included), so the real win, outro and
+/// `challenge_cleanup` play on every console: the crawl's way through a mission whose
+/// objectives need tricks, gates or a camera (M8).
+fn diagnostic_wins() -> &'static [u32] {
+    static SPEC: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| {
+        std::env::var("SKATE2_DIAGNOSTIC_COOP_WIN").ok().map_or_else(Vec::new, |spec| spec.split(';').filter_map(|tick| tick.trim().parse().ok()).collect())
+    })
 }
 
 /// The progression savables as one byte string, for the server's store and the hash every
@@ -223,12 +240,19 @@ impl<T, C> SelectedLiveSession<T, C> {
                 _ => {}
             }
         }
-        if let Some((at, name)) = diagnostic_execute()
-            && tick == at
+        for (at, name) in diagnostic_execute() {
+            if *at == tick
+                && let Some(career) = self.career.as_mut()
+            {
+                let executed = career.system.diagnostic_execute_challenge(name);
+                trace(format_args!("diagnostic: execute {name} at round tick {tick}: {executed}"));
+            }
+        }
+        if diagnostic_wins().contains(&tick)
             && let Some(career) = self.career.as_mut()
         {
-            let executed = career.system.diagnostic_execute_challenge(&name);
-            trace(format_args!("diagnostic: execute {name} at round tick {tick}: {executed}"));
+            let won = career.system.diagnostic_win_main_challenge();
+            trace(format_args!("diagnostic: won the main challenge at round tick {tick}: {won} objectives completed"));
         }
         for &(at, answer) in diagnostic_prompts() {
             if at == tick

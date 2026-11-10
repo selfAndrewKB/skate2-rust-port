@@ -1286,6 +1286,26 @@ impl ChallengeSystem {
             .collect()
     }
 
+    /// Co-op fork (M8), `SKATE2_DIAGNOSTIC_COOP_WIN`: every objective of the main challenge's
+    /// groups not yet complete is completed as a win would (`force_complete`), in order,
+    /// points objectives included; how many were.
+    pub fn diagnostic_win_main_challenge(&mut self) -> usize {
+        let Some(main) = self.world.activities.main else { return 0 };
+        let targets: Vec<(u32, usize)> = self
+            .world
+            .objectives
+            .groups
+            .iter()
+            .filter(|g| g.activity == main)
+            .flat_map(|g| g.objectives.iter().enumerate().filter(|(_, o)| o.state != objectives::Status::Complete).map(move |(index, _)| (g.id, index)))
+            .collect();
+        let count = targets.len();
+        for (group, index) in targets {
+            objectives::force_complete(&mut self.world, group, index);
+        }
+        count
+    }
+
     /// [`MarkerRules`] for the current challenge state.
     #[must_use]
     pub fn session_marker_rules(&self) -> MarkerRules {
