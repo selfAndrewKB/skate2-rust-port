@@ -31,11 +31,32 @@ coop decisions. Priming needs the career demo (`--live-controls-demo career`) wi
 `SKATE2_DIAGNOSTIC_COMPLETE_CHALLENGES` and a quit by `SKATE2_DIAGNOSTIC_CAREER_QUIT_END`; the
 autosave writes `SKATER.P` at the save root.
 
-**The seats' switches** (`SEAT_EXTRA_N`): `SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>`
-puts the skater there (786,-58,882 is the waterfront spawn, a street with pedestrians; the
-career's continue point has none); `SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>` knocks down the nearest
-puppet pedestrian as a hit would and sends the contact to its owner. The career's own
-`SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a seat.
+**The seats' switches** (`SEAT_EXTRA_N`; ticks are the seat's own completed frames unless
+said otherwise, round ticks are the campaign round's, the same on every console):
+`SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>[;...]` puts the skater there (786,-58,882 is
+the waterfront spawn, a street with pedestrians; the career's continue point has none);
+`SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=<round tick>:<x>,<y>,<z>[;...]` the same at round ticks;
+`SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>` knocks down the nearest puppet pedestrian as a hit would
+and sends the contact to its owner; `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<round tick>:<name>` runs a
+named challenge; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[;...]` completes the main
+challenge's active objective of every group as its script would; `SKATE2_DIAGNOSTIC_COOP_ANSWER=
+yes|no[:<round ticks>]` answers the progression's Yes/No dialog; `SKATE2_DIAGNOSTIC_COOP_TRIGGERS=
+<round tick>:<radius>` lists the trigger volumes around the skater and every objective's state,
+boundary and condition (the volume ids match the conditions' floats through `skate3::id_float`).
+The career's own `SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a
+seat.
+
+**A typical M2 run** (the opening tutorial, the three go-to exits by each player's own entry,
+the rest at the same tick):
+
+```
+R="1516.5,110.6,-719.6"; M="1569.5,109.3,-693.9"; G="1598.6,107.1,-662.0"
+SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 \
+SEAT_EXTRA="SKATE2_DIAGNOSTIC_COOP_ANSWER=no SKATE2_DIAGNOSTIC_COOP_EXECUTE=900:m_1a_01_goto_slappys SKATE2_DIAGNOSTIC_COOP_COMPLETE=2400;2500;2600;2700;2800;2900;3000;3100" \
+SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1200:$R;1500:$M;1800:$G" \
+SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=1300:$R;1600:$M;1900:$G" \
+CAPTURE_COUNT=0 ./tools/coop/bench.sh start 2
+```
 
 **A typical M1 run:**
 

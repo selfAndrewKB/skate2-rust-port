@@ -575,6 +575,19 @@ fn objective_group(world: &World, value: &Value) -> Option<u32> {
     world.pointers.object(value, ObjectKind::ObjectiveGroup)
 }
 
+/// Co-op fork, the ledger's "everyone" kind: the groups a script's group operation applies to.
+/// Under an `Everyone` rule the script holds the first player's group and means the activity's
+/// objectives, so the operation reaches every player's copy; otherwise the one group.
+fn objective_groups(world: &World, value: &Value) -> Vec<u32> {
+    let Some(group) = objective_group(world, value) else { return Vec::new() };
+    let Some(gi) = world.objectives.group_index(group) else { return vec![group] };
+    let activity = world.objectives.groups[gi].activity;
+    match super::coop_rule(world, activity) {
+        Some((crate::coop::rules::Rule::Everyone, _, _)) => world.objectives.groups.iter().filter(|g| g.activity == activity).map(|g| g.id).collect(),
+        _ => vec![group],
+    }
+}
+
 /// `Objectives.MakeObjectives(playerID)` (`0x82d53108`) through
 /// `MakeObjectives_helper(lua, "Objectives")` (`0x82d52de0`): the activity's
 /// objective group with every `Objectives` entry added in order.
@@ -716,12 +729,13 @@ fn objectives_get_fraction_denominator(_: &mut Lua<World>, world: &mut World, ca
 /// `cChallengeObjectiveGroup::SetFractionNumerator` (`0x82d43488`), dirtying the objective.
 fn objectives_set_fraction_numerator(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     let (index, value) = (get_int_or(call, 1, 0), get_int_or(call, 2, 0));
-    if let Some(group) = objective_group(world, call.arg(0))
-        && let Some(g) = world.objectives.group_index(group)
-        && let Some(o) = usize::try_from(index).ok().and_then(|i| world.objectives.groups[g].objectives.get_mut(i))
-    {
-        o.fraction_numerator = value;
-        o.dirty = true;
+    for group in objective_groups(world, call.arg(0)) {
+        if let Some(g) = world.objectives.group_index(group)
+            && let Some(o) = usize::try_from(index).ok().and_then(|i| world.objectives.groups[g].objectives.get_mut(i))
+        {
+            o.fraction_numerator = value;
+            o.dirty = true;
+        }
     }
     none()
 }
@@ -730,10 +744,10 @@ fn objectives_set_fraction_numerator(_: &mut Lua<World>, world: &mut World, call
 /// `PointsRequirement` (+0x4C).
 fn objectives_change_points_requirement(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     let points = get_int_or(call, 1, 0);
-    if let Some(group) = objective_group(world, call.arg(0))
-        && let Some(g) = world.objectives.group_index(group)
-    {
-        world.objectives.groups[g].points_requirement = points.cast_unsigned();
+    for group in objective_groups(world, call.arg(0)) {
+        if let Some(g) = world.objectives.group_index(group) {
+            world.objectives.groups[g].points_requirement = points.cast_unsigned();
+        }
     }
     none()
 }
@@ -822,15 +836,16 @@ fn objectives_get_highlight_definition(_: &mut Lua<World>, world: &mut World, ca
 /// `cChallengeObjectiveGroup::AddPointsObjective` (`0x82d51938`) under the calling activity's
 /// name.
 fn objectives_add_points_objective(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let group =
-        objective_group(world, call.arg(0)).ok_or_else(|| lua.error("Objectives.AddPointsObjective: expected an objective group".to_owned()))?;
-    super::objectives::add_points_objective(world, group, get_int(call, 1).cast_unsigned());
+    objective_group(world, call.arg(0)).ok_or_else(|| lua.error("Objectives.AddPointsObjective: expected an objective group".to_owned()))?;
+    for group in objective_groups(world, call.arg(0)) {
+        super::objectives::add_points_objective(world, group, get_int(call, 1).cast_unsigned());
+    }
     none()
 }
 
 /// `Objectives.SetEvaluationStatus(group, status)` (`0x82d4b6b8`).
 fn objectives_set_evaluation_status(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some(group) = objective_group(world, call.arg(0)) {
+    for group in objective_groups(world, call.arg(0)) {
         super::objectives::set_evaluation_status(world, group, !matches!(call.arg(1), Value::Nil | Value::Boolean(false)));
     }
     none()
@@ -839,7 +854,7 @@ fn objectives_set_evaluation_status(_: &mut Lua<World>, world: &mut World, call:
 /// `Objectives.FailAllObjectiveStatus(group)` (`0x82d4d410`): every objective failed
 /// (`cChallengeObjectiveGroup::FailAllObjectiveStatus` `0x82d4c8a8`).
 fn objectives_fail_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some(group) = objective_group(world, call.arg(0)) {
+    for group in objective_groups(world, call.arg(0)) {
         let count = world.objectives.group_index(group).map_or(0, |index| world.objectives.groups[index].objectives.len());
         for index in 0..count {
             super::objectives::set_status(world, group, index, super::objectives::Status::Failed);
@@ -850,8 +865,10 @@ fn objectives_fail_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall)
 
 /// `Objectives.ForceObjectiveComplete(group, index)` (`0x82d51740`).
 fn objectives_force_complete(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let (Some(group), Ok(index)) = (objective_group(world, call.arg(0)), usize::try_from(get_int(call, 1))) {
-        super::objectives::force_complete(world, group, index);
+    if let Ok(index) = usize::try_from(get_int(call, 1)) {
+        for group in objective_groups(world, call.arg(0)) {
+            super::objectives::force_complete(world, group, index);
+        }
     }
     none()
 }
@@ -1056,8 +1073,8 @@ fn speech_play_follow_me_warning(_: &mut Lua<World>, world: &mut World, call: &N
 
 /// `Objectives.ResetObjectives(group, resetCumulative = true)` (`0x82d4db10`).
 fn objectives_reset_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some(group) = objective_group(world, call.arg(0)) {
-        let reset_cumulative = get_bool_or(call, 1, true);
+    let reset_cumulative = get_bool_or(call, 1, true);
+    for group in objective_groups(world, call.arg(0)) {
         super::objectives::reset_objectives(world, group, reset_cumulative);
     }
     none()
@@ -1066,11 +1083,11 @@ fn objectives_reset_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall
 /// `Objectives.ResetObjective(group, index, resetCumulative = true,
 /// resetStatus = true)` (`0x82d4db98`).
 fn objectives_reset_one(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some(group) = objective_group(world, call.arg(0)) {
-        let index = get_int_or(call, 1, 0);
-        let reset_cumulative = get_bool_or(call, 2, true);
-        let reset_status = get_bool_or(call, 3, true);
-        if let Ok(index) = usize::try_from(index) {
+    let index = get_int_or(call, 1, 0);
+    let reset_cumulative = get_bool_or(call, 2, true);
+    let reset_status = get_bool_or(call, 3, true);
+    if let Ok(index) = usize::try_from(index) {
+        for group in objective_groups(world, call.arg(0)) {
             super::objectives::reset_objective(world, group, index, reset_cumulative, reset_status);
         }
     }
@@ -1079,7 +1096,7 @@ fn objectives_reset_one(_: &mut Lua<World>, world: &mut World, call: &NativeCall
 
 /// `Objectives.DeleteObjectiveGroup(group)` (`0x82d51698`).
 fn objectives_delete_group(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some(group) = objective_group(world, call.arg(0)) {
+    for group in objective_groups(world, call.arg(0)) {
         super::objectives::delete_group(world, group);
     }
     none()

@@ -53,6 +53,13 @@ own skater, never both.
   ([scenes](topics/scenes.md)).
 - M1's ownership rule is "the census that spawned it owns it"; nearest-player ownership with
   hysteresis and migration is M6's ([world](topics/world.md)).
+- The campaign's round is the port's facts lockstep over the whole career, started by the
+  server once every member's career is loaded; no player is the host of it (2026-11-10, M2).
+- Under an `Everyone` rule a mission's objectives exist once per player; the script holds the
+  first player's group on every console and its group operations reach every copy; the rule
+  decides completion at the one evaluation point (2026-11-10, M2; [progression](topics/progression.md)).
+- Scenes run under the online rule once a campaign round runs (no pause, no skip, ends from the
+  pacing leader), each console showing its own skater (2026-11-10, M2; M4 proves it).
 
 **Open:** the completion rule per mission family beyond the defaults; whether cars and props
 stream as pedestrians do or through the replay recorder's living-world record
@@ -62,3 +69,5 @@ stream as pedestrians do or through the replay recorder's living-world record
 
 - 2026-11-10 (M0, M1): the file begun, from `design.md` §0, §4, §7 and the player's instructions
   of 2026-11-09 and 2026-11-10 (no attribution, commit as you go, no images, logging alongside).
+- 2026-11-10 (M2): the round's start, the everyone kind in the objective system and the scenes'
+  online rule added to Decided.

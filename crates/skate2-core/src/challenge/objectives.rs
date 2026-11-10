@@ -590,9 +590,14 @@ fn group_mut(world: &mut World, group: u32) -> Option<&mut ObjectiveGroup> {
 /// `cChallengeObjective::SetObjectiveStatus` (`0x82d4bac8`).
 pub fn set_status(world: &mut World, group: u32, index: usize, state: Status) {
     let window = world.objective_notification_window;
+    let campaign = world.coop.is_some();
     let Some(g) = group_mut(world, group) else { return };
+    let player = g.player;
     let Some(o) = g.objectives.get_mut(index) else { return };
     if o.state != state {
+        if campaign {
+            crate::coop::trace(format_args!("objective {:016x} of player {player}: {:?} -> {state:?}", o.key, o.state));
+        }
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "(__int64)(float)")]
         let frames = (window * 60.0) as u32;
         o.notify_window = frames;
@@ -730,6 +735,13 @@ fn reset_objective_data(world: &mut World, group: u32, index: usize, reset_cumul
     g.objectives[index].skater_state = skater_state::INVALID;
     if reset_status {
         reset_objective_status(world, group, index);
+    }
+    if world.coop.is_some()
+        && let Some(gi) = world.objectives.group_index(group)
+        && (reset_status || !world.objectives.groups[gi].objectives[index].trigger_volumes.is_empty())
+    {
+        let g = &world.objectives.groups[gi];
+        crate::coop::trace(format_args!("objective {:016x} of player {}: data reset (cumulative {reset_cumulative}, status {reset_status}), {} volumes dropped", g.objectives[index].key, g.player, g.objectives[index].trigger_volumes.len()));
     }
     let Some(g) = group_mut(world, group) else { return };
     let o = &mut g.objectives[index];
@@ -1453,6 +1465,9 @@ pub fn receive(lua: &mut Lua<World>, world: &mut World, event: &Event) {
     apply_vars_clears(lua, world);
     if let Event::TriggerCollision { enter, volume, player } = *event {
         let ids: Vec<u32> = world.objectives.groups.iter().filter(|g| g.evaluate && g.player == player).map(|g| g.id).collect();
+        if world.coop.is_some() && enter {
+            crate::coop::trace(format_args!("trigger {volume:x} entered by player {player}: groups {ids:?}"));
+        }
         for group in ids {
             if enter {
                 trigger_enter(world, group, volume);
@@ -1802,6 +1817,7 @@ fn trigger_enter(world: &mut World, group: u32, volume: u64) {
                 }
             }
         } else if state == Status::Active {
+            let player = world.objectives.groups[gi].player;
             let o = &mut world.objectives.groups[gi].objectives[i];
             if o.trigger_volumes.len() == 32 {
                 o.trigger_volumes.remove(0);
@@ -1809,6 +1825,9 @@ fn trigger_enter(world: &mut World, group: u32, volume: u64) {
             o.trigger_volumes.push(volume);
             o.sequence_volumes.retain(|&v| v != volume);
             o.sequence_volumes.push(volume);
+            if world.coop.is_some() {
+                crate::coop::trace(format_args!("objective {key:016x} of player {player}: entered volume {volume:x} ({} held)", o.trigger_volumes.len()));
+            }
         }
     }
 }

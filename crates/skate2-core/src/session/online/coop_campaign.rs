@@ -38,6 +38,35 @@ fn diagnostic_triggers() -> Option<(u32, f32)> {
     })
 }
 
+/// `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<tick>[;<tick>...]`: at each round tick the first active
+/// objective of every group of the main challenge is completed as its script would complete it,
+/// the same tick on every console: the bench's way past the steps a teleport cannot prove (an
+/// ollie, a duck, a prop), after the ones it can.
+fn diagnostic_completes() -> &'static [u32] {
+    static SPEC: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| {
+        std::env::var("SKATE2_DIAGNOSTIC_COOP_COMPLETE").ok().map_or_else(Vec::new, |spec| spec.split(';').filter_map(|tick| tick.trim().parse().ok()).collect())
+    })
+}
+
+/// `SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=<tick>:<x>,<y>,<z>[;...]`: as `SKATE2_DIAGNOSTIC_COOP_TELEPORT`,
+/// but at round ticks, so a run's stops line up with the mission's ticks whenever the round
+/// started.
+fn diagnostic_round_teleports() -> &'static [(u32, [f32; 3])] {
+    static SPEC: std::sync::OnceLock<Vec<(u32, [f32; 3])>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| {
+        let Ok(spec) = std::env::var("SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND") else { return Vec::new() };
+        spec.split(';')
+            .filter_map(|entry| {
+                let (at, position) = entry.split_once(':')?;
+                let values: Vec<f32> = position.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+                let [x, y, z] = values[..] else { return None };
+                Some((at.trim().parse().ok()?, [x, y, z]))
+            })
+            .collect()
+    })
+}
+
 /// `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<tick>:<name>`: at that round tick the named challenge is
 /// activated and executed, the same tick on every console (the bench's way into a mission).
 fn diagnostic_execute() -> Option<(u32, String)> {
@@ -119,6 +148,17 @@ impl<T, C> SelectedLiveSession<T, C> {
         {
             let executed = career.system.diagnostic_execute_challenge(&name);
             trace(format_args!("diagnostic: execute {name} at round tick {tick}: {executed}"));
+        }
+        for &(at, position) in diagnostic_round_teleports() {
+            if at == tick {
+                trace(format_args!("diagnostic: teleport to {position:?} at round tick {tick}: {}", self.diagnostic_teleport_local_player(position)));
+            }
+        }
+        if diagnostic_completes().contains(&tick)
+            && let Some(career) = self.career.as_mut()
+        {
+            let completed = career.system.diagnostic_complete_active_objectives();
+            trace(format_args!("diagnostic: completed the active objectives at round tick {tick}: {completed:?}"));
         }
         if let Some((at, radius)) = diagnostic_triggers()
             && tick == at

@@ -27,6 +27,22 @@ Front page: [README](../README.md).
 8. The career's continue point has no pedestrians in the port (offline too); the waterfront
    spawn has them. Not a co-op matter, but every M1-M6 bench run teleports there.
 
+## Progression ([topic](topics/progression.md))
+
+10. A member who loads its career after the campaign round started runs its career alone; the
+    server names it in its log. Joining a running campaign is M8's (the server's save adopted,
+    the round's tick caught up).
+11. The tutorials' `eChallengeTypes` family number is unknown; the built-in rule table names
+    the opening tutorials by prefix (`m_1a_`).
+12. With one objective group per player the HUD may list both copies' objectives; not looked
+    at on the bench (no HUD capture of it) [UNKNOWN].
+13. The Start State Machine's "New to skate?" dialog does not come back on Continue with a
+    mission done, so the bench never answers it; the prompt's answer travelling as a note is
+    M3's, and a fresh-profile bench prime is owed.
+14. Statistics (Hall of Meat, achievements, service stats) stay each console's own backend;
+    the shared save carries progression, unlockables and hulls only (the design's "mirrored on
+    both, the server holding the blob" holds for those).
+
 ## Scenes ([topic](topics/scenes.md))
 
 9. `career.nis.set_online_game` stays false in a campaign: scenes pause the simulation as
