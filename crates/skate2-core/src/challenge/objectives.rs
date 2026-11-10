@@ -206,6 +206,9 @@ pub struct Objective {
     pub last_sequence_points: u32,
     /// `mTotalPoints`.
     pub total_points: u32,
+    /// Co-op fork (M7): this copy's failure was reported this activation (the "any player"
+    /// kinds fail the activity only when every copy has).
+    pub failed_sent: bool,
     /// `mObjectiveResultStyle`.
     pub result_style: i32,
     /// `mFractionNumerator`.
@@ -438,6 +441,7 @@ fn new_objective(world: &mut World, key: u64, challenge: u64, player: i32) -> Ob
         skater_state: 0,
         last_sequence_points: 0,
         total_points: 0,
+        failed_sent: false,
         result_style: if denominator > 1 { result_style::FRACTION } else { result_style::CHECK_BOX },
         fraction_numerator: 0,
         title,
@@ -598,6 +602,9 @@ pub fn set_status(world: &mut World, group: u32, index: usize, state: Status) {
         if campaign {
             crate::coop::trace(format_args!("objective {:016x} of player {player}: {:?} -> {state:?}", o.key, o.state));
         }
+        if state == Status::Active {
+            o.failed_sent = false;
+        }
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "(__int64)(float)")]
         let frames = (window * 60.0) as u32;
         o.notify_window = frames;
@@ -680,7 +687,7 @@ fn presentation_plays(world: &World, group: u32, index: usize, status: Status) -
     }
     let count = siblings.iter().filter(|x| x.objectives.get(index).is_some_and(|o| o.state == status)).count();
     let plays = match status {
-        Status::Complete if matches!(rule, crate::coop::rules::Rule::Everyone) => count == siblings.len(),
+        Status::Complete => rule.completes(count, siblings.len()) && (count == siblings.len() || count == 1),
         _ => count == 1,
     };
     crate::coop::trace(format_args!(
@@ -720,14 +727,19 @@ fn script_hears(world: &World, class_name: &str, handle: usize, index: usize) ->
     let (count, send) = match class_name {
         "cMsgObjectiveComplete" => {
             let count = with(Status::Complete);
-            (count, if matches!(rule, crate::coop::rules::Rule::Everyone) { count == siblings.len() } else { count == 1 })
+            (count, rule.completes(count, siblings.len()) && (count == siblings.len() || count == 1))
         }
         "cMsgObjectiveActivate" => (with(Status::Active), with(Status::Active) == 1),
+        "cMsgObjectiveFailed" => {
+            let failed = siblings.iter().filter(|x| x.objectives.get(index).is_some_and(|o| o.failed_sent)).count();
+            (failed, rule.fails(failed, siblings.len()))
+        }
         _ => (1, true),
     };
     // The activations and failures come every tick from a script that resets its objectives
-    // each tick (the go-to missions'); only the completions are worth a line.
-    if class_name == "cMsgObjectiveComplete" {
+    // each tick (the go-to missions'); only the completions, and a failure withheld, are worth
+    // a line.
+    if class_name == "cMsgObjectiveComplete" || (class_name == "cMsgObjectiveFailed" && !send) {
         crate::coop::trace(format_args!(
             "{name}: {class_name} of objective {index} from player {}: {count} of {} copies under {rule:?}: {}",
             g.player,
@@ -1260,6 +1272,9 @@ fn evaluate_group(lua: &mut Lua<World>, world: &mut World, group: u32, triggers:
             if result >= 0 {
                 #[expect(clippy::cast_precision_loss, reason = "index")]
                 let failed = Field::Number(result as f32);
+                if let Some(gi) = world.objectives.group_index(group) {
+                    world.objectives.groups[gi].objectives[i].failed_sent = true;
+                }
                 objective_message(world, "cMsgObjectiveFailed", handle, i, vec![("FailedIndex", failed)]);
             }
             continue;
@@ -1321,10 +1336,7 @@ fn on_objective_completed(world: &mut World, group: u32, completed: &[usize]) {
                 let first = siblings.iter().min_by_key(|x| x.player).map_or(g.handle, |x| x.handle);
                 let complete_players: Vec<i32> = siblings.iter().filter(|x| x.objectives.iter().all(|o| o.state == Status::Complete)).map(|x| x.player).collect();
                 let all = complete_players.len() == siblings.len();
-                let send = match rule {
-                    crate::coop::rules::Rule::Everyone => all,
-                    _ => true,
-                };
+                let send = rule.completes(complete_players.len(), siblings.len());
                 crate::coop::trace(format_args!(
                     "rule: {name}: player {player} completed its objectives; {} of {} players complete under {rule:?}: {}",
                     complete_players.len(),

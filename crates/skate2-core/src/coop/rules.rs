@@ -3,8 +3,13 @@
 //! (`design.md` §3.4, §7: tutorials `Everyone`, everything else `Anyone`, tuned in play). The
 //! objective system asks it at its one evaluation point; nothing else decides.
 //!
-//! M2 applies `Everyone` and `Anyone`; `Combined`, `BestOf` and `Compete` are named so the
-//! table can hold them before M7 applies them.
+//! M7 applies every kind at the objective system's evaluation point: `Everyone` and
+//! `Compete { every_human_must_win: true }` wait for every copy; `Anyone`, `BestOf` and
+//! `Compete { .. false }` take the first copy's completion and fail only when every copy has
+//! failed; `Combined` adds the copies' points up, so each copy's points objective sees the sum.
+//! A `BestOf` result beyond completion (the best run's score on the results screen) is each
+//! console's own display still. The built-in table names the families by `eChallengeTypes`
+//! (`design.md` §7).
 
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
@@ -24,6 +29,27 @@ pub enum Rule {
 }
 
 impl Rule {
+    /// Whether an activity with `complete` of `copies` player copies complete is complete.
+    pub fn completes(self, complete: usize, copies: usize) -> bool {
+        match self {
+            Self::Everyone | Self::Compete { every_human_must_win: true } => complete == copies,
+            Self::Anyone | Self::BestOf | Self::Combined | Self::Compete { every_human_must_win: false } => complete >= 1,
+        }
+    }
+
+    /// Whether an activity with `failed` of `copies` player copies failed is failed.
+    pub fn fails(self, failed: usize, copies: usize) -> bool {
+        match self {
+            Self::Everyone | Self::Compete { every_human_must_win: true } => failed >= 1,
+            Self::Anyone | Self::BestOf | Self::Combined | Self::Compete { every_human_must_win: false } => failed == copies,
+        }
+    }
+
+    /// Whether the copies' points add up (each copy's points objective reads the sum).
+    pub fn points_combined(self) -> bool {
+        matches!(self, Self::Combined)
+    }
+
     fn parse(text: &str) -> Option<Self> {
         Some(match text {
             "Everyone" => Self::Everyone,
@@ -35,6 +61,36 @@ impl Rule {
             _ => return None,
         })
     }
+}
+
+/// `eChallengeTypes` (the `binding_table`'s enumeration), the families the built-in table names.
+pub mod family {
+    pub const TUTORIAL: i32 = 0;
+    pub const POINT_CONTEST: i32 = 1;
+    pub const RISK: i32 = 3;
+    pub const PHOTO: i32 = 6;
+    pub const FILM: i32 = 7;
+    pub const BEST_TRICK: i32 = 8;
+    pub const OWN_THE_SPOT: i32 = 9;
+    pub const SLALOM: i32 = 10;
+    pub const SLIDE: i32 = 11;
+    pub const LAP: i32 = 12;
+    pub const GATE: i32 = 13;
+    pub const FAVOUR: i32 = 14;
+    pub const JAM: i32 = 15;
+    pub const CRASH: i32 = 16;
+    pub const SECURITY: i32 = 17;
+    pub const POINT_TO_POINT_RACE: i32 = 18;
+    pub const DEATH_RACE: i32 = 19;
+    pub const SPOT_RACE: i32 = 20;
+    pub const LAST_MAN_STANDING: i32 = 21;
+    pub const FOLLOW: i32 = 23;
+    pub const MEGA_RAMP: i32 = 26;
+    pub const STREET_SKATING: i32 = 27;
+    pub const GOTO: i32 = 30;
+    pub const HALL_OF_MEAT: i32 = 31;
+    pub const HALL_OF_MEAT_SP: i32 = 33;
+    pub const SERVICE: i32 = 34;
 }
 
 /// The table: a rule by challenge key, else by the challenge's name prefix, else by its family
@@ -50,12 +106,40 @@ pub struct RuleTable {
 }
 
 impl RuleTable {
-    /// The built-in table: the opening tutorial missions (`m_1a_*`) are everyone's, the rest
-    /// anyone's. The tutorials' family number is not yet known ([open items]).
+    /// The built-in table (`design.md` §7): tutorials (`eChallengeTypes` 0) and security
+    /// (17) everyone's; the contests and races (point contest 1, risk 3, slalom 10, slide 11,
+    /// lap 12, gate 13, jam 15, crash 16, point-to-point race 18, death race 19, spot race 20,
+    /// last man standing 21, mega ramp 26, street skating 27) a competition the best human
+    /// result wins; best trick (8), Own the Spot (9) and Hall of Meat (31, 33) the best single
+    /// run; the rest (go-to, follow, favours, photo, film, services) anyone's. The opening
+    /// missions (`m_1a_*`) stay everyone's by prefix, whatever their family says.
     pub fn builtin() -> Self {
+        let compete = Rule::Compete { every_human_must_win: false };
+        let families = [
+            (family::TUTORIAL, Rule::Everyone),
+            (family::SECURITY, Rule::Everyone),
+            (family::POINT_CONTEST, compete),
+            (family::RISK, compete),
+            (family::SLALOM, compete),
+            (family::SLIDE, compete),
+            (family::LAP, compete),
+            (family::GATE, compete),
+            (family::JAM, compete),
+            (family::CRASH, compete),
+            (family::POINT_TO_POINT_RACE, compete),
+            (family::DEATH_RACE, compete),
+            (family::SPOT_RACE, compete),
+            (family::LAST_MAN_STANDING, compete),
+            (family::MEGA_RAMP, compete),
+            (family::STREET_SKATING, compete),
+            (family::BEST_TRICK, Rule::BestOf),
+            (family::OWN_THE_SPOT, Rule::BestOf),
+            (family::HALL_OF_MEAT, Rule::BestOf),
+            (family::HALL_OF_MEAT_SP, Rule::BestOf),
+        ];
         Self {
             default: Rule::Anyone,
-            families: BTreeMap::new(),
+            families: families.into_iter().collect(),
             prefixes: vec![("m_1a_".to_owned(), Rule::Everyone)],
             challenges: BTreeMap::new(),
             source: "built-in".to_owned(),
@@ -321,7 +405,26 @@ mod tests {
     fn the_builtin_table_asks_everyone_for_the_opening_tutorials() {
         let table = RuleTable::builtin();
         assert_eq!(table.rule_for(1, "m_1a_01_goto_slappys", 7), Rule::Everyone);
-        assert_eq!(table.rule_for(2, "m_2b_race", 7), Rule::Anyone);
+        assert_eq!(table.rule_for(2, "m_2b_photo", family::PHOTO), Rule::Anyone);
+        assert_eq!(table.rule_for(3, "tut", family::TUTORIAL), Rule::Everyone);
+        assert_eq!(table.rule_for(4, "race", family::DEATH_RACE), Rule::Compete { every_human_must_win: false });
+        assert_eq!(table.rule_for(5, "ots", family::OWN_THE_SPOT), Rule::BestOf);
+        assert_eq!(table.rule_for(6, "guards", family::SECURITY), Rule::Everyone);
+    }
+
+    #[test]
+    fn each_kind_decides_completion_and_failure() {
+        let any = [Rule::Anyone, Rule::BestOf, Rule::Combined, Rule::Compete { every_human_must_win: false }];
+        let all = [Rule::Everyone, Rule::Compete { every_human_must_win: true }];
+        for rule in any {
+            assert!(rule.completes(1, 2) && !rule.completes(0, 2));
+            assert!(!rule.fails(1, 2) && rule.fails(2, 2));
+        }
+        for rule in all {
+            assert!(!rule.completes(1, 2) && rule.completes(2, 2));
+            assert!(rule.fails(1, 2));
+        }
+        assert!(Rule::Combined.points_combined() && !Rule::BestOf.points_combined());
     }
 
     #[test]
