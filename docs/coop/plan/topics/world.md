@@ -20,6 +20,15 @@ seat 2 returned to 6 m (the margin holds); every puppet spawned with its owner's
 M1's held 24 (12 own and 12 puppets per seat). The stream's cost: about 555 B/s per owned
 pedestrian, 6.6 KB/s a seat with twelve owned, 1.9 KB/s with four.
 
+**The first synchronization audit** (`tools/coop/sync_audit.py` over
+`../bench/evidence/2026-11-10-m6b-*.log`: the M6 recipe, then two hours idle with the census
+dump on; 6981 dumps, 135 053 entity pairs): no pair where both seats claimed the same role;
+model identical in every pair; position within 0.5 m in 99.95 % (worst 2.58 m, at a handoff);
+down within 99.8 %; flags 97.9 %; yaw within 5° in 95.3 % (worst 142°, a puppet mid-turn);
+speed within 0.5 m/s in 71.7 % (the puppet's speed is its drive's, not the owner's: the
+first thing the audit says to improve, [open items](../open-items.md) 39). The graph behaviour
+differs in 99.5 % of pairs and the moods in 41 %, by design (not shared).
+
 **M6's mechanisms:**
 
 - **A puppet is its owner's copy.** Spawned with the owner's model key and recipe id (the

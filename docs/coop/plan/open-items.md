@@ -44,6 +44,18 @@ Front page: [README](../README.md).
     beyond the hash each traces at the round start. The design has the creator's table ride
     the campaign's `GameReset`; not built.
 
+## Audit ([inventory](sync-inventory.md), [world](topics/world.md))
+
+39. The first audit: a puppet's speed differs from its owner's by more than 0.5 m/s in 28 %
+    of pairs and its yaw by more than 5° in 5 %, while its position holds within 0.5 m in
+    99.95 %. The puppet's velocity is its drive's own (the coast, then the hold); carrying the
+    owner's velocity through to the puppet's `core.velocity` and yaw target is the next
+    improvement the audit will measure.
+40. The audit is offline (two seats' logs on one machine). A live digest in the world run
+    (the owner's quantized hash of each entity's shared fields every 60 round ticks, compared
+    by the receiver against its puppet and traced on divergence) makes it a bridge log that
+    works on two machines; agreed with the player, 2026-11-10, next.
+
 ## Play (2026-11-10, the player, M5 build)
 
 31. Pedestrians' positions and the dodge when run into are synced; their models differ per

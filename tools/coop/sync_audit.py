@@ -15,7 +15,7 @@ import re
 import sys
 from collections import defaultdict
 
-LINE = re.compile(r'coop census (\d+): ([0-9a-f]{8}) (own|puppet of \d+) e(\d+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) yaw (-?[\d.]+) v ([\d.]+) f(\d+) m([0-9a-f]+) g(\d+) moods(\d+) (down|up)')
+LINE = re.compile(r'coop: census (\d+): ([0-9a-f]{8}) (own|puppet of \d+) e(\d+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) yaw (-?[\d.]+) v ([\d.]+) f(\d+) m([0-9a-f]+) g(\d+) moods(\d+) (down|up)')
 SHARED = {'position': 0.5, 'yaw': 5.0, 'speed': 0.5, 'flags': 0, 'model': 0, 'down': 0}
 LOCAL = ['graph', 'moods']
 
