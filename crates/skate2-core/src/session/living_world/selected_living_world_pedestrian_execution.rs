@@ -42,8 +42,11 @@ impl super::SelectedRecipeFrame<'_> {
                         frame.security_guard_prestate_suffix(entity, target.dt)?;
                         frame.big_black_prestate(entity)?;
                     }
-                    // BasicEntity82e4c1d0 checks the actual optional AI graph.
-                    if entity.ai_bindings.is_some() { entity.update_ai_graph(target.dt, frame)?; }
+                    // BasicEntity82e4c1d0 checks the actual optional AI graph. Co-op fork (M6):
+                    // a puppet's graph runs only while it collides (a knockdown's animation);
+                    // its locomotion is its owner's (`update_puppet_intent`).
+                    let own_graph = entity.puppet.is_none() || crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref());
+                    if entity.ai_bindings.is_some() && own_graph { entity.update_ai_graph(target.dt, frame)?; }
                     // Pedestrian.UpdateState82e6eaf0 clears tAnimData+68,
                     // exactly cPedAnimData.MotionGraphInput.IntentsValid.
                     entity.animation.as_mut().ok_or("pedestrian state animation absent")?
@@ -282,10 +285,17 @@ impl super::SelectedRecipeFrame<'_> {
                 for target in targets {
                     crate::pedestrian_graph::backend::frame::with_entity(
                         &mut living, world, target.entity, cvars, &actors, &painter, self.vault, &avoid,
-                        |entity, frame| match phase {
-                            0 => frame.seek_navigation(entity),
-                            1 => frame.resolve_navigation(entity),
-                            _ => frame.update_navigation(entity, target.dt),
+                        |entity, frame| {
+                            // Co-op fork (M6): a puppet navigates nowhere; it goes where its
+                            // owner's stream says.
+                            if entity.puppet.is_some() && !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref()) {
+                                return Ok(());
+                            }
+                            match phase {
+                                0 => frame.seek_navigation(entity),
+                                1 => frame.resolve_navigation(entity),
+                                _ => frame.update_navigation(entity, target.dt),
+                            }
                         },
                     )?;
                 }
@@ -433,13 +443,26 @@ impl super::SelectedRecipeFrame<'_> {
         for target in &targets {
             crate::pedestrian_graph::backend::frame::with_entity(
                 &mut living, world, target.entity, cvars, &actors, &painter, self.vault, &avoid,
-                |entity, frame| frame.evaluate_all_navigation_modifiers(entity),
+                |entity, frame| {
+                    if entity.puppet.is_some() && !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref()) {
+                        return Ok(());
+                    }
+                    frame.evaluate_all_navigation_modifiers(entity)
+                },
             )?;
         }
         for target in &targets {
-            living.pedestrian_entities.as_deref_mut().ok_or("pedestrian current roster absent")?
-                .get_mut(target.entity).ok_or("pedestrian current target disappeared")?
-                .update_intent(&mesh, cvars, &mut HostReckoningNumeric)?;
+            let entity = living.pedestrian_entities.as_deref_mut().ok_or("pedestrian current roster absent")?
+                .get_mut(target.entity).ok_or("pedestrian current target disappeared")?;
+            // Co-op fork (M6): a puppet's walk, run or stand is its owner's velocity; its
+            // own intents only while it collides.
+            match entity.puppet.as_ref().filter(|_| !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref())) {
+                Some(puppet) => {
+                    let velocity = puppet.locomotion_velocity();
+                    entity.update_puppet_intent(velocity)?;
+                }
+                None => entity.update_intent(&mesh, cvars, &mut HostReckoningNumeric)?,
+            }
         }
         Ok(())
     }

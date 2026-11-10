@@ -53,6 +53,20 @@ impl PedestrianConstruction {
             .update(animation, &mut adapter, explicit_direction)
     }
 
+    /// Co-op fork (M6): a puppet's locomotion intents from its owner's velocity, through the
+    /// animation data's own speed table (`select_speed_mapping`), with no navigation and no
+    /// turn stage (its yaw is the sample's). What `IntentQueue::update` does without a packet.
+    pub(crate) fn update_puppet_intent(&mut self, velocity: [f32; 4]) -> Result<(), String> {
+        let speed = (velocity[0] * velocity[0] + velocity[2] * velocity[2]).sqrt();
+        let animation = self.animation.as_mut().ok_or("puppet intent animation absent")?;
+        let queue = self.intent_queue.as_mut().ok_or("puppet intent queue absent")?;
+        let mappings = animation.selected_animation_data()?.try_pedestrian_speed_mappings()?;
+        queue.select_speed_mapping(speed, &mappings)?;
+        animation.motion_intents.valid = true;
+        animation.motion_intents.set_packet(queue.base.active()?);
+        Ok(())
+    }
+
     /// Pedestrian::ClearAllIntents 0x82e8d890: IntentGen::ClearAllIntents 0x82e8b028 (not for
     /// a high priority, with the animation data's AI graph input), then the motion graph
     /// input's AnimFrameOffset (tAnimData+0x70) is zeroed.

@@ -36,6 +36,18 @@ impl PuppetDrive {
         self.flags = flags;
     }
 
+    /// The velocity the puppet's animation walks at: the owner's last, or none once it has
+    /// coasted and stands.
+    pub(crate) fn locomotion_velocity(&self) -> [f32; 4] {
+        if self.age < COAST_TICKS { self.velocity } else { [0.; 4] }
+    }
+
+    /// Whether the entity is in or entering its colliding behaviour, which its own graph
+    /// plays even as a puppet (a knockdown's animation).
+    pub(crate) fn colliding(collision: Option<&crate::pedestrian_collision::PedestrianCollision>) -> bool {
+        collision.is_some_and(|collision| collision.required_to_begin_colliding || collision.colliding)
+    }
+
     /// The transform the entity should reach this tick: the last sample carried on at its
     /// velocity for a while, then held.
     pub(crate) fn step(&mut self, dt: f32) -> Transform {

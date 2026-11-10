@@ -85,6 +85,9 @@ pub(crate) struct PedestrianCensusFrame<'a> {
     pub(crate) cvars: &'a InputCvarReferences,
     pub(crate) painter: &'a WorldPainterLayerMan,
     pub(crate) override_model_name: bool,
+    /// Co-op fork (M6): the model key and recipe id to spawn with, the owner's, instead of
+    /// the recipe manager's own draw, so a puppet looks as its owner's copy does.
+    pub(crate) look: Option<(u64, u64)>,
 }
 
 impl PedestrianCensusFrame<'_> {
@@ -136,10 +139,10 @@ impl PedestrianCensusFrame<'_> {
                 u64::from_be_bytes(data.bytes().try_into().expect("checked model key"))
             });
         let attributes = RecipeAttributes::new(self.vault, self.cvars);
-        let model_key = self
-            .recipe_man
-            .select_model(parent, &attributes)
-            .map_err(error)?;
+        let model_key = match self.look {
+            Some((model_key, _)) => model_key,
+            None => self.recipe_man.select_model(parent, &attributes).map_err(error)?,
+        };
         if self.override_model_name {
             return Err(error("Juice model override owner absent"));
         }
@@ -151,10 +154,10 @@ impl PedestrianCensusFrame<'_> {
             .try_get_data(LOAD_MODEL_ATTRIBUTE_ID, 0)
             .map_err(error)?
             .is_some_and(|data| data.bytes().first().is_some_and(|&v| v != 0));
-        let recipe_id = self
-            .recipe_man
-            .model_asset_id(model_key, &attributes)
-            .map_err(error)?;
+        let recipe_id = match self.look {
+            Some((_, recipe_id)) => recipe_id,
+            None => self.recipe_man.model_asset_id(model_key, &attributes).map_err(error)?,
+        };
         static TRACE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         static CANDIDATES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         if *TRACE.get_or_init(|| std::env::var_os("SKATE2_TRACE_PEDESTRIANS").is_some()) {

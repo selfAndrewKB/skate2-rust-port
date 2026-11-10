@@ -7,15 +7,20 @@
 //! Format 1 (M1). Units: positions 1/256 m, velocities 1/64 m/s, yaw 1/65536 of a turn.
 //! Format 2 (M5) adds the props: the dynamic objects this console owns by its skater's last
 //! touch, named by their locator id, with a full rotation (a quaternion in 1/32767) and the
-//! claim number that decides the owner everywhere. A change of meaning raises `FORMAT`; a
-//! receiver drops a run of another format.
+//! claim number that decides the owner everywhere. Format 3 (M6) names each entity's owner
+//! and its ownership epoch, so an owner can hand an entity to the nearer player: the record
+//! then names the new owner's slot with the epoch raised, and the highest epoch wins
+//! everywhere. A world id is fixed at the entity's first spawn (its spawner's slot and local
+//! id) and never changes. A change of meaning raises `FORMAT`; a receiver drops a run of
+//! another format.
 
 use super::ownership::Kind;
 
-pub const FORMAT: u8 = 2;
+pub const FORMAT: u8 = 3;
 
-/// A world id names an entity across consoles: the owner's slot in the game (4 bits) over
-/// the owner's local entity id (its type nibble and 24-bit counter).
+/// A world id names an entity across consoles: its first spawner's slot in the game (4 bits)
+/// over that console's local entity id (its type nibble and 24-bit counter); it stays through
+/// a handoff (M6).
 pub fn world_id(slot: u8, local_id: u32) -> u32 {
     (u32::from(slot & 0xf) << 28) | (local_id & 0x0fff_ffff)
 }
@@ -53,6 +58,11 @@ pub struct Descriptor {
 pub struct EntityState {
     pub id: u32,
     pub kind: Kind,
+    /// The slot that owns the entity after this record: the sender's, or the one it hands
+    /// the entity to.
+    pub owner: u8,
+    /// Raised by one at each handoff; the highest wins everywhere.
+    pub epoch: u32,
     pub position: [f32; 3],
     /// Radians about the up axis, `atan2(forward.x, forward.z)`.
     pub yaw: f32,
@@ -183,6 +193,8 @@ fn read_vector(r: &mut Reader<'_>, scale: f32) -> Result<[f32; 3], &'static str>
 fn write_entity(out: &mut Vec<u8>, entity: &EntityState) {
     varint(out, u64::from(entity.id));
     out.push(entity.kind as u8);
+    out.push(entity.owner);
+    varint(out, u64::from(entity.epoch));
     out.push(entity.flags);
     out.push(entity.motion);
     write_vector(out, entity.position, POSITION_SCALE, i64::from(i32::MAX));
@@ -288,6 +300,8 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
     for _ in 0..r.count(MOST_ENTITIES)? {
         let id = r.varint()? as u32;
         let kind = Kind::from_wire(r.u8()?).ok_or("world run entity kind")?;
+        let owner = r.u8()?;
+        let epoch = r.varint()? as u32;
         let flags = r.u8()?;
         let motion = r.u8()?;
         let position = read_vector(&mut r, POSITION_SCALE)?;
@@ -304,7 +318,7 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
             }
             _ => return Err("world run descriptor flag"),
         };
-        run.entities.push(EntityState { id, kind, position, yaw, velocity, flags, motion, descriptor });
+        run.entities.push(EntityState { id, kind, owner, epoch, position, yaw, velocity, flags, motion, descriptor });
     }
     if r.at != bytes.len() {
         return Err("world run has trailing bytes");
@@ -383,6 +397,8 @@ mod tests {
                 EntityState {
                     id: world_id(0, 0x0200_0003),
                     kind: Kind::Pedestrian,
+                    owner: 0,
+                    epoch: 0,
                     position: [1491.8145, 109.711, -743.305],
                     yaw: 2.5,
                     velocity: [1.25, 0., -0.5],
@@ -393,6 +409,8 @@ mod tests {
                 EntityState {
                     id: world_id(0, 0x0200_0004),
                     kind: Kind::Pedestrian,
+                    owner: 1,
+                    epoch: 3,
                     position: [-2000., 0., 2000.],
                     yaw: -3.0,
                     velocity: [0., 0., 0.],
@@ -429,7 +447,7 @@ mod tests {
         }
         assert_eq!(back.entities.len(), 2);
         for (a, b) in back.entities.iter().zip(&run.entities) {
-            assert_eq!((a.id, a.kind, a.flags, a.motion, &a.descriptor), (b.id, b.kind, b.flags, b.motion, &b.descriptor));
+            assert_eq!((a.id, a.kind, a.owner, a.epoch, a.flags, a.motion, &a.descriptor), (b.id, b.kind, b.owner, b.epoch, b.flags, b.motion, &b.descriptor));
             for lane in 0..3 {
                 assert!((a.position[lane] - b.position[lane]).abs() <= 1. / 256., "{:?} vs {:?}", a.position, b.position);
                 assert!((a.velocity[lane] - b.velocity[lane]).abs() <= 1. / 64.);
@@ -449,7 +467,7 @@ mod tests {
         assert_eq!(back.contacts.len(), 1);
         assert_eq!(back.props.len(), 1, "the props always fit");
         assert!(back.entities.is_empty());
-        let (bytes, included) = encode(&run, 110);
+        let (bytes, included) = encode(&run, 120);
         assert_eq!(included, 1, "{} bytes", bytes.len());
     }
 
@@ -504,7 +522,7 @@ mod tests {
         let (with, _) = encode(&WorldRun { entities: vec![run.entities[0].clone()], ..Default::default() }, 1024);
         let (without, _) = encode(&WorldRun { entities: vec![run.entities[1].clone()], ..Default::default() }, 1024);
         // The budget arithmetic in docs/coop/bench.md rests on these.
-        assert!(with.len() <= 56, "{} bytes with a descriptor", with.len());
-        assert!(without.len() <= 28, "{} bytes without", without.len());
+        assert!(with.len() <= 58, "{} bytes with a descriptor", with.len());
+        assert!(without.len() <= 30, "{} bytes without", without.len());
     }
 }

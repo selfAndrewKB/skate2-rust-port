@@ -375,7 +375,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                         continue;
                     }
                     let transform = stream::transform(spawn.state.position, spawn.state.yaw);
-                    let spawned = recipes.spawn_census_pedestrian(world, cvars, ground, spawn.descriptor.entity_key, transform, false, false, true, true, false, false)?;
+                    let look = Some((spawn.descriptor.model_key, spawn.descriptor.recipe_id));
+                    let spawned = recipes.spawn_census_pedestrian_as(world, cvars, ground, spawn.descriptor.entity_key, look, transform, false, false, true, true, false, false)?;
                     let Some(entity) = spawned else { continue };
                     let owner = spawn.owner;
                     {

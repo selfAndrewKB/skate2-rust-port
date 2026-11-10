@@ -107,7 +107,7 @@ impl SelectedRecipeFrame<'_> {
             let painter=self.painter.lock().map_err(|_|"WorldPainter lock")?;
             let mut services=Services{frame:self,living:&mut living,world,cvars,painter:&painter,ground,simulation_random};
             PedestrianCensusFrame{census:&census,random:&mut random,recipe_man:&self.runtime.recipes,
-                vault:self.vault,cvars,painter:&painter,override_model_name:false}
+                vault:self.vault,cvars,painter:&painter,override_model_name:false,look:None}
                 .evaluate(&mut services,inputs,cull,spawn,&mut crate::reckoning_numeric::HostReckoningNumeric)
         })();
         living.random=Some(random);
@@ -147,6 +147,18 @@ impl SelectedRecipeFrame<'_> {
         entity_key:u64,transform:crate::living_world_rain::geometry::Transform,initial:bool,
         allow_culling:bool,force_spawn:bool,allow_world_collisions:bool,ignore_navmesh_ground:bool,
         allow_hand_prop:bool)->Result<Option<u32>,String>{
+        self.spawn_census_pedestrian_as(world,cvars,ground,entity_key,None,transform,initial,allow_culling,
+            force_spawn,allow_world_collisions,ignore_navmesh_ground,allow_hand_prop)
+    }
+
+    /// Co-op fork (M6): the same spawn with the look given (the owner's model key and recipe
+    /// id), so a puppet is its owner's copy, not the recipe manager's own draw.
+    #[expect(clippy::too_many_arguments, reason = "the census spawn's own list")]
+    pub(crate) fn spawn_census_pedestrian_as(&self,world:&mut PhysicalAssemblyWorld,
+        cvars:&InputCvarReferences,ground:&crate::static_ground_pool::StaticGroundPool,
+        entity_key:u64,look:Option<(u64,u64)>,transform:crate::living_world_rain::geometry::Transform,initial:bool,
+        allow_culling:bool,force_spawn:bool,allow_world_collisions:bool,ignore_navmesh_ground:bool,
+        allow_hand_prop:bool)->Result<Option<u32>,String>{
         let owner=Arc::clone(world.grind_services.living_world());
         let mut living=owner.lock().map_err(|_|"LivingWorld lock")?;
         let census=living.census.clone();
@@ -155,7 +167,7 @@ impl SelectedRecipeFrame<'_> {
             let painter=self.painter.lock().map_err(|_|"WorldPainter lock")?;
             let mut services=Services{frame:self,living:&mut living,world,cvars,painter:&painter,ground,simulation_random:None};
             PedestrianCensusFrame{census:&census,random:&mut random,recipe_man:&self.runtime.recipes,
-                vault:self.vault,cvars,painter:&painter,override_model_name:false}
+                vault:self.vault,cvars,painter:&painter,override_model_name:false,look}
                 .spawn(&mut services,entity_key,transform,initial,allow_culling,force_spawn,
                     allow_world_collisions,ignore_navmesh_ground,allow_hand_prop,
                     &mut crate::reckoning_numeric::HostReckoningNumeric)
