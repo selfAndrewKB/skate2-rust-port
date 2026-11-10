@@ -88,6 +88,16 @@ pub(crate) struct PedestrianCensusFrame<'a> {
     /// Co-op fork (M6): the model key and recipe id to spawn with, the owner's, instead of
     /// the recipe manager's own draw, so a puppet looks as its owner's copy does.
     pub(crate) look: Option<(u64, u64)>,
+    /// Co-op fork (M6): the other players' positions, for the population rule.
+    pub(crate) peers: Vec<[f32; 4]>,
+}
+
+/// Co-op fork (M6): whether a point is a peer's to populate: a peer is nearer to it than
+/// `center` is.
+pub(crate) fn nearer_a_peer(point: [f32; 4], center: [f32; 4], peers: &[[f32; 4]]) -> bool {
+    let d2 = |a: [f32; 4], b: [f32; 4]| (0..3).map(|lane| (a[lane] - b[lane]) * (a[lane] - b[lane])).sum::<f32>();
+    let mine = d2(point, center);
+    peers.iter().any(|&peer| d2(point, peer) < mine)
 }
 
 impl PedestrianCensusFrame<'_> {
@@ -258,6 +268,10 @@ impl PedestrianCensusFrame<'_> {
                 )
                 .map_err(error)?;
             let (sin, cos) = try_sin_cos(yaw, &mut HostReckoningSinCosNumeric).map_err(error)?;
+            // Co-op fork (M6): a point nearer another player is that player's census's.
+            if nearer_a_peer(position, center, &self.peers) {
+                continue;
+            }
             let transform = [
                 [cos, 0., -sin, 0.],
                 [0., 1., 0., 0.],
@@ -311,11 +325,20 @@ impl PedestrianCensusFrame<'_> {
             let delta = std::array::from_fn(|i| center[i] - entry.position[i]);
             let distance = numeric.dot3(delta, delta).map_err(error)? - radius * radius;
             if entry.allow_culling {
-                if if outside {
-                    !(distance < 0.)
-                } else {
-                    !(distance > 0.)
-                } {
+                // Co-op fork (M6): an entity within another player's radius stays (the
+                // handoff takes it there); only one beyond every player's goes.
+                let within_a_peer = outside
+                    && self.peers.iter().any(|peer| {
+                        let delta: [f32; 4] = std::array::from_fn(|i| peer[i] - entry.position[i]);
+                        (0..3).map(|i| delta[i] * delta[i]).sum::<f32>() < radius * radius
+                    });
+                if !within_a_peer
+                    && if outside {
+                        !(distance < 0.)
+                    } else {
+                        !(distance > 0.)
+                    }
+                {
                     services.request_cull(entry.id,self.random)?;
                 }
             } else if entry.security_guard {
@@ -400,5 +423,20 @@ impl PedestrianCensusFrame<'_> {
             )?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod coop_tests {
+    use super::nearer_a_peer;
+
+    #[test]
+    fn a_point_is_the_nearer_players_to_populate() {
+        let me = [0., 0., 0., 1.];
+        let peer = [100., 0., 0., 1.];
+        assert!(!nearer_a_peer([10., 0., 0., 1.], me, &[peer]));
+        assert!(nearer_a_peer([90., 0., 0., 1.], me, &[peer]));
+        assert!(!nearer_a_peer([50., 0., 0., 1.], me, &[peer]), "a tie is this console's");
+        assert!(!nearer_a_peer([90., 0., 0., 1.], me, &[]), "alone, every point is this console's");
     }
 }

@@ -138,6 +138,11 @@ pub(crate) struct LivingWorldGrindServices {
     /// Detached entities awaiting the census destructor, still owning bodies.
     pub(crate) vehicle_culls: Vec<vehicle_entity::Vehicle>,
     pub(crate) vehicle_ground_results: Vec<(u32, [Option<[f32; 4]>; 3])>,
+    /// Co-op fork (M6): the other players' positions this tick (from the facts), for the
+    /// population rule: a point nearer a peer is that peer's census's to fill, a puppet in a
+    /// peer's half is not this console's to count, and an entity is culled only beyond every
+    /// player's radius.
+    pub(crate) coop_peers: Vec<[f32; 4]>,
     pub(crate) vehicle_execution: vehicle_entity::execution::VehicleExecutionMan,
     pub(crate) vehicle_collideables: collideable_objects::CollideableObjectMan,
     pub(crate) vehicle_grabbables: spline_registration::GrabbableObjectMan,
@@ -203,6 +208,7 @@ impl LivingWorldGrindServices {
             vehicle_spawn_unfinished: None,
             vehicle_culls: Vec::new(),
             vehicle_ground_results: Vec::new(),
+            coop_peers: Vec::new(),
             vehicle_execution: vehicle_entity::execution::VehicleExecutionMan::new(),
             vehicle_collideables: collideable_objects::CollideableObjectMan::new(),
             vehicle_grabbables: spline_registration::GrabbableObjectMan::new(),

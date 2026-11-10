@@ -14,10 +14,21 @@ struct Services<'a,'b> {
     painter: &'a crate::world_painter_layer::WorldPainterLayerMan,
     ground:&'a crate::static_ground_pool::StaticGroundPool,
     simulation_random:Option<&'a mut crate::native_skater_random::SimulationCommandRandom>,
+    /// Co-op fork (M6): the census centre (this console's skater), when the population rule
+    /// reads the peers.
+    center:Option<[f32;4]>,
 }
 impl<N:ReckoningNumeric> PedestrianCensusServices<N> for Services<'_, '_>
 where N::Error:std::fmt::Debug {
-    fn count(&self)->usize {self.living.pedestrian_entities.as_ref().map_or(0,|p|p.captured_member_count())}
+    // Co-op fork (M6): a puppet in another player's half is that player's to count.
+    fn count(&self)->usize {
+        let Some(entities)=self.living.pedestrian_entities.as_ref() else {return 0};
+        let Some(center)=self.center.filter(|_|!self.living.coop_peers.is_empty()) else {return entities.captured_member_count();};
+        entities.ids().into_iter().filter(|&id|{
+            let Some(entity)=entities.get(id) else {return false};
+            entity.puppet.is_none()||entity.core.as_ref().is_none_or(|core|!crate::living_world_grind_services::census::pedestrian::nearer_a_peer(core.transform[3],center,&self.living.coop_peers))
+        }).count()
+    }
     fn contains_model(&self,recipe:u64)->bool {self.living.dmo_models.character_model(recipe).is_some()}
     fn request_spawn(&mut self,info:PedestrianSpawnInfo,numeric:&mut N)->Result<Option<u32>,String>{
         self.frame.spawn_pedestrian(self.living,self.world,&info,self.cvars,self.painter,numeric)
@@ -53,7 +64,9 @@ where N::Error:std::fmt::Debug {
             let Some((_point,position,orientation))=prop.prepare_pedestrian_spawn()? else{continue;};
             let offset=prop.pedestrian_spawn_offset.ok_or("Prop spawn offset absent")?;
             let source_key=prop.core.as_ref().ok_or("Prop core absent")?.entity_key;
-            let count=self.living.pedestrian_entities.as_ref().ok_or("pedestrian roster absent")?.captured_member_count() as u32;
+            let count=PedestrianCensusServices::<N>::count(self) as u32;
+            // Co-op fork (M6): a prop's spawn point nearer another player is that player's.
+            if crate::living_world_grind_services::census::pedestrian::nearer_a_peer(position,center,&census.peers){continue;}
             let point=census.census.point_info::<std::convert::Infallible>(PopulationKind::Pedestrian,
                 [position[0],position[1],position[2]],census.vault,census.painter,census.cvars)
                 .map_err(|e|format!("prop point census: {e:?}"))?;
@@ -103,11 +116,12 @@ impl SelectedRecipeFrame<'_> {
         // temporarily for disjoint mutable borrows and restored on failure too.
         let census=living.census.clone();
         let mut random=living.random.take().ok_or("CensusMan random absent")?;
+        let peers=living.coop_peers.clone();
         let result=(||{
             let painter=self.painter.lock().map_err(|_|"WorldPainter lock")?;
-            let mut services=Services{frame:self,living:&mut living,world,cvars,painter:&painter,ground,simulation_random};
+            let mut services=Services{frame:self,living:&mut living,world,cvars,painter:&painter,ground,simulation_random,center:Some(inputs.center)};
             PedestrianCensusFrame{census:&census,random:&mut random,recipe_man:&self.runtime.recipes,
-                vault:self.vault,cvars,painter:&painter,override_model_name:false,look:None}
+                vault:self.vault,cvars,painter:&painter,override_model_name:false,look:None,peers}
                 .evaluate(&mut services,inputs,cull,spawn,&mut crate::reckoning_numeric::HostReckoningNumeric)
         })();
         living.random=Some(random);
@@ -165,9 +179,9 @@ impl SelectedRecipeFrame<'_> {
         let mut random=living.random.take().ok_or("CensusMan random absent")?;
         let result=(||{
             let painter=self.painter.lock().map_err(|_|"WorldPainter lock")?;
-            let mut services=Services{frame:self,living:&mut living,world,cvars,painter:&painter,ground,simulation_random:None};
+            let mut services=Services{frame:self,living:&mut living,world,cvars,painter:&painter,ground,simulation_random:None,center:None};
             PedestrianCensusFrame{census:&census,random:&mut random,recipe_man:&self.runtime.recipes,
-                vault:self.vault,cvars,painter:&painter,override_model_name:false,look}
+                vault:self.vault,cvars,painter:&painter,override_model_name:false,look,peers:Vec::new()}
                 .spawn(&mut services,entity_key,transform,initial,allow_culling,force_spawn,
                     allow_world_collisions,ignore_navmesh_ground,allow_hand_prop,
                     &mut crate::reckoning_numeric::HostReckoningNumeric)

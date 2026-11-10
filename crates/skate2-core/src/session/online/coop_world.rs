@@ -307,6 +307,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                 let living_owner = Arc::clone(world.grind_services.living_world());
                 let (centre, _) = crate::simulation_assembly_backend::constraint_session::dmo_living_world::local_skater_census_centre(frame.actor)
                     .map_err(|e| format!("coop world: skater centre: {e:?}"))?;
+                // The peers' positions for the census's population rule (M6).
+                living_owner.lock().map_err(|_| "LivingWorld lock")?.coop_peers = peers.iter().map(|&(_, at)| at).collect();
 
                 // 1. The owners' samples drive the puppets; an owner's knockdown plays here.
                 {
