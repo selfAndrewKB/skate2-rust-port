@@ -123,6 +123,23 @@ impl SelectedRecipeFrame<'_> {
         }
         result
     }
+    /// Co-op fork: a pedestrian culled by a caller outside the census update (a puppet whose
+    /// owner stopped streaming it), on the same owners and RNG as the census's own culls.
+    pub(crate) fn cull_census_pedestrian(&self,world:&mut PhysicalAssemblyWorld,
+        cvars:&InputCvarReferences,id:u32)->Result<(),String>{
+        let owner=Arc::clone(world.grind_services.living_world());
+        let mut living=owner.lock().map_err(|_|"LivingWorld lock")?;
+        if let Some(core)=living.pedestrian_entities.as_deref_mut().and_then(|p|p.get_mut(id)).and_then(|p|p.core.as_mut()){
+            core.allow_culling=true;
+        }
+        let mut random=living.random.take().ok_or("CensusMan random absent")?;
+        let result=(||{
+            let painter=self.painter.lock().map_err(|_|"WorldPainter lock")?;
+            self.request_pedestrian_cull(&mut living,world,id,cvars,&painter,&mut random)
+        })();
+        living.random=Some(random);
+        result
+    }
     /// `ILWCensusMan::SpawnPedestrian` (CensusMan vtable +4, SpawnPedestrian82720fe0) for a
     /// caller outside the census update, on the same Manager owners and RNG.
     pub(crate) fn spawn_census_pedestrian(&self,world:&mut PhysicalAssemblyWorld,

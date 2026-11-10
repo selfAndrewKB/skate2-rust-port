@@ -16,9 +16,14 @@
 #   SERVER            host:port the server binds and the seats sign in to (default 127.0.0.1:32082)
 #   SEAT_ONLINE_1..N  each seat's SKATE2_DIAGNOSTIC_ONLINE (default: seat 1 "create:8", others "join:8": an online free skate)
 #   SEAT_EXTRA        extra environment for every seat, e.g. "SKATE2_TRACE_CAREER=1"
-#   SEAT_EXTRA_1..N   the same for one seat, e.g. SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_CAREER_PAD=600-660"
-#                     (seat 2 pushes once at career tick 600, so two skaters that continue at the
-#                     same saved spot come apart)
+#   SEAT_EXTRA_1..N   the same for one seat. The switches a campaign seat takes (the career's
+#                     own SKATE2_DIAGNOSTIC_CAREER_* run only under the career demo, not here):
+#                       SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>  the skater put there
+#                         (786,-58,882 is the waterfront spawn, a street with pedestrians; the
+#                         career's continue point has none)
+#                       SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>  the nearest puppet pedestrian
+#                         knocked down as a hit would, the contact sent to its owner (M1)
+#   Every seat traces online, career and coop decisions (SKATE2_TRACE_*=1): never blind.
 #   BENCH_VISIBLE     set to show the seats' windows; by default they open inactive and off-screen
 #                     (SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW), so the desktop stays yours
 #   WINDOW_SIZE       each seat's window (default 960x540)
@@ -93,11 +98,13 @@ start() {
         if [ -z "$online" ]; then
             if [ "$i" -eq 1 ]; then online="create:8"; else online="join:8"; fi
         fi
-        eval "extra=\${SEAT_EXTRA_$i:-}"
+        eval "extra=\"\${SEAT_EXTRA_$i:-}\""
         echo "seat $i: SKATE2_DIAGNOSTIC_ONLINE=$online ${SEAT_EXTRA:-} $extra (log $dir/seat.log)"
-        (cd "$dir" && env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_DIAGNOSTIC_ONLINE="$online" \
+        # The seat's whole environment is kept beside its log (seat.env), so a switch that did
+        # not take is never a guess.
+        (cd "$dir" && env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_DIAGNOSTIC_ONLINE="$online" \
             SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" $(window_env) ${SEAT_EXTRA:-} $extra \
-            "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) &
+            sh -c 'env | grep "^SKATE2_" | sort > seat.env; exec "$0" "$@"' "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) &
         echo $! > "$dir/pid"
         # The creator must hold the lobby before a joiner searches.
         [ "$i" -eq 1 ] && sleep 8

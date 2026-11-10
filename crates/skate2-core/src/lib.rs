@@ -11,6 +11,8 @@ pub mod diagnostics;
 pub mod ui;
 #[path = "online/online.rs"]
 pub mod online;
+#[path = "coop/coop.rs"]
+pub mod coop;
 pub(crate) mod ai;
 pub mod challenge;
 #[path = "dlc/dlc.rs"]
@@ -179,6 +181,8 @@ mod living_world_pedestrian_memory;
 mod living_world_pedestrian_resources;
 #[path = "living_world/pedestrians/living_world_pedestrian_entity.rs"]
 mod living_world_pedestrian_entity;
+#[path = "living_world/pedestrians/pedestrian_puppet.rs"]
+mod pedestrian_puppet;
 #[path = "living_world/pedestrians/pedestrian_ground_batches.rs"]
 mod pedestrian_ground_batches;
 #[path = "living_world/pedestrians/pedestrian_execution_queries.rs"]

@@ -1,0 +1,52 @@
+//! Co-op fork: a pedestrian another console owns, driven here as a puppet. Its owner's world
+//! stream (`coop::world_stream`) gives it a target transform at the stream's cadence; between
+//! runs it carries on at the owner's velocity. The entity is otherwise a real pedestrian in the
+//! census (its collision bodies follow the target as every pedestrian's do), so the local
+//! skater, scoring and scripts see it as they see any pedestrian.
+
+use crate::living_world_rain::geometry::Transform;
+
+/// How many ticks a puppet carries on at its last velocity before it stands where it is.
+const COAST_TICKS: u32 = 30;
+
+#[derive(Clone, Debug)]
+pub(crate) struct PuppetDrive {
+    /// The owner's last transform and velocity, and the ticks since they arrived.
+    pub(crate) target: Transform,
+    pub(crate) velocity: [f32; 4],
+    pub(crate) age: u32,
+    /// The owner's last flags (`coop::world_stream::flags`).
+    pub(crate) flags: u8,
+    /// A full collision the local skater made with this puppet, resolved here as a prediction
+    /// and waiting to be reported to the owner: force, direction, the skater's velocity and
+    /// angular velocity at the hit.
+    pub(crate) pending_contact: Option<(u8, u8, [f32; 3], [f32; 3])>,
+}
+
+impl PuppetDrive {
+    pub(crate) fn new(target: Transform) -> Self {
+        Self { target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None }
+    }
+
+    /// The owner's next sample.
+    pub(crate) fn arrive(&mut self, target: Transform, velocity: [f32; 3], flags: u8) {
+        self.target = target;
+        self.velocity = [velocity[0], velocity[1], velocity[2], 0.];
+        self.age = 0;
+        self.flags = flags;
+    }
+
+    /// The transform the entity should reach this tick: the last sample carried on at its
+    /// velocity for a while, then held.
+    pub(crate) fn step(&mut self, dt: f32) -> Transform {
+        let mut target = self.target;
+        if self.age < COAST_TICKS {
+            let t = dt * self.age as f32;
+            for lane in 0..3 {
+                target[3][lane] += self.velocity[lane] * t;
+            }
+        }
+        self.age = self.age.saturating_add(1);
+        target
+    }
+}

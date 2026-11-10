@@ -7,6 +7,8 @@
 mod activity;
 #[path = "online/online_challenge.rs"]
 mod online_challenge;
+#[path = "online/coop_world.rs"]
+mod coop_world;
 #[path = "online/online_dmos.rs"]
 mod online_dmos;
 #[path = "online/lobby_hud.rs"]
@@ -157,6 +159,10 @@ pub(super) struct Online {
     pub(super) start: Option<[f32; 16]>,
     pub(super) event_log: EventLog,
     notices: Vec<OnlineNotice>,
+    /// Co-op fork: the campaign's shared living world.
+    pub(super) coop: coop_world::CoopWorld,
+    /// Co-op fork: the campaign's offline-flags trace went out for this game.
+    campaign_flags_told: bool,
     /// `SKATE2_DIAGNOSTIC_ONLINE` made its request.
     diagnostic_requested: bool,
     /// Co-op fork: the last reason `SKATE2_DIAGNOSTIC_ONLINE` waited, traced when it changes.
@@ -414,6 +420,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     }
                 }
                 ClientEvent::Facts { user_id, tick, stint, notes, data } => self.online_facts(user_id, tick, stint, notes, &data),
+                ClientEvent::World { user_id, tick, data } => self.online_world_event(user_id, tick, &data),
                 ClientEvent::Message(message) => {
                     if let Err(e) = self.online_message(message) {
                         self.online_unplayable(&e)?;
@@ -694,22 +701,33 @@ impl<T, C> SelectedLiveSession<T, C> {
         // StateOnlineGame::SetupInitalGameInfo sets sGameInfo.isNetworkGame (0x8275dba8) and
         // GameModule::BackToSP clears it (0x8273dac8): no slow motion in an online game, and the
         // network game's solver passes.
-        let online = self.online.game.as_ref().is_some_and(|game| game.entered);
+        // Co-op fork: a campaign is the career with the netcode attached, never the original's
+        // network game: its simulation keeps slow motion, board pickup, offline culling and
+        // collision, and its living world spawns (IsLWSpawnEnabled reads the same flag), so the
+        // flags below stay offline in a campaign. Traced once per game.
+        let campaign = self.online_campaign();
+        if campaign && self.online.game.as_ref().is_some_and(|game| game.entered) && !self.online.campaign_flags_told {
+            self.online.campaign_flags_told = true;
+            trace(format_args!("campaign lobby: the simulation keeps its offline flags (no network game, no ghost system)"));
+        }
+        let online = self.online.game.as_ref().is_some_and(|game| game.entered) && !campaign;
         if let Some(owner) = self.inner.world.as_ref() {
             let mut world = owner.world.lock().map_err(|_| error("world lock poisoned"))?;
             world.sim_rate.lock().map_err(|_| error("sim rate lock poisoned"))?.set_online_game(online);
             // The same flag's sGhostSystemEnabled and isNetworkGame, from SetupInitalGameInfo to
             // BackToSP: no skater touches a board online, an off-board skater's own included, and a
             // spawn or teleport keeps normal collision.
-            let in_game = self.online.game.is_some();
+            let in_game = self.online.game.is_some() && !campaign;
             world.set_online_game_culling(in_game);
             if let Some(services) = world.physical_world_services() {
                 services.game_info().try_set_online_game(in_game).map_err(|e| error(format!("{e:?}")))?;
             }
         }
         // Net::IsInOnlineGame (0x82559b80): the flow's STATE_OnlineGame, which a scene's load reads.
+        // Co-op fork: a campaign's scenes load as the career's until M4 puts them under the online
+        // rule (`docs/coop/design.md` §3.5).
         if let Some(career) = self.career.as_mut() {
-            career.nis.set_online_game(self.online.game.is_some());
+            career.nis.set_online_game(self.online.game.is_some() && !campaign);
         }
         Ok(())
     }
@@ -1391,6 +1409,8 @@ impl<T, C> SelectedLiveSession<T, C> {
     pub(super) fn online_tick(&mut self) -> Result<(), SelectedLiveError> {
         let tick = self.completed_frames;
         let result = self.online_tick_frame();
+        // Co-op fork: the shared living world's tick, after the skater's frame.
+        let result = result.and_then(|()| self.coop_world_tick());
         // The tick's facts wait for the run being gathered; a tick that made no frame ends it.
         if self.online.run.last().is_none_or(|frame| frame.tick != tick) {
             self.online.send_run();

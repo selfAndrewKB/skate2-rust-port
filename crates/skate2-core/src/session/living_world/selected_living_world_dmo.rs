@@ -1242,7 +1242,17 @@ impl SelectedLivingWorldDmo {
             let living=&mut *living;
             let roster=living.pedestrian_entities.as_deref_mut().ok_or(SelectedLivingWorldDmoError::MissingManagers)?;
             for id in roster.ids(){
-                roster.get_mut(id).expect("captured collision roster")
+                let pedestrian=roster.get_mut(id).expect("captured collision roster");
+                // Co-op fork: a puppet goes where its owner's stream says, whatever its own
+                // animation asked; its bodies and transform follow as every pedestrian's do.
+                if let Some(puppet)=pedestrian.puppet.as_mut(){
+                    let target=puppet.step(UPDATE_TIME);
+                    pedestrian.core.as_mut()
+                        .ok_or_else(||SelectedLivingWorldDmoError::Pedestrians("puppet core absent".into()))?
+                        .set_target_transform::<()>(target)
+                        .map_err(|e|SelectedLivingWorldDmoError::Pedestrians(format!("puppet target: {e:?}")))?;
+                }
+                pedestrian
                     .update_collision_models(world,UPDATE_TIME,cvars,living.props.as_deref())
                     .map_err(SelectedLivingWorldDmoError::Pedestrians)?;
             }

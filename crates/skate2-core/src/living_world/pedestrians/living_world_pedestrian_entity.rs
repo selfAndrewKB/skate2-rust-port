@@ -140,6 +140,8 @@ pub(crate) struct PedestrianConstruction {
     pub(crate) graph: PedestrianGraph,
     pub(crate) ai_bindings: Option<crate::pedestrian_graph::PedestrianAiBindings>,
     pub(crate) behaviours: PedestrianGraphBehaviours,
+    /// Co-op fork: set while another console owns this pedestrian and drives it here.
+    pub(crate) puppet: Option<crate::pedestrian_puppet::PuppetDrive>,
 }
 impl PedestrianConstruction {
     pub(crate) fn new(
@@ -197,6 +199,7 @@ impl PedestrianConstruction {
             perception: perception::PedestrianPerception::new(),
             state_out: crate::pedestrian_motion_delegate::frame::PedStateOut::new(),
             collision_info: crate::pedestrian_graph::colliding::PedestrianCollisionInfo::new(),
+            puppet: None,
             navigation_modifiers: None,
             animation: None,
             nav_rig: None,
