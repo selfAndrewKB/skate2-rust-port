@@ -37,4 +37,10 @@ facts), a service bought by anyone is everyone's ([prompts](prompts.md), [world]
 
 ## History
 
-- 2026-11-10 M7: the kinds applied; the families named (open item 11 retired).
+- 2026-11-10 M7: the kinds applied; the families named (open item 11 retired). The first
+  proof run (`../bench/evidence/2026-11-10-m7a-*.log`, the opening tutorial under a rules file
+  making it `Anyone`'s) split the round: under any rule but `Everyone` the objective system
+  still made one copy per console, for its own player, so seat 1's player completed its
+  objectives and ended the mission alone ("1 of 1 players complete under Anyone") while seat 2
+  stayed in it. Every rule now makes one copy per player (`natives.rs`,
+  `make_objectives_helper`); the rule decides only at the evaluation point.

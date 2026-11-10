@@ -19,9 +19,10 @@ Research: [the objective system per player](../../research/RE-objectives-per-pla
   (or `SKATE2_COOP_RULES=<file>`), else the built-in table: the opening tutorials (`m_1a_*`)
   everyone's, the rest anyone's; by key, name prefix, family, default; its hash traced at the
   round start on every console. The tutorials' family number is not yet known.
-- **The ledger's "everyone" kind in the objective system.** Under an `Everyone` rule
-  `Objectives.MakeObjectives` makes one group per player, each evaluated from that player's facts
-  on every console; the script holds the first player's group (the same on every console) and its
+- **The ledger's "everyone" kind in the objective system.** In a campaign
+  `Objectives.MakeObjectives` makes one group per player under every rule (M2 did so for
+  `Everyone` only; M7 for all, after one copy per console split the round), each evaluated
+  from that player's facts on every console; the script holds the first player's group (the same on every console) and its
   group operations (reset, force complete, fail, evaluation status, points, delete) reach every
   copy; `on_objective_completed` asks the rule at the one evaluation point: `Everyone` completes
   the activity when every player's copy is complete, `Anyone` at the first (the other copies

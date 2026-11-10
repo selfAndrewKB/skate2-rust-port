@@ -64,9 +64,11 @@ own skater, never both.
   hysteresis and migration is M6's ([world](topics/world.md)).
 - The campaign's round is the port's facts lockstep over the whole career, started by the
   server once every member's career is loaded; no player is the host of it (2026-11-10, M2).
-- Under an `Everyone` rule a mission's objectives exist once per player; the script holds the
-  first player's group on every console and its group operations reach every copy; the rule
-  decides completion at the one evaluation point (2026-11-10, M2; [progression](topics/progression.md)).
+- In a campaign a mission's objectives exist once per player under every rule; the script
+  holds the first player's group on every console and its group operations reach every copy;
+  the rule decides completion at the one evaluation point (2026-11-10, M2 for `Everyone`; M7
+  for every rule, after one copy per console under `Anyone` split the round;
+  [progression](topics/progression.md)).
 - Scenes run under the online rule once a campaign round runs (no pause, no skip, ends from the
   pacing leader), each console showing its own skater (2026-11-10, M2; proven on the bench in
   M4 for scenes and speech, own skater and movies by reading: [scenes](topics/scenes.md)).
