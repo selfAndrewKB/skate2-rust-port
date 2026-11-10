@@ -13,8 +13,14 @@ diagnostic switches. The script is `tools/coop/bench.sh`; its header lists every
 ./tools/coop/bench.sh prime 2      # once: a scratch profile per seat with the first mission done
 SEAT_ONLINE_1=create:9 SEAT_ONLINE_2=join:9 ./tools/coop/bench.sh start 2
 ./tools/coop/bench.sh status       # pids and the last line of each log
+./tools/coop/bench.sh server       # the server alone (M8: it reads campaign-<key>.save back)
+SEAT_ONLINE_3=join:9 ./tools/coop/bench.sh seat 3   # one seat alone, joining the running server
 ./tools/coop/bench.sh stop
 ```
+
+`BENCH_KEEP=1` keeps a seat's last save instead of restoring the primed profile (a crawl, a
+resume). A seat's `player_id` (its stable identity, M8) survives the `online-config.json` the
+bench rewrites.
 
 `start` returns at once: every process it starts is detached from the caller's stdio, so a
 script or a tool that ran it never waits on the games (they lingered as background tasks until
@@ -47,8 +53,10 @@ said otherwise, round ticks are the campaign round's, the same on every console)
 the waterfront spawn, a street with pedestrians; the career's continue point has none);
 `SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=<round tick>:<x>,<y>,<z>[;...]` the same at round ticks;
 `SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>` knocks down the nearest puppet pedestrian as a hit would
-and sends the contact to its owner; `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<round tick>:<name>` runs a
-named challenge; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[@<player>][;...]` completes the main
+and sends the contact to its owner; `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<round tick>:<name>[;...]` runs
+named challenges; `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>[;...]` completes every objective of
+the main challenge as a win would (points objectives included), so the real win, outro and
+`challenge_cleanup` play: the crawl's way through a mission whose objectives need tricks; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[@<player>][;...]` completes the main
 challenge's active objective of every group (or of that player's group alone, M7) as its script
 would; `SKATE2_DIAGNOSTIC_COOP_ANSWER=
 yes|no[:<round ticks>]` answers the progression's Yes/No dialog; `SKATE2_DIAGNOSTIC_COOP_TRIGGERS=
@@ -172,6 +180,16 @@ SEAT_EXTRA_1="SKATE2_DIAGNOSTIC_COOP_TELEPORT=3000:786,-58,882" \
 SEAT_EXTRA_2="SKATE2_DIAGNOSTIC_COOP_TELEPORT=3000:792,-58,888 SKATE2_DIAGNOSTIC_COOP_SHOVE=4800" \
 CAPTURE_FROM=100 CAPTURE_EVERY=20 CAPTURE_COUNT=6 ./tools/coop/bench.sh start 2
 ```
+
+## The mission crawl
+
+`python3 tools/coop/crawl.py --list` names the campaign's 115 `m_*` missions from the career
+database (`SKATE2_CAREER_DB`); `--run [--from NAME] [--count N]` runs them on the bench one
+start at a time with the saves carried forward (`BENCH_KEEP`), each executed by name at round
+tick 900 and won by diagnostic at 1800, and appends one row per mission to
+`../bench/evidence/<date>-crawl.md`: PASS (both seats reached `challenge_cleanup` and the saves
+agree), STOPPED (with each seat's last state), NOT EXECUTED, CRASHED. Each mission's logs are
+kept as `crawl-<name>-seat-N.log`. About three minutes a mission.
 
 ## The synchronization audit
 
