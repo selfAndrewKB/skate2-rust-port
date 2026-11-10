@@ -2043,7 +2043,10 @@ impl<T, C> SelectedLiveSession<T, C> {
         // Co-op fork (M8): in a campaign the server's save is the truth: its progression
         // leaves take the local file's places (the skater's own orientation stays the file's),
         // so two players resume at the same progression whatever each file held.
+        // A new profile's career (the intro, Create-a-Skater) starts from nothing; the server's
+        // save is for a continued one.
         if self.online_campaign()
+            && continued
             && let Some(adopt) = self.online.campaign_adopt.take()
         {
             let local: Vec<(&'static str, u32, Vec<Vec<u8>>)> = [

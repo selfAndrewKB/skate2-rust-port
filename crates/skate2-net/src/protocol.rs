@@ -425,6 +425,11 @@ pub struct Prompt {
     pub value: i32,
 }
 
+/// The campaign save's hash (FNV-1a over the blob), as both the game and the server compute it.
+pub fn campaign_save_hash(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
+}
+
 /// The most prompts one facts frame carries.
 pub const MAX_PROMPTS: usize = 7;
 

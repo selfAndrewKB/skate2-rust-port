@@ -831,7 +831,7 @@ impl ServerCore {
                             let mut made = Campaign::default();
                             let path = campaign_save_path(location);
                             if let Ok(data) = std::fs::read(&path) {
-                                let hash = data.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
+                                let hash = crate::protocol::campaign_save_hash(&data);
                                 (self.log)(&format!("campaign save read from {path}: {} B, hash {hash:016x}; a member's newer one supersedes it", data.len()));
                                 made.save = Some((0, 0, 0, hash, Arc::new(data)));
                             }
@@ -978,6 +978,7 @@ impl ServerCore {
         // Co-op fork: a campaign's newest save goes to a joining member, whose console says
         // whether its own agrees (adopting it is M8's).
         if let Some((owner, session, tick, hash, data)) = self.games.get(&game_id).and_then(|game| game.campaign.as_ref()).and_then(|campaign| campaign.save.clone()) {
+            (self.log)(&format!("game {game_id}: the campaign save (session {session} tick {tick}, {} B, hash {hash:016x}) sent to {name}", data.len()));
             self.send(id, &ServerMessage::CampaignSave { slot: owner, session, tick, hash, data: data.to_vec() });
         }
     }
@@ -1032,14 +1033,16 @@ impl ServerCore {
                         // Co-op fork (M8): a member loaded after the round started: every
                         // member reloads from the newest save and the round restarts with
                         // everyone once every member has loaded again.
-                        (self.log)(&format!("game {game_id}: {name} loaded its career after campaign round {session} started: every member reloads from the newest save and the round restarts"));
+                        (self.log)(&format!("game {game_id}: {name} loaded its career after campaign round {session} started: every other member reloads from the newest save and the round restarts"));
                         campaign.started = None;
                         campaign.loaded.clear();
+                        campaign.loaded.insert(user_id);
                         let save = campaign.save.clone();
                         if let Some((owner, save_session, tick, hash, data)) = save {
-                            self.broadcast(game_id, &ServerMessage::CampaignSave { slot: owner, session: save_session, tick, hash, data: data.to_vec() }, None);
+                            (self.log)(&format!("game {game_id}: the campaign save (session {save_session} tick {tick}, {} B, hash {hash:016x}) sent to every other member for the reload", data.len()));
+                            self.broadcast(game_id, &ServerMessage::CampaignSave { slot: owner, session: save_session, tick, hash, data: data.to_vec() }, Some(user_id));
                         }
-                        self.broadcast(game_id, &ServerMessage::CampaignReload { session }, None);
+                        self.broadcast(game_id, &ServerMessage::CampaignReload { session }, Some(user_id));
                     }
                     None => {
                         (self.log)(&format!("game {game_id}: {name} loaded its career ({loaded} of {total})"));

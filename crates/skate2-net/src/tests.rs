@@ -1922,5 +1922,27 @@ fn a_campaign_round_starts_once_every_member_s_career_is_loaded() {
     let log = net.server_log.lock().expect("log").join("\n");
     assert!(log.contains("campaign round") && log.contains("started with 2 players"), "{log}");
     assert!(log.contains("Host agrees (tick 600)"), "{log}");
+    // An older save (a lower session and tick) is not kept.
+    net.send(host, &ClientMessage::CampaignSave { session: 0, tick: 500, hash: 0xdef, data: vec![9] });
+    net.run(100);
+    assert!(net.server_log.lock().expect("log").join("\n").contains("older than the held one, not kept"));
+    // The third loads after the start: the two running members get the save and a reload, the
+    // third neither; the round restarts with three once the two have loaded again.
+    let _ = resets(&mut net, host);
+    let _ = resets(&mut net, guest);
+    net.send(third, &ClientMessage::ChallengeLoaded);
+    net.run(100);
+    let reloads = |net: &mut Net, client: usize| -> usize {
+        net.events(client).into_iter().filter(|event| matches!(event, ClientEvent::Message(ServerMessage::CampaignReload { .. }))).count()
+    };
+    assert_eq!(reloads(&mut net, host), 1);
+    assert_eq!(reloads(&mut net, guest), 1);
+    assert_eq!(reloads(&mut net, third), 0);
+    net.send(host, &ClientMessage::ChallengeLoaded);
+    net.send(guest, &ClientMessage::ChallengeLoaded);
+    net.run(100);
+    let restarted = resets(&mut net, third);
+    assert_eq!(restarted.len(), 1, "{restarted:?}");
+    assert_eq!(restarted[0].2.iter().filter(|&&id| id != 0).count(), 3, "three players in the restarted round");
     let _ = std::fs::remove_file(format!("campaign-{:016x}.save", campaign::KEY));
 }

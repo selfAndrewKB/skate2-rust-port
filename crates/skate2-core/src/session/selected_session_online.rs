@@ -431,8 +431,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                     self.online.searching = None;
                     self.online.sign_in = SignIn::Failed(reason);
                     self.online.user_id = None;
-                    let campaign_entered = self.online.game.as_ref().is_some_and(|game| game.entered && game.attributes.challenge_type == challenge::CAMPAIGN);
-                    if had_game && campaign_entered && !update && !nickname {
+                    // A campaign lost at any point, its career loading or up, is rejoined.
+                    let in_campaign = self.online.game.as_ref().is_some_and(|game| game.attributes.challenge_type == challenge::CAMPAIGN);
+                    if had_game && in_campaign && !update && !nickname {
                         self.online_campaign_dropped()?;
                     } else if self.online.campaign_rejoin && !update && !nickname {
                         // The server is not back yet: again in three seconds.
