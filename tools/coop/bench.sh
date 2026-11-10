@@ -25,8 +25,10 @@
 #                       SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>  the nearest puppet pedestrian
 #                         knocked down as a hit would, the contact sent to its owner (M1)
 #   Every seat traces online, career and coop decisions (SKATE2_TRACE_*=1): never blind.
-#   BENCH_VISIBLE     set to show the seats' windows; by default they open inactive and off-screen
-#                     (SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW), so the desktop stays yours
+#   BENCH_VISIBLE     set to show the seats' windows, tiled side by side from the top left (seat N
+#                     at x = (N-1) * width); by default they open inactive and off-screen
+#                     (SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW), so the desktop stays yours. A pad drives
+#                     the focused window's skater.
 #   WINDOW_SIZE       each seat's window (default 960x540)
 #   CAPTURE_EVERY     seconds between a seat's PNG captures, written by the game itself as
 #                     seat-N/capture_<n>.png (default 30; CAPTURE_FROM 60, CAPTURE_COUNT 40).
@@ -48,10 +50,15 @@ seats=${2:-2}
 
 seat_dirs() { ls -d "$BENCH"/seat-* 2>/dev/null || true; }
 
-# The window and capture environment every seat runs with.
+# The window and capture environment a seat runs with (its number tiles a shown window).
 window_env() {
-    printf 'SKATE2_DIAGNOSTIC_WINDOW_SIZE=%s' "${WINDOW_SIZE:-960x540}"
-    [ -n "${BENCH_VISIBLE:-}" ] || printf ' SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW=1'
+    size=${WINDOW_SIZE:-960x540}
+    printf 'SKATE2_DIAGNOSTIC_WINDOW_SIZE=%s' "$size"
+    if [ -n "${BENCH_VISIBLE:-}" ]; then
+        printf ' SKATE2_DIAGNOSTIC_WINDOW_POSITION=%s,40' "$(( (${1:-1} - 1) * ${size%x*} ))"
+    else
+        printf ' SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW=1'
+    fi
     printf ' SKATE2_DIAGNOSTIC_CAPTURE_EVERY=%s SKATE2_DIAGNOSTIC_CAPTURE_FROM=%s SKATE2_DIAGNOSTIC_CAPTURE_COUNT=%s' \
         "${CAPTURE_EVERY:-30}" "${CAPTURE_FROM:-60}" "${CAPTURE_COUNT:-40}"
 }
@@ -71,7 +78,7 @@ prime() {
             echo "seat $i: priming a profile (log $dir/prime.log)"
             (cd "$dir" && env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_CAREER=1 SKATE2_DIAGNOSTIC_CAREER_YES=1 \
                 SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" SKATE2_DIAGNOSTIC_MOVIE_SKIP=120 SKATE2_DIAGNOSTIC_COMPLETE_CHALLENGES="${PRIME_TICK:-1200}:m_1a_01_goto_slappys" \
-                SKATE2_DIAGNOSTIC_CAREER_QUIT_END="${PRIME_END:-6000}" $(window_env) \
+                SKATE2_DIAGNOSTIC_CAREER_QUIT_END="${PRIME_END:-6000}" $(window_env "$i") \
                 "$GAME" --live-skating --live-controls-demo career --live-completions 600000 --live-capture "$dir/prime.png" > prime.log 2>&1
              if [ -f "$dir/SKATER.P" ]; then cp "$dir/SKATER.P" "$dir/SKATER.P.primed"; echo "seat $i: primed (SKATER.P.primed kept)"; else echo "seat $i: no save was written (read $dir/prime.log)"; fi) &
         fi
@@ -112,7 +119,7 @@ start() {
         # The seat's whole environment is kept beside its log (seat.env), so a switch that did
         # not take is never a guess.
         (cd "$dir" && env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_DIAGNOSTIC_ONLINE="$online" \
-            SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" $(window_env) ${SEAT_EXTRA:-} $extra \
+            SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" $(window_env "$i") ${SEAT_EXTRA:-} $extra \
             sh -c 'env | grep "^SKATE2_" | sort > seat.env; exec "$0" "$@"' "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) &
         echo $! > "$dir/pid"
         # The creator must hold the lobby before a joiner searches.

@@ -20,6 +20,15 @@ Front page: [README](../README.md).
 6. A `controlled host backlog` of about 160 ticks at Continue Career (a hull reload) stalls
    both seats; the campaign's inactivity window (15 s) absorbs it.
 
+## Play (2026-11-10, the player, M5 build)
+
+31. Pedestrians' positions and the dodge when run into are synced; their models differ per
+    screen (the puppet spawn takes the owner's entity key and the census picks the recipe and
+    colours at random, though the descriptor carries them), and their startled runs and falls
+    are not mirrored (the owner's motion byte travels and the receiver never applies it; the
+    puppet's own graph has no moods since M5). All three are M6's first targets: the puppet
+    spawned with the owner's recipe, its animation from the owner's motion state and flags.
+
 ## Session ([topic](topics/session.md))
 
 7. Two primed saves continue at the same spot with the same look; the bench teleports the seats

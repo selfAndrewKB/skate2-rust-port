@@ -228,6 +228,14 @@ pub fn run_with_options(
     {
         builder = builder.with_inner_size(winit::dpi::LogicalSize::new(width, height));
     }
+    // SKATE2_DIAGNOSTIC_WINDOW_POSITION=X,Y: a scripted run's logical window position (the
+    // co-op bench tiles its seats side by side when they are shown).
+    if let Some((x, y)) = std::env::var("SKATE2_DIAGNOSTIC_WINDOW_POSITION")
+        .ok()
+        .and_then(|at| at.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<i32>().ok()?, y.trim().parse::<i32>().ok()?))))
+    {
+        builder = builder.with_position(winit::dpi::LogicalPosition::new(x, y));
+    }
     // SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW: a scripted run's window opens inactive, left of
     // every monitor, so it draws and captures without covering the desktop.
     if std::env::var_os("SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW").is_some() {
