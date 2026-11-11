@@ -705,6 +705,9 @@ pub(crate) struct AiSkaterManager {
     in_an_online_game: bool,
     has_challenge_asset_request_occurred: bool,
     pub(crate) allow_ambient_skater_spawn: bool,
+    /// Co-op fork: the slots the campaign's humans hold (0 to N-1); an ambient skater seats
+    /// itself after them. One (the career's own skater) outside a campaign.
+    pub(crate) human_slots: usize,
     /// The `cMsgSpawnAi`/`cMsgUnspawnAi` messages the `SkaterManager` takes after the frame.
     pub(crate) pending: Vec<AmbientCommand>,
     /// `mSkaterDistanceCallbacks`.
@@ -717,6 +720,7 @@ impl Default for AiSkaterManager {
         Self {
             assets: SkaterAssetManager::default(),
             players: [PlayerSlot::default(); 9],
+            human_slots: 1,
             update_count: 0,
             min_update_count_for_next_model_swap: 0,
             max_ambient_skaters_based_on_framerate: 0,
@@ -1262,7 +1266,7 @@ impl AiSkaterManager {
         }
         let result = &results[best_path];
         let transform = path::node_matrix(path::node(result.path.path(), result.node_index));
-        let Some(slot) = (1..9).find(|&slot| self.players[slot].player_type == player_type::NONE) else {
+        let Some(slot) = (self.human_slots.max(1)..9).find(|&slot| self.players[slot].player_type == player_type::NONE) else {
             return Ok(());
         };
         let recipe = recipes[best_recipe];

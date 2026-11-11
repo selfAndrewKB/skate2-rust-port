@@ -548,14 +548,20 @@ pub(crate) fn select_demo_characters(world: &mut World, no_asset_load: bool) -> 
 /// with competitors.
 pub(crate) fn is_activity_an_ai_challenge(world: &World, activity: usize) -> bool {
     let online = world.ai_link.as_ref().is_some_and(|link| link.manager().is_in_an_online_game());
-    let competitors = num_competitors(world, activity);
-    let is_ai = !online && !party_play(world) && competitors != 0;
+    !online && !party_play(world) && num_competitors(world, activity) != 0
+}
+
+/// The decision behind [`is_activity_an_ai_challenge`] on the `SKATE2_TRACE_AI` line, for the
+/// one-shot callers (the asset load's skater models and paths).
+pub(crate) fn trace_ai_challenge_decision(world: &World, activity: usize) {
+    let online = world.ai_link.as_ref().is_some_and(|link| link.manager().is_in_an_online_game());
     trace(format_args!(
-        "IsActivityAnAiChallenge {:#018x}: {is_ai} (manager online {online}, party play {}, {competitors} competitors)",
+        "IsActivityAnAiChallenge {:#018x}: {} (manager online {online}, party play {}, {} competitors)",
         world.activities.activities[activity].key,
-        party_play(world)
+        is_activity_an_ai_challenge(world, activity),
+        party_play(world),
+        num_competitors(world, activity)
     ));
-    is_ai
 }
 
 /// `ChallengeAIManager::AreAllAssetsLoaded` (`0x825b2c00`).

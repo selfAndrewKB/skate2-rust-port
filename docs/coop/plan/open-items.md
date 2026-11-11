@@ -258,3 +258,15 @@ Front page: [README](../README.md).
     missions' `*_challengelocator01` among them) are now a teleport's fallback when no registered
     arena holds the name (46); none of the crawl's unknown locators was among them, every one was a
     hull's.
+59. The seven team photo and film missions (`m_08_01_photo_team_shot_1`, `m_6a_01_filmfriend_70s`,
+    `m_6c_01_profilm_soho`, `m_6d_01_profilm_classic` and the `m_6p_*` team shoots) take their
+    competitors from the demo sponsor's team (`SelectDemoCharacters`), which is the team of the
+    pro the player beat in a throwdown (`pro_beaten_key`); on the crawl's save no pro was beaten
+    (the diagnostic win completes objectives, it beats no one), so the team is empty and the
+    spawn finds no recipe (`2026-11-11-crawl-ai3`, `SelectDemoCharacters: 0 competitors`). The
+    bench's limit, not co-op's: the sponsor team is a progression choice made in play. A bench
+    way through would be a save with a pro beaten, or a diagnostic that sets the beaten pro.
+60. The three `m_1x_01_*_ccenter_dlc` missions are the downloadable content's: their hull loads
+    from `missions.big` but their locator (`m_1x_01_ftl_ccenter_DLC_challengelocator_01`) is in no
+    archive of this game folder, which has no DLC installed. They stop at the spawn's "unknown
+    location" until the content is there.

@@ -412,6 +412,7 @@ pub fn shutdown_activity(world: &mut World, activity: usize) {
 /// sponsor's selects its characters, a jam, mega ramp or street skating challenge leaving
 /// their models to `CAIAssetOverride`.
 fn load_skater_models(world: &mut World, activity: usize) {
+    ai::trace_ai_challenge_decision(world, activity);
     if !ai::is_activity_an_ai_challenge(world, activity) {
         return;
     }

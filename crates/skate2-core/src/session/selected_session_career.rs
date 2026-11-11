@@ -1894,9 +1894,15 @@ impl CareerSession {
         if registered.is_some() {
             return Ok(registered);
         }
+        if self.system.world().coop.is_none() {
+            eprintln!("career: teleport to unknown location {location} ({pos_id}), held {:?}", locations.counts());
+            return Ok(None);
+        }
+        // Online a position past the sixth takes the sixth's, as `online_spawn_location`.
+        let position = if online { pos_id.min(5) } else { pos_id };
         let table = self.system.world().locations.get(&hash).copied().map(|mut transform| {
             #[expect(clippy::cast_precision_loss, reason = "the native (float) conversion")]
-            let offset = pos_id as f32 * -5.0;
+            let offset = position as f32 * -5.0;
             transform[14] += offset;
             transform
         });
@@ -2587,9 +2593,9 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// which join the humans' facts frames in a campaign round. Each console simulates its own
     /// AI skaters (the original's challenge AI is offline-only); what the scripts read of them
     /// is this console's, not shared.
-    pub(super) fn career_ai_skater_frames(&self) -> Result<Vec<MissionFrame>, SelectedLiveError> {
+    pub(super) fn career_ai_skater_frames(&self, humans: usize) -> Result<Vec<MissionFrame>, SelectedLiveError> {
         let mut frames = Vec::with_capacity(self.inner.ai_skaters.len());
-        for skater in &self.inner.ai_skaters {
+        for skater in self.inner.ai_skaters.iter().filter(|skater| usize::try_from(skater.player_index()).is_ok_and(|slot| slot >= humans)) {
             frames.push(self.mission_frame_of(&skater.actor, -1)?);
         }
         Ok(frames)
@@ -3072,10 +3078,10 @@ impl<T, C> SelectedLiveSession<T, C> {
             (false, Some(humans)) => {
                 for mut message in challenge_messages {
                     if let crate::hermes_challenge_queue::ChallengePayload::Skater { notification, player_id } = &mut message.payload
-                        && let Ok(slot) = usize::try_from(*player_id)
-                        && slot >= humans
+                        && usize::try_from(*player_id).is_ok_and(|slot| slot >= humans)
                     {
-                        let ordinal = i32::try_from(slot - humans + 1).unwrap_or(1);
+                        let slot = *player_id;
+                        let ordinal = crate::challenge::players::script_index(career.system.world(), slot);
                         crate::coop::trace(format_args!("AI skater at slot {slot} (the scripts' AI player {ordinal}): {notification:?}"));
                         *player_id = ordinal;
                         career.system.post(challenge_queue_event(message));

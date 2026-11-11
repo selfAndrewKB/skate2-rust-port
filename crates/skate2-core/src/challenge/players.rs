@@ -46,12 +46,12 @@ pub struct OnlineChallenge {
     /// The players with a peer id.
     pub players: i32,
     /// `PlayersBackEnd::GetPlayerIsDisconnected`, by player index.
-    pub disconnected: [bool; 8],
+    pub disconnected: [bool; 9],
     /// The player whose turn a turn-based challenge plays: the last one `AI.RepositionAI` moved
     /// with the camera (`setCamera`), its argument the script's turn player on every console.
     pub turn_player: Option<i32>,
     /// The players `AI.RepositionAI` teleported whose output has not yet finished the teleport.
-    pub teleporting: [bool; 8],
+    pub teleporting: [bool; 9],
     /// The round tick the challenge runs, the same on every console.
     pub tick: u32,
 }
@@ -73,20 +73,25 @@ pub(crate) fn network_local_player(world: &World) -> i32 {
 /// facts, never by number.
 pub(crate) fn script_slot(world: &World, player: i32) -> i32 {
     match world.coop.as_ref() {
-        Some(_) if player == 0 => world.local_player,
+        // The campaign's own slot, not `world.local_player`: that one follows the camera
+        // (`SwitchCamera`, a reposition with the camera) to an AI.
+        Some(_) if player == 0 => network_local_player(world),
         Some(campaign) if player > 0 => i32::try_from(campaign.players.len()).unwrap_or(1) - 1 + player,
         _ => player,
     }
 }
 
+/// Another human's slot as the scripts see it: no index at all.
+pub(crate) const NO_SCRIPT_INDEX: i32 = -1;
+
 /// Co-op fork: a slot as the scripts of a campaign number it ([`script_slot`] backwards): this
-/// console's skater 0, an AI skater its ordinal; another human has no index and keeps its slot.
+/// console's skater 0, an AI skater its ordinal, another human [`NO_SCRIPT_INDEX`].
 pub(crate) fn script_index(world: &World, slot: i32) -> i32 {
     match world.coop.as_ref() {
-        Some(_) if slot == world.local_player => 0,
+        Some(_) if slot == network_local_player(world) => 0,
         Some(campaign) => {
             let humans = i32::try_from(campaign.players.len()).unwrap_or(1);
-            if slot >= humans { slot - humans + 1 } else { slot }
+            if slot >= humans { slot - humans + 1 } else { NO_SCRIPT_INDEX }
         }
         None => slot,
     }
@@ -148,6 +153,12 @@ fn get_num_human_skaters(_: &mut Lua<World>, world: &mut World, _: &NativeCall) 
 
 /// `ChallengeManager.GetSkaterCount()` (`0x828825f8`): `PlayersBackEnd::GetNumPlayers`.
 fn get_skater_count(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
+    if let Some(campaign) = world.coop.as_ref() {
+        // Co-op fork: the scripts' view is the career's: one human and this console's AI rows.
+        let humans = i32::try_from(campaign.players.len()).unwrap_or(1);
+        let ai = (humans..9).filter(|&slot| crate::ai::skater_manager::player_type::is_ai(player_type(world, slot).cast_unsigned())).count();
+        return Ok(vec![int(1 + i32::try_from(ai).unwrap_or(0))]);
+    }
     Ok(vec![int(backend(world).map_or(0, PlayersBackEnd::num_players))])
 }
 

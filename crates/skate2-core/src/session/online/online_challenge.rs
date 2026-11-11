@@ -771,7 +771,7 @@ impl OnlinePlayers {
     /// challenge AI skaters, whose row the AI manager creates in the profile's back end at the
     /// skater's slot (`AISkaterManager::post`); the row answers for it.
     fn ai_row(&self, player: i32) -> Option<i32> {
-        (player >= self.count()).then_some(player)
+        (player >= self.count() && crate::ai::skater_manager::player_type::is_ai(self.settings.player_type(player).cast_unsigned())).then_some(player)
     }
 
     /// The profile's row a player's settings live in: the local skater's or an AI skater's.
@@ -992,7 +992,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             .career
             .as_ref()
             .and_then(|career| career.system.world().online.as_ref())
-            .map_or((None, [false; 8]), |online| (online.turn_player, online.teleporting));
+            .map_or((None, [false; 9]), |online| (online.turn_player, online.teleporting));
         let (Some(round), Some(game)) = (self.online.round.as_mut(), self.online.game.as_ref()) else { return };
         if !round.turn_based {
             return;
@@ -1096,6 +1096,11 @@ impl<T, C> SelectedLiveSession<T, C> {
         world.local_player = local_index;
         world.online = Some(OnlineChallenge { local_player: local_index, players: i32::try_from(count).unwrap_or(0), ..OnlineChallenge::default() });
         world.coop = Some(crate::coop::rules::CampaignWorld { rules, players: (0..i32::try_from(count).unwrap_or(0)).collect(), chase_on: false });
+        // Co-op fork (open items 45, 53): this console's AI skaters, ambient and challenge, seat
+        // themselves after the campaign's humans.
+        if let Some(ai) = self.inner.ai.as_ref() {
+            ai.manager().human_slots = count;
+        }
         career.online_random = Some(random);
         career.nis.set_online_game(true);
         // The design's online rule for scenes: no skip, so every console sees a scene end at the
@@ -1789,8 +1794,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                     // Co-op fork (open item 45): this console's own challenge AI skaters join the
                     // humans' facts frames, so the scripts find them at their slots.
                     let mut frames = frames;
-                    if self.career.as_ref().is_some_and(|career| career.system.world().coop.is_some()) {
-                        frames.extend(self.career_ai_skater_frames()?);
+                    if let Some(humans) = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.players.len()) {
+                        frames.extend(self.career_ai_skater_frames(humans)?);
                         frames.sort_by_key(|frame| frame.player);
                     }
                     self.career_step(Some((frames, local, own)))?;
