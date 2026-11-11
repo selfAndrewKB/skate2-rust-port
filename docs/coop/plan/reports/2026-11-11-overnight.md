@@ -6,7 +6,7 @@ ledger of states: [versions](../versions.md); every mission: [missions](../missi
 
 ## Where things are
 
-- Branch `coop` at `7e8073e`, pushed; tags `coop-v0.9.1-mission-ledger` (the crawl's record) and
+- Branch `coop`, pushed (this report is its last commit); tags `coop-v0.9.1-mission-ledger` (the crawl's record) and
   `coop-v0.9.2-puppet-standup` (the fix below). The release build in `dist/` is the pushed code.
 - The two-seat lobby is up on that build (`m6-play.sh`), on the campaign save the crawl carried
   (83 missions' completions, kept by your choice; a copy at
