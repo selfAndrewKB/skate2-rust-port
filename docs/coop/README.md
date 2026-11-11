@@ -6,7 +6,10 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.10.0-ai-skaters`**
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.11.0-outcome-notes`**
+(2026-11-11): M9, the competing kinds: a script's decision about its own player travels as a
+note on its facts and the rules settle the mission (a win on one seat completes it on both under
+`Anyone`; [design](plan/design.md) §7). Before it, `coop-v0.10.0-ai-skaters`
 (2026-11-11): the AI families run in a campaign. The AI skaters were never the port's blocker:
 a campaign told the AI manager it was in a network game, the scripts count their AI three ways
 and a two-seat round made one index mean two skaters, the AI's creation message was dropped, and
@@ -39,7 +42,8 @@ open items a person's play decides (New Career in a lobby, 41; a rejoin notice, 
 
 ## What's next
 
-Play on the `coop-v0.10.0` lobby build: the AI missions with two people. The AI day's report
+Play on the `coop-v0.11.0` lobby build: the AI missions with two people, and a S.K.A.T.E. or
+contest, where the first human to win now ends it for both. The AI day's report
 says what changed and what it measured:
 [reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md); the night before it:
 [reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md).

@@ -73,6 +73,23 @@ review's fixes, the milestone's proof.
 - The results screen's rows and the objectives' per-player fan-out keep the simulation's
   indexes (56, "not routed").
 
+## The afternoon: the competing kinds (M9)
+
+The competing kinds (S.K.A.T.E., jams, contests) read their AI's outcome, and that is each
+console's own, so their scripts part where a leader fails its trick (open item 62). The answer
+chosen is the ledger's "the one who did it" kind, as the prompts: a script's decision about its
+own player (an objective forced complete, the objectives all failed, the mission won or lost on
+the script's own terms) is not applied where it is made; it travels as an outcome note on that
+player's facts (protocol 122) and every console applies it to that player's copy at the note's
+tick; the rules settle the mission once per attempt. A completion that follows the shared
+objective completion still applies at once, as before. Proven on the bench with the diagnostic
+win on seat 1 alone: both seats applied the notes and entered the mission's cleanup at the same
+tick. The review found the first discriminator wrong (a retired copy would have routed the
+shared completion as a note and completed the mission twice on one console); it is the rule's
+threshold now. Two pre-existing gaps are recorded (63, 64). What is not shared is the AI's run
+itself: a S.K.A.T.E. still plays its rounds once per console; the first human to win ends it
+for both.
+
 ## Next
 
 Play on this build: a follow mission, a photo mission and a demo with two people, watching the

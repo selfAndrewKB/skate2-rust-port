@@ -35,6 +35,7 @@ what the ledger states is what those logs say.
 | `2026-11-11-crawl-ai2` | 6 | PASS 1, STOPPED 5 | build 9981ee26, commit 6772b2b (the AI day: the manager offline in a campaign, the scripts' index space, the AI's messages, the preload, the win after the running state); the six probe missions of the AI families, `CRAWL_WAIT_S=200`, AI and career traces on; every mission's state sequence identical on both seats. | `bench/evidence/2026-11-11-crawl-ai2.md` |
 | `2026-11-11-crawl-ai3` | 26 | PASS 10, STOPPED 16 | the same build; the 26 other missions the 2026-11-10 crawl had stopped at, `CRAWL_WAIT_S=200`; 11 PASS, 15 STOPPED, every stop at the same state on both seats, one (`m_7a_02`) a tick apart at one state. | `bench/evidence/2026-11-11-crawl-ai3.md` |
 | `2026-11-11-crawl-ai4` | 6 | PASS 1, STOPPED 5 | build 6b106be5, commit 9fc64a1 (the review's fixes: ambient skaters seated after the humans and evicted from a human's slot at the round start, player 0 the campaign's slot, the back end's AI rows gated); the six probe missions again, every state sequence identical on both seats: the milestone's proof. | `bench/evidence/2026-11-11-crawl-ai4.md` |
+| `2026-11-11-crawl-m9` | 9 | PASS 6, STOPPED 3 | build 327caf08, commit ea2381d (M9, outcomes as notes: the win and a script's forced outcomes travel on the player's facts); nine missions across the families as a regression check, `CRAWL_WAIT_S=200`; every state sequence identical on both seats, the tutorials and go-to saves agreeing, the AI missions standing as before. | `bench/evidence/2026-11-11-crawl-m9.md` |
 
 ### Missions
 
@@ -48,9 +49,9 @@ Kind, from `challenge_global_data.Global`: main (3, 4: executed and won), locati
 | `m_08_01_photo_team_shot_1` | photo (team) † | main | Anyone | STOPPED | `spawn_player` @1368 | bench: no sponsor team | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | the demo sponsor's team is empty on the crawl's save (no pro beaten), so the team photo has no one to spawn (open item 59); both seats stop alike. |
 | `m_08_01_teleport_trainingfacility_in` | property (teleport) | location | Anyone (table) | PASS | — | — | yes | 2026-11-10-rest2: PASS | the execute's teleport named an empty location (hash 0): the mission's `MapStartLocation` is unset; completed by name, saves agree (open item 54). |
 | `m_08_01_teleport_trainingfacility_out` | property (teleport) | location | Anyone (table) | PASS | — | — | yes | 2026-11-10-rest2: PASS | as `m_08_01_teleport_trainingfacility_in`. |
-| `m_1a_01_goto_slappys` | tutorial | main | Everyone | PASS | — | — | yes | 2026-11-10-m1a: PASS |  |
-| `m_1a_02_open_up` | tutorial | main | Everyone | PASS | — | — | yes | 2026-11-10-m1a: PASS |  |
-| `m_1a_03_tutorial_fliptricks` | tutorial | main | Everyone | PASS (no save) | — | — | yes | 2026-11-10-m1a: PASS (saves differ) | a tutorial autosaves nothing; the first report's "saves differ" was the old label for no save. |
+| `m_1a_01_goto_slappys` | tutorial | main | Everyone | PASS | — | — | yes | 2026-11-10-m1a: PASS, 2026-11-11-m9: PASS |  |
+| `m_1a_02_open_up` | tutorial | main | Everyone | PASS | — | — | yes | 2026-11-10-m1a: PASS, 2026-11-11-m9: PASS |  |
+| `m_1a_03_tutorial_fliptricks` | tutorial | main | Everyone | PASS (no save) | — | — | yes | 2026-11-10-m1a: PASS (saves differ), 2026-11-11-m9: PASS (no save) | a tutorial autosaves nothing; the first report's "saves differ" was the old label for no save. |
 | `m_1a_04_tutorial_manuals` | tutorial | main | Everyone | PASS | — | — | yes | 2026-11-10-m1a: PASS |  |
 | `m_1a_05_photo_rail` | photo (team) † | main | Everyone | PASS (no save) | — | — | yes | 2026-11-10-m1a: STOPPED, 2026-11-11-ai3: PASS (no save) | PASS on the AI-day build (`2026-11-11-crawl-ai3`), as `m_5a_01_photo_thrasher`. |
 | `m_1a_05_tutorial_scoring` | tutorial | main | Everyone | PASS | — | — | yes | 2026-11-10-m1a: PASS |  |
@@ -89,9 +90,9 @@ Kind, from `challenge_global_data.Global`: main (3, 4: executed and won), locati
 | `m_3a_01_pro_duffy` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_3a_02_pro_ladd` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_3a_03_besttrick_danny` | jam | main | Compete (table) | STOPPED | `results_screen` @6522 | in step: the mission ended on its own terms | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | the AI competitors spawn and the contest runs the same states at the same round ticks on both seats on the AI-day build (`2026-11-11-crawl-ai3`) to its results screen; the diagnostic win completes no objective of a points contest. |
-| `m_4a_01_skate_carroll_koston` | S.K.A.T.E. † | main | Anyone (table) | STOPPED | `wait_for_scoring` @10993 | in step: the mission runs on | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: STOPPED, 2026-11-11-ai4: STOPPED | the two AI leaders spawn at slots 2 and 3 on both seats and the rounds run in step (53 states alike, `2026-11-11-crawl-ai2`); each AI leader fails its set trick in turn and the bench sets none, so the game has no end on the bench (the competing kinds, [kinds](topics/kinds.md)). |
+| `m_4a_01_skate_carroll_koston` | S.K.A.T.E. † | main | Anyone (table) | STOPPED | `wait_for_scoring` @11050 | in step: the mission runs on | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: STOPPED, 2026-11-11-ai4: STOPPED, 2026-11-11-m9: STOPPED | the two AI leaders spawn at slots 2 and 3 on both seats and the rounds run in step (53 states alike, `2026-11-11-crawl-ai2`); each AI leader fails its set trick in turn and the bench sets none, so the game has no end on the bench (the competing kinds, [kinds](topics/kinds.md)). |
 | `m_4a_01_skate_carroll_koston_ol` | S.K.A.T.E. † | none | Anyone (table) | PASS | — | — | — | 2026-11-10-rest2: PASS |  |
-| `m_4b_01_pro_navarrette_1` | follow | main | Anyone | STOPPED | `run_heat` @2526 | in step: the mission runs on | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: STOPPED, 2026-11-11-ai4: STOPPED | the pro spawns at slot 2 on both seats and the heat runs in step past the diagnostic win (`run_heat`, `2026-11-11-crawl-ai2`); its end is the pro's path, past the bench's deadline (open item 45). |
+| `m_4b_01_pro_navarrette_1` | follow | main | Anyone | STOPPED | `run_heat` @2524 | in step: the mission runs on | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: STOPPED, 2026-11-11-ai4: STOPPED, 2026-11-11-m9: STOPPED | the pro spawns at slot 2 on both seats and the heat runs in step past the diagnostic win (`run_heat`, `2026-11-11-crawl-ai2`); its end is the pro's path, past the bench's deadline (open item 45). |
 | `m_4b_02_pro_navarrette_2` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_4c_01_pro_cardiel` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_4d_01_goto_dill_dyrdek` | goto | location | Anyone (table) | PASS | — | — | yes | 2026-11-10-rest2: PASS |  |
@@ -102,13 +103,13 @@ Kind, from `challenge_global_data.Global`: main (3, 4: executed and won), locati
 | `m_4f_01_pro_brown` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_4g_01_spotfilm_johnson` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-long-intro: PASS (no save) | the crawl's win at 1800 came during the pro's intro scene (`nis_overview` to 2453, `challenge_running` at 2723), so the script never saw a completion; with the win at 3600 it ran `challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options` and passed (open item 51). |
 | `m_4h_01_pro_appleyard` | follow | main | Anyone | STOPPED | `run_heat` @2343 | in step: the mission runs on | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | as `m_4b_01_pro_navarrette_1` (`2026-11-11-crawl-ai3`). |
-| `m_4i_01_spotfilm_barbee` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: PASS (no save) | PASS on the AI-day build (`2026-11-11-crawl-ai3`), as `m_4e_01_spotfilm_braydon_kennedy_2`; the `check_ai` divergence of 2026-11-10 was the scripts' index space (open item 56). |
+| `m_4i_01_spotfilm_barbee` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: PASS (no save), 2026-11-11-m9: PASS (no save) | PASS on the AI-day build (`2026-11-11-crawl-ai3`), as `m_4e_01_spotfilm_braydon_kennedy_2`; the `check_ai` divergence of 2026-11-10 was the scripts' index space (open item 56). |
 | `m_4j_01_pro_busenitz` | follow | main | Anyone | STOPPED | `run_heat` @2404 | in step: the mission runs on | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | as `m_4b_01_pro_navarrette_1` (`2026-11-11-crawl-ai3`). |
 | `m_4k_01_spotfilm_haslam` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: PASS (no save) | as `m_4i_01_spotfilm_barbee`. |
 | `m_4l_01_pro_rattray_cole_1` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_4m_01_pro_rattray_cole_2` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_4n_01_lucas_puig` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: PASS (no save) | as `m_4i_01_spotfilm_barbee`. |
-| `m_5a_01_photo_thrasher` | photo (team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: PASS (no save), 2026-11-11-ai4: PASS (no save) | PASS on the AI-day build (`2026-11-11-crawl-ai2`, `-ai4`): Chris Haslam selected at the asset load on both seats, spawned at slot 2 on both, the states identical to the tick; before, the recipe-None stop (open items 55, 56). |
+| `m_5a_01_photo_thrasher` | photo (team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: PASS (no save), 2026-11-11-ai4: PASS (no save), 2026-11-11-m9: PASS (no save) | PASS on the AI-day build (`2026-11-11-crawl-ai2`, `-ai4`): Chris Haslam selected at the asset load on both seats, spawned at slot 2 on both, the states identical to the tick; before, the recipe-None stop (open items 55, 56). |
 | `m_5a_02_photo_thrasher` | photo | main | Anyone (table) | STOPPED | `photo` @5240 | in step: the mission ended on its own terms | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | the pro spawns and the photo round runs the same states at the same round ticks on both seats on the AI-day build (`2026-11-11-crawl-ai3`) to the `photo` state (the photo to take), past a win that completed no objective (the round's). |
 | `m_5a_03_photo_thrasher_cardiel` | photo | main | Anyone (table) | STOPPED | `photo` @7196 | in step: the mission ended on its own terms | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | as `m_5a_02_photo_thrasher`. |
 | `m_5a_04_thrasher_cole` | photo | main | Anyone (table) | STOPPED | `photo` @7036 | in step: the mission ended on its own terms | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | as `m_5a_02_photo_thrasher`. |
@@ -127,7 +128,7 @@ Kind, from `challenge_global_data.Global`: main (3, 4: executed and won), locati
 | `m_6p_01_thrasher_01` | photo (team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_6p_02_film_pool_team_02` | pro film † | none | Anyone (table) | PASS | — | — | — | 2026-11-10-rest2: PASS |  |
 | `m_6p_02_photo_pool_thrasher_2` | photo (team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
-| `m_6p_03_demo_pool_team_03` | film team † | main | Anyone (table) | PASS | — | — | yes | 2026-11-10-rest2: STOPPED | the film-team graph goes `initial→challenge_running→complete` at tick 1082, 182 ticks after the execute, and autosaves (hashes agree); the win at 1800 found nothing left. The run report's STOPPED is the old pass test (`challenge_cleanup` only); the ledger counts `complete`. Open item 52. |
+| `m_6p_03_demo_pool_team_03` | film team † | main | Anyone (table) | PASS | — | — | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-m9: PASS | the film-team graph goes `initial→challenge_running→complete` at tick 1082, 182 ticks after the execute, and autosaves (hashes agree); the win at 1800 found nothing left. The run report's STOPPED is the old pass test (`challenge_cleanup` only); the ledger counts `complete`. Open item 52. |
 | `m_6p_03_film_team_03` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_6p_03_photo_pool_thrasher_3` | photo (team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_6p_04_photo_pool_thrasher_4` | photo (team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
@@ -148,7 +149,7 @@ Kind, from `challenge_global_data.Global`: main (3, 4: executed and won), locati
 | `m_6p_12_film_pool_team_12` | film (pool team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_6p_13_film_pool_team_13` | film (pool team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_6p_14_film_pool_team_14` | film (pool team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
-| `m_7a_01_demo_dyrdek` | demo † | main | Anyone | STOPPED | `end_options` @11127 | in step: the mission ended on its own terms | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: STOPPED, 2026-11-11-ai4: STOPPED | four pros spawn at slots 2 to 5 on both seats; the demo's rounds run in step to `end_options` (14 states alike, `2026-11-11-crawl-ai2`), lost by a bench that does no tricks. |
+| `m_7a_01_demo_dyrdek` | demo † | main | Anyone | STOPPED | `end_options` @11127 | in step: the mission ended on its own terms | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai2: STOPPED, 2026-11-11-ai4: STOPPED, 2026-11-11-m9: STOPPED | four pros spawn at slots 2 to 5 on both seats; the demo's rounds run in step to `end_options` (14 states alike, `2026-11-11-crawl-ai2`), lost by a bench that does no tricks. |
 | `m_7a_02_jam_monster_public_park` | jam | main | Compete (table) | STOPPED | `results_screen` @5627 | in step: the mission ended on its own terms | yes | 2026-11-10-rest2: STOPPED, 2026-11-11-ai3: STOPPED | the jam's eight competitors spawn at `m_7a_02_jam_round1_locators` once the hull is preloaded (open item 58); the seats left `wait_for_assetload` one tick apart (906, 907: the load's own timing, open item 57) and ran the rest alike to the results screen (`2026-11-11-crawl-ai3`). |
 | `m_7a_02_jam_monster_public_park_ol` | jam | none | Compete (table) | PASS | — | — | — | 2026-11-10-rest2: PASS |  |
 | `m_7b_02_photo_cover_thrasher` | photo (team) † | none | Anyone (table) | PASS | — | — | — | 2026-11-10-rest2: PASS |  |
@@ -170,9 +171,9 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_08_01_photo_team_shot_1` | 0 | — | — | — | — | 0.00 m / 0° | 0 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1368 |
 | `m_08_01_teleport_trainingfacility_in` | 3371 | 100.0 % | 95.0 % | 75.6 % | 100.0 % | 0.13 m / 19° | 16 (11 / 6) | 5930 | 0 | 0/0/0/0 | 0 | 0 / 0 | 900 |
 | `m_08_01_teleport_trainingfacility_out` | 3137 | 100.0 % | 96.6 % | 77.5 % | 100.0 % | 0.54 m / 13° | 16 (11 / 5) | 5749 | 0 | 0/0/0/0 | 0 | 0 / 0 | 900 |
-| `m_1a_01_goto_slappys` | 0 | — | — | — | — | 0.00 m / 0° | 0 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 18 / 6 | 9287 |
-| `m_1a_02_open_up` | 0 | — | — | — | — | 0.00 m / 0° | 0 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 2209 |
-| `m_1a_03_tutorial_fliptricks` | 357 | 100.0 % | 97.5 % | 77.9 % | 100.0 % | 0.09 m / 13° | 4 (1 / 1) | 646 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1981 |
+| `m_1a_01_goto_slappys` | 0 | — | — | — | — | 0.00 m / 0° | 0 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 8841 |
+| `m_1a_02_open_up` | 0 | — | — | — | — | 0.00 m / 0° | 0 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1747 |
+| `m_1a_03_tutorial_fliptricks` | 0 | — | — | — | — | 0.00 m / 0° | 1 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1521 |
 | `m_1a_04_tutorial_manuals` | 384 | 100.0 % | 90.9 % | 76.8 % | 100.0 % | 0.13 m / 13° | 1 (1 / 1) | 354 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1981 |
 | `m_1a_05_photo_rail` | 0 | — | — | — | — | 0.00 m / 0° | 1 (0 / 0) | 244 | 1 | 0/0/0/0 | 0 | 0 / 0 | 2049 |
 | `m_1a_05_tutorial_scoring` | 641 | 100.0 % | 96.1 % | 76.9 % | 100.0 % | 0.08 m / 13° | 2 (1 / 1) | 647 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1981 |
@@ -211,9 +212,9 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_3a_01_pro_duffy` | 2225 | 98.0 % | 95.8 % | 53.6 % | 100.0 % | 11.49 m / 48° | 14 (11 / 10) | 5955 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_3a_02_pro_ladd` | 2050 | 98.4 % | 94.7 % | 60.8 % | 100.0 % | 6.27 m / 51° | 18 (12 / 9) | 6393 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_3a_03_besttrick_danny` | 0 | — | — | — | — | 0.00 m / 0° | 0 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 6522 |
-| `m_4a_01_skate_carroll_koston` | 6337 | 100.0 % | 93.9 % | 77.8 % | 100.0 % | 0.17 m / 22° | 8 (4 / 5) | 2216 | 2 | 0/0/0/0 | 0 | 3 / 0 | 10993 |
+| `m_4a_01_skate_carroll_koston` | 7227 | 100.0 % | 96.0 % | 76.9 % | 100.0 % | 0.13 m / 30° | 7 (2 / 5) | 2074 | 2 | 0/0/0/0 | 0 | 0 / 0 | 11050 |
 | `m_4a_01_skate_carroll_koston_ol` | 3382 | 100.0 % | 91.5 % | 77.5 % | 100.0 % | 0.13 m / 29° | 21 (12 / 9) | 5656 | 0 | 0/0/0/0 | 0 | 0 / 0 | 0 |
-| `m_4b_01_pro_navarrette_1` | 22951 | 100.0 % | 90.0 % | 79.3 % | 100.0 % | 0.82 m / 30° | 19 (10 / 11) | 5204 | 0 | 0/0/0/0 | 0 | 0 / 0 | 2526 |
+| `m_4b_01_pro_navarrette_1` | 26908 | 100.0 % | 90.6 % | 81.3 % | 100.0 % | 0.22 m / 30° | 20 (11 / 11) | 5789 | 0 | 0/0/0/0 | 0 | 0 / 0 | 2524 |
 | `m_4b_02_pro_navarrette_2` | 2110 | 100.0 % | 90.6 % | 80.1 % | 100.0 % | 0.32 m / 19° | 18 (12 / 6) | 6218 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_4c_01_pro_cardiel` | 2218 | 99.9 % | 91.4 % | 76.5 % | 100.0 % | 0.72 m / 29° | 15 (12 / 6) | 6014 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_4d_01_goto_dill_dyrdek` | 2720 | 100.0 % | 95.6 % | 78.0 % | 100.0 % | 0.11 m / 13° | 17 (12 / 7) | 5691 | 0 | 0/0/0/0 | 0 | 0 / 0 | 900 |
@@ -224,13 +225,13 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_4f_01_pro_brown` | 3111 | 100.0 % | 95.4 % | 76.2 % | 100.0 % | 0.51 m / 14° | 19 (11 / 8) | 5364 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_4g_01_spotfilm_johnson` | 2168 | 100.0 % | 94.0 % | 80.5 % | 100.0 % | 0.16 m / 14° | 15 (4 / 10) | 1725 | 0 | 0/0/0/0 | 0 | 0 / 0 | 3721 |
 | `m_4h_01_pro_appleyard` | 24905 | 100.0 % | 92.7 % | 76.7 % | 100.0 % | 1.55 m / 30° | 18 (10 / 11) | 4937 | 0 | 0/0/0/0 | 0 | 0 / 0 | 2343 |
-| `m_4i_01_spotfilm_barbee` | 555 | 100.0 % | 95.1 % | 76.0 % | 100.0 % | 0.10 m / 13° | 4 (2 / 2) | 1481 | 0 | 0/0/0/0 | 0 | 0 / 0 | 3463 |
+| `m_4i_01_spotfilm_barbee` | 771 | 100.0 % | 97.7 % | 79.5 % | 100.0 % | 0.12 m / 13° | 9 (4 / 5) | 1808 | 0 | 0/0/0/0 | 0 | 0 / 0 | 3466 |
 | `m_4j_01_pro_busenitz` | 11158 | 100.0 % | 93.4 % | 77.5 % | 100.0 % | 0.99 m / 29° | 20 (12 / 8) | 6515 | 1 | 0/24/0/0 | 1 | 0 / 0 | 2404 |
 | `m_4k_01_spotfilm_haslam` | 2599 | 100.0 % | 88.6 % | 77.6 % | 100.0 % | 0.16 m / 19° | 12 (2 / 10) | 1146 | 0 | 0/0/0/0 | 0 | 0 / 0 | 3329 |
 | `m_4l_01_pro_rattray_cole_1` | 21665 | 99.9 % | 92.4 % | 78.1 % | 100.0 % | 0.71 m / 30° | 22 (11 / 12) | 5740 | 0 | 0/0/0/0 | 0 | 0 / 0 | 7848 |
 | `m_4m_01_pro_rattray_cole_2` | 19881 | 99.9 % | 93.0 % | 77.4 % | 100.0 % | 0.72 m / 30° | 21 (12 / 12) | 5857 | 0 | 0/0/0/0 | 0 | 0 / 0 | 7303 |
 | `m_4n_01_lucas_puig` | 2197 | 100.0 % | 96.0 % | 77.8 % | 100.0 % | 0.12 m / 18° | 16 (8 / 7) | 3522 | 0 | 0/0/0/0 | 0 | 0 / 0 | 3279 |
-| `m_5a_01_photo_thrasher` | 143 | 100.0 % | 86.0 % | 77.6 % | 100.0 % | 0.09 m / 18° | 2 (0 / 1) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1777 |
+| `m_5a_01_photo_thrasher` | 49 | 100.0 % | 100.0 % | 75.5 % | 100.0 % | 0.07 m / 2° | 4 (2 / 1) | 598 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1778 |
 | `m_5a_02_photo_thrasher` | 0 | — | — | — | — | 0.00 m / 0° | 1 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 5240 |
 | `m_5a_03_photo_thrasher_cardiel` | 0 | — | — | — | — | 0.00 m / 0° | 1 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 7196 |
 | `m_5a_04_thrasher_cole` | 0 | — | — | — | — | 0.00 m / 0° | 1 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 7036 |
@@ -249,7 +250,7 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_6p_01_thrasher_01` | 2877 | 99.4 % | 91.7 % | 67.5 % | 100.0 % | 0.70 m / 18° | 19 (12 / 9) | 6163 | 0 | 0/0/0/0 | 1 | 4 / 0 | 1800 |
 | `m_6p_02_film_pool_team_02` | 2796 | 100.0 % | 93.7 % | 77.4 % | 100.0 % | 0.12 m / 19° | 17 (12 / 5) | 6078 | 0 | 0/0/0/0 | 0 | 0 / 0 | 0 |
 | `m_6p_02_photo_pool_thrasher_2` | 1952 | 99.6 % | 95.6 % | 71.9 % | 100.0 % | 0.70 m / 18° | 18 (12 / 6) | 6212 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1800 |
-| `m_6p_03_demo_pool_team_03` | 25339 | 100.0 % | 93.4 % | 81.3 % | 100.0 % | 0.14 m / 30° | 21 (11 / 11) | 5799 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1082 |
+| `m_6p_03_demo_pool_team_03` | 0 | — | — | — | — | 0.00 m / 0° | 0 (0 / 0) | 100 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1082 |
 | `m_6p_03_film_team_03` | 669 | 97.5 % | 96.4 % | 55.0 % | 100.0 % | 0.70 m / 30° | 14 (12 / 2) | 5016 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_6p_03_photo_pool_thrasher_3` | 1383 | 99.0 % | 88.8 % | 64.2 % | 100.0 % | 0.75 m / 19° | 15 (12 / 3) | 5506 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1800 |
 | `m_6p_04_photo_pool_thrasher_4` | 3619 | 99.8 % | 92.5 % | 77.3 % | 100.0 % | 0.71 m / 13° | 15 (8 / 10) | 3876 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1800 |
@@ -270,7 +271,7 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_6p_12_film_pool_team_12` | 3130 | 100.0 % | 93.4 % | 82.3 % | 100.0 % | 0.24 m / 29° | 19 (12 / 7) | 6394 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_6p_13_film_pool_team_13` | 3108 | 100.0 % | 93.2 % | 80.4 % | 100.0 % | 0.10 m / 19° | 19 (12 / 7) | 6285 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_6p_14_film_pool_team_14` | 4771 | 100.0 % | 95.8 % | 79.9 % | 100.0 % | 0.50 m / 21° | 20 (11 / 9) | 5773 | 0 | 0/0/0/0 | 0 | 0 / 0 | 1921 |
-| `m_7a_01_demo_dyrdek` | 20087 | 99.9 % | 99.8 % | 99.4 % | 57.1 % | 0.76 m / 15° | 32 (16 / 16) | 5800 | 0 | 6504/5221/2/6 | 0 | 0 / 0 | 11127 |
+| `m_7a_01_demo_dyrdek` | 19869 | 100.0 % | 99.8 % | 99.5 % | 80.8 % | 0.76 m / 15° | 32 (16 / 16) | 5421 | 0 | 275/367/2/4 | 0 | 0 / 0 | 11127 |
 | `m_7a_02_jam_monster_public_park` | 6262 | 100.0 % | 98.4 % | 98.4 % | 100.0 % | 0.72 m / 14° | 24 (12 / 18) | 6412 | 0 | 0/0/0/0 | 0 | 0 / 0 | 5627 |
 | `m_7a_02_jam_monster_public_park_ol` | 2476 | 100.0 % | 93.7 % | 78.1 % | 100.0 % | 0.10 m / 18° | 18 (11 / 8) | 5834 | 0 | 0/0/0/0 | 0 | 0 / 0 | 0 |
 | `m_7b_02_photo_cover_thrasher` | 3341 | 100.0 % | 88.0 % | 80.1 % | 100.0 % | 0.72 m / 20° | 19 (12 / 8) | 6066 | 0 | 0/0/0/0 | 0 | 0 / 0 | 0 |
@@ -333,9 +334,9 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_3a_01_pro_duffy` | 41 | 393 | 12 / 0 | 93.1 % (8.7 m) | 90.6 % (54.8°) | 56.2 % (13.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 27 |
 | `m_3a_02_pro_ladd` | 34 | 372 | 15 / 4 | 99.5 % (1.6 m) | 93.8 % (51.2°) | 69.6 % (10.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 16 |
 | `m_3a_03_besttrick_danny` | — | — | — | — | — | — | — | — | — | — | — |
-| `m_4a_01_skate_carroll_koston` | 127 | 623 | 11 / 3 | 99.7 % (0.8 m) | 93.7 % (54.1°) | 70.1 % (30.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 45 | 10 |
+| `m_4a_01_skate_carroll_koston` | 139 | 587 | 4 / 4 | 99.8 % (1.6 m) | 94.5 % (63.2°) | 77.2 % (80.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 33 | 11 |
 | `m_4a_01_skate_carroll_koston_ol` | 42 | 679 | 15 / 3 | 100.0 % | 94.8 % (44.8°) | 62.6 % (4.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 14 |
-| `m_4b_01_pro_navarrette_1` | 152 | 2388 | 3 / 3 | 99.7 % (1.6 m) | 88.4 % (74.7°) | 71.2 % (27.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 12 | 17 |
+| `m_4b_01_pro_navarrette_1` | 152 | 2512 | 1 / 6 | 100.0 % (0.8 m) | 88.8 % (81.3°) | 80.2 % (40.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 15 | 7 |
 | `m_4b_02_pro_navarrette_2` | 42 | 392 | 13 / 14 | 98.5 % (6.6 m) | 91.6 % (72.3°) | 76.3 % (10.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 23 |
 | `m_4c_01_pro_cardiel` | 42 | 525 | 16 / 0 | 97.3 % (5.6 m) | 89.7 % (34.0°) | 66.1 % (14.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 43 |
 | `m_4d_01_goto_dill_dyrdek` | 42 | 564 | 15 / 0 | 98.6 % (5.5 m) | 89.9 % (107.7°) | 68.8 % (82.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 31 |
@@ -346,13 +347,13 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_4f_01_pro_brown` | 43 | 477 | 11 / 0 | 99.0 % (3.3 m) | 89.9 % (42.1°) | 70.0 % (7.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 33 |
 | `m_4g_01_spotfilm_johnson` | 29 | 283 | 1 / 1 | 97.2 % (1.2 m) | 92.2 % (34.0°) | 64.7 % (7.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 13 |
 | `m_4h_01_pro_appleyard` | 155 | 2456 | 6 / 5 | 99.6 % (2.7 m) | 89.4 % (83.9°) | 74.9 % (12.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 14 |
-| `m_4i_01_spotfilm_barbee` | 19 | 78 | 1 / 0 | 100.0 % | 94.9 % (38.5°) | 67.9 % (30.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 6 | 2 |
+| `m_4i_01_spotfilm_barbee` | 19 | 122 | 0 / 0 | 100.0 % | 80.3 % (40.4°) | 73.8 % (2.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 15 | 1 |
 | `m_4j_01_pro_busenitz` | 153 | 1747 | 1 / 2 | 99.9 % (0.8 m) | 86.8 % (68.4°) | 75.8 % (3.6 m/s) | 98.7 % | 98.8 % | 100.0 % | 0 | 11 |
 | `m_4k_01_spotfilm_haslam` | 22 | 209 | 2 / 0 | 99.5 % (1.0 m) | 90.9 % (34.0°) | 72.7 % (49.1 m/s) | 100.0 % | 100.0 % | 100.0 % | 3 | 1 |
 | `m_4l_01_pro_rattray_cole_1` | 118 | 2203 | 10 / 5 | 98.7 % (7.5 m) | 92.1 % (114.0°) | 76.8 % (14.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 38 |
 | `m_4m_01_pro_rattray_cole_2` | 114 | 1999 | 14 / 2 | 98.6 % (5.5 m) | 93.3 % (58.5°) | 70.6 % (37.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 40 |
 | `m_4n_01_lucas_puig` | 22 | 259 | 1 / 0 | 100.0 % | 91.5 % (43.6°) | 78.4 % (3.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 6 | 3 |
-| `m_5a_01_photo_thrasher` | 17 | 18 | 0 / 0 | 100.0 % | 88.9 % (8.5°) | 72.2 % (1.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 1 |
+| `m_5a_01_photo_thrasher` | 15 | 41 | 0 / 0 | 100.0 % | 75.6 % (40.7°) | 68.3 % (3.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 0 |
 | `m_5a_02_photo_thrasher` | — | — | — | — | — | — | — | — | — | — | — |
 | `m_5a_03_photo_thrasher_cardiel` | — | — | — | — | — | — | — | — | — | — | — |
 | `m_5a_04_thrasher_cole` | — | — | — | — | — | — | — | — | — | — | — |
@@ -371,7 +372,7 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_6p_01_thrasher_01` | 42 | 513 | 14 / 5 | 93.4 % (5.5 m) | 89.7 % (35.2°) | 57.7 % (37.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 33 |
 | `m_6p_02_film_pool_team_02` | 43 | 608 | 9 / 0 | 100.0 % | 88.2 % (57.1°) | 75.7 % (5.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
 | `m_6p_02_photo_pool_thrasher_2` | 42 | 435 | 11 / 1 | 91.3 % (5.5 m) | 92.0 % (44.0°) | 60.9 % (11.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 28 |
-| `m_6p_03_demo_pool_team_03` | 163 | 2908 | 9 / 24 | 100.0 % | 92.6 % (54.1°) | 66.5 % (4.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 31 |
+| `m_6p_03_demo_pool_team_03` | — | — | — | — | — | — | — | — | — | — | — |
 | `m_6p_03_film_team_03` | 21 | 232 | 6 / 6 | 89.2 % (7.5 m) | 92.7 % (71.7°) | 61.2 % (15.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 22 |
 | `m_6p_03_photo_pool_thrasher_3` | 42 | 370 | 9 / 3 | 90.3 % (7.4 m) | 83.8 % (53.5°) | 56.8 % (15.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 26 |
 | `m_6p_04_photo_pool_thrasher_4` | 42 | 417 | 10 / 5 | 92.6 % (5.6 m) | 94.2 % (33.3°) | 70.3 % (10.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 25 |
@@ -392,7 +393,7 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_6p_12_film_pool_team_12` | 44 | 646 | 8 / 18 | 99.2 % (2.7 m) | 91.6 % (48.5°) | 76.3 % (28.1 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
 | `m_6p_13_film_pool_team_13` | 44 | 619 | 8 / 19 | 100.0 % | 91.4 % (40.7°) | 76.1 % (3.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 8 |
 | `m_6p_14_film_pool_team_14` | 43 | 655 | 9 / 1 | 100.0 % | 94.8 % (41.5°) | 72.8 % (4.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 13 |
-| `m_7a_01_demo_dyrdek` | 156 | 2047 | 15 / 8 | 100.0 % (0.6 m) | 99.5 % (37.6°) | 99.5 % (4.8 m/s) | 50.6 % | 97.8 % | 100.0 % | 60 | 7 |
+| `m_7a_01_demo_dyrdek` | 156 | 2038 | 16 / 8 | 99.9 % (0.7 m) | 99.5 % (33.4°) | 99.5 % (5.1 m/s) | 59.6 % | 98.2 % | 100.0 % | 60 | 6 |
 | `m_7a_02_jam_monster_public_park` | 36 | 700 | 1 / 3 | 100.0 % | 96.3 % (26.5°) | 99.0 % (3.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 84 | 0 |
 | `m_7a_02_jam_monster_public_park_ol` | 43 | 550 | 8 / 1 | 100.0 % | 88.9 % (51.2°) | 80.2 % (2.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
 | `m_7b_02_photo_cover_thrasher` | 44 | 630 | 7 / 19 | 100.0 % | 92.4 % (42.5°) | 77.3 % (2.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
@@ -540,5 +541,6 @@ Hand-kept, one line a mission (`- \`mission\`: text`) or a run (`- run \`id\`: b
 - run `2026-11-11-crawl-long-intro`: the stand-up build; the two missions the crawl's win at tick 1800 caught inside their intro scene, rerun with `CRAWL_WIN_AT=3600 CRAWL_WAIT_S=480` (`m_4g_01_spotfilm_johnson`: PASS) and, for `m_2a_01`, whose Shut-Down-of-SanVan scene runs to tick 4033, `CRAWL_WIN_AT=4500 CRAWL_WAIT_S=300`.
 - run `2026-11-11-crawl-ai2`: build 9981ee26, commit 6772b2b (the AI day: the manager offline in a campaign, the scripts' index space, the AI's messages, the preload, the win after the running state); the six probe missions of the AI families, `CRAWL_WAIT_S=200`, AI and career traces on; every mission's state sequence identical on both seats.
 - run `2026-11-11-crawl-ai3`: the same build; the 26 other missions the 2026-11-10 crawl had stopped at, `CRAWL_WAIT_S=200`; 11 PASS, 15 STOPPED, every stop at the same state on both seats, one (`m_7a_02`) a tick apart at one state.
+- run `2026-11-11-crawl-m9`: build 327caf08, commit ea2381d (M9, outcomes as notes: the win and a script's forced outcomes travel on the player's facts); nine missions across the families as a regression check, `CRAWL_WAIT_S=200`; every state sequence identical on both seats, the tutorials and go-to saves agreeing, the AI missions standing as before.
 - run `2026-11-11-crawl-ai4`: build 6b106be5, commit 9fc64a1 (the review's fixes: ambient skaters seated after the humans and evicted from a human's slot at the round start, player 0 the campaign's slot, the back end's AI rows gated); the six probe missions again, every state sequence identical on both seats: the milestone's proof.
 - `m_4g_01_spotfilm_johnson`: the crawl's win at 1800 came during the pro's intro scene (`nis_overview` to 2453, `challenge_running` at 2723), so the script never saw a completion; with the win at 3600 it ran `challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options` and passed (open item 51).
