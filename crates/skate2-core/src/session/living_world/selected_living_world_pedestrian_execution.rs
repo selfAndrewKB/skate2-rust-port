@@ -43,9 +43,13 @@ impl super::SelectedRecipeFrame<'_> {
                         frame.big_black_prestate(entity)?;
                     }
                     // BasicEntity82e4c1d0 checks the actual optional AI graph. Co-op fork (M6):
-                    // a puppet's graph runs only while it collides (a knockdown's animation);
-                    // its locomotion is its owner's (`update_puppet_intent`).
-                    let own_graph = entity.puppet.is_none() || crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref());
+                    // a puppet's graph runs only while it collides (a knockdown's animation) and
+                    // for one tick after, so the graph leaves its colliding state and the
+                    // behaviour's `End` runs (the knocked-down flag, the intent packet); its
+                    // locomotion is its owner's (`update_puppet_intent`).
+                    let colliding_now = crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref());
+                    let was_colliding = entity.puppet.as_mut().map(|drive| std::mem::replace(&mut drive.was_colliding, colliding_now));
+                    let own_graph = entity.puppet.is_none() || colliding_now || was_colliding == Some(true);
                     if entity.ai_bindings.is_some() && own_graph { entity.update_ai_graph(target.dt, frame)?; }
                     // Pedestrian.UpdateState82e6eaf0 clears tAnimData+68,
                     // exactly cPedAnimData.MotionGraphInput.IntentsValid.

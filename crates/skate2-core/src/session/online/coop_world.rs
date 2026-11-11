@@ -99,6 +99,10 @@ const AUDIT_YAW_DEGREES: f32 = 5.;
 const AUDIT_SPEED: f32 = 0.5;
 /// A puppet this many samples in a row beyond the position tolerance is traced once.
 const AUDIT_BEHIND_SAMPLES: u32 = 20;
+/// A knockdown contact sent to the owner is awaited this many ticks before the owner's "up"
+/// counts as its refusal (the stream's round trip is a few ticks; the owner's own knockdown
+/// plays at once).
+const CONFIRM_GRACE_TICKS: u32 = 60;
 
 #[derive(Debug, Default)]
 struct Stats {
@@ -110,6 +114,8 @@ struct Stats {
     contacts_sent: u32,
     contacts_applied: u32,
     confirmed: u32,
+    /// Predicted knockdowns ended by the owner's "up" before any confirmation.
+    refused: u32,
     /// Records received and ignored for an epoch older than the table's.
     stale: u32,
     since: u32,
@@ -392,7 +398,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                         {
                             core.allow_culling = false;
                             let transform = core.transform;
-                            pedestrian.puppet = Some(PuppetDrive::new(transform));
+                            let mut drive = PuppetDrive::new(transform);
+                            // demoted during or right after a knockdown: the graph owes the exit tick
+                            drive.was_colliding = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) || PuppetDrive::colliding(pedestrian.collision.as_ref());
+                            pedestrian.puppet = Some(drive);
                             trace(format_args!("own pedestrian {id:08x} demoted: another console claimed it at {tick}"));
                         }
                     }
@@ -453,6 +462,26 @@ impl<T, C> SelectedLiveSession<T, C> {
                                 trace(format_args!("puppet {:08x}: up again at {tick}", sample.id));
                             }
                             puppet.knocked_down = false;
+                            // The owner is up while this copy still plays a knockdown: the owner's
+                            // word ends it. The collision is closed as its own completion closes it
+                            // (the graph then leaves the colliding state and the behaviour's `End`
+                            // clears the knocked-down flag and releases the intent packet). A
+                            // prediction the owner never confirmed, past the grace, is a refusal.
+                            let down_here = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
+                            let awaited_long_enough = puppet.awaiting.is_none_or(|at| tick.saturating_sub(at) > CONFIRM_GRACE_TICKS);
+                            if down_here && awaited_long_enough && let Some(collision) = pedestrian.collision.as_mut().filter(|collision| collision.colliding) {
+                                collision.colliding = false;
+                                collision.required_to_begin_colliding = false;
+                                // The collision's intent packet would park at the queue's front (a puppet
+                                // never advances its queue outside a collision) and reject the next hit.
+                                pedestrian.clear_all_intents()?;
+                                if puppet.awaiting.take().is_some() {
+                                    coop.stats.refused += 1;
+                                    trace(format_args!("puppet {:08x}: its owner is up, the predicted knockdown unconfirmed for {CONFIRM_GRACE_TICKS} ticks: standing up at {tick}", sample.id));
+                                } else {
+                                    trace(format_args!("puppet {:08x}: its owner is up while this copy lies knocked down: standing up at {tick}", sample.id));
+                                }
+                            }
                         }
                     }
 
@@ -790,7 +819,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let Some(contact) = roster.get_mut(puppet.entity).and_then(|p| p.puppet.as_mut()).and_then(|drive| drive.pending_contact.take()) else { continue };
                         let (force, direction, velocity, omega) = contact;
                         run.contacts.push(Contact { id, force, direction, velocity, omega });
-                        puppet.awaiting = Some(tick);
+                        if force == 0 {
+                            puppet.awaiting = Some(tick); // a knockdown: the owner's flags confirm or refuse it
+                        }
                         coop.stats.contacts_sent += 1;
                         trace(format_args!("contact on puppet {id:08x} of {:?}: force {force} direction {direction}, reported to its owner at {tick}", puppet.owner));
                     }
@@ -853,10 +884,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let seconds = f64::from(tick.saturating_sub(stats.since)) / 60.;
                     let per_entity = if stats.entities == 0 { 0. } else { stats.bytes as f64 / seconds / (stats.entities as f64 / f64::from(stats.runs.max(1))) };
                     trace(format_args!(
-                        "world stream at {tick}: {} runs, {} entity samples, {} prop samples, {} B ({:.0} B/s, {:.0} B/s per streamed pedestrian), {} owned in range of {} pedestrians here, {} puppets, {} props owned of {} known, contacts sent {} applied {} confirmed {}, {} records ignored for an older epoch",
+                        "world stream at {tick}: {} runs, {} entity samples, {} prop samples, {} B ({:.0} B/s, {:.0} B/s per streamed pedestrian), {} owned in range of {} pedestrians here, {} puppets, {} props owned of {} known, contacts sent {} applied {} confirmed {} refused {}, {} records ignored for an older epoch",
                         stats.runs, stats.entities, stats.props, stats.bytes, stats.bytes as f64 / seconds, per_entity, run.entities.len(), roster_size, coop.entities.values().filter(|known| known.owner != Owner::Local).count(),
                         coop.props.values().filter(|prop| prop.owner == Owner::Local).count(), coop.props.len(),
-                        stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.stale
+                        stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.refused, stats.stale
                     ));
                     let audit = &stats.audit;
                     if audit.samples > 0 {

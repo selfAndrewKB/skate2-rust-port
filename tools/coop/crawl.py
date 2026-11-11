@@ -28,8 +28,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCH = Path(os.environ.get('BENCH', ROOT.parent / 'bench'))
-EXECUTE_AT, WIN_AT = 900, 1800
-WAIT_S, SETTLE_S, LOOP_S = 170, 10, 30
+EXECUTE_AT, WIN_AT = 900, int(os.environ.get('CRAWL_WIN_AT', 1800))  # CRAWL_WIN_AT: a later win for a mission whose intro scene outlasts tick 1800
+WAIT_S, SETTLE_S, LOOP_S = int(os.environ.get('CRAWL_WAIT_S', 170)), 10, 30  # CRAWL_WAIT_S: a longer deadline for a mission with a long intro scene
 GLOBAL_FIELD = '122db7b0f026dbec'  # challenge_global_data.Global
 
 

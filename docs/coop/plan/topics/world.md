@@ -122,21 +122,26 @@ bench's shove: predicted on seat 2 at its tick 4800, applied on seat 1 at its 52
 seat 2 at 4805 (five ticks); the puppet up again with the owner's 420 ticks later ("up again" is
 the owner's flag: the local copy itself never got up, see below).
 
-**Not done (2026-11-11): a puppet never stands up locally.** Once knocked down, by its owner's
-flags or by this console's prediction, a puppet reads `down` in every census until it is culled
-(M6's logs, the crawl's demo mission, the stand-up probes in `../bench/evidence/probe/`). Two
-causes, both read in the code and seen in a trace of the colliding state: the puppet's graph
-ticks only while `required_to_begin_colliding || colliding` holds (`own_graph` in the pedestrian
-execution), so when the colliding behaviour completes and clears `colliding`, the graph is never
-ticked again and the exit that runs the behaviour's `End` (which clears `flags[1] & 4`, releases
-the monitored intent packet, pops head tracking) never happens; and the getup's major intent never
-completes on a puppet (the trace: `recovering, forced true, packet complete false, major intent
-complete false` for the whole round), so the behaviour does not complete at all. Setting
-`forced_to_recover` from the sample handler when the owner says up (tried, reverted) changes
-neither and, left set, makes `resolve_full_collision` drop every later hit on that puppet. The
-fix: tick the puppet's graph while its graph state is still Colliding so the exit runs, find why
-the getup animation never reports its major intent on a puppet, and only then the owner's "up"
-as the word that stands a lying puppet up. Open item 50.
+**A puppet stands up (2026-11-11).** It did not before: once knocked down, by its owner's flags
+or by this console's prediction, a puppet read `down` in every census until it was culled (M6's
+logs, the crawl's demo mission). Two causes, read in the code and seen in a trace of the colliding
+state (`SKATE2_TRACE_COOP_PUPPET=1`): a puppet's graph was ticked only while
+`required_to_begin_colliding || colliding` held, so when the colliding behaviour completed and
+cleared `colliding` the graph never ticked again and the exit that runs the behaviour's `End`
+(which clears `flags[1] & 4`, releases the monitored intent packet, pops head tracking) never
+happened; and the un-released packets clogged the intent queue, so later collisions' packets were
+rejected (`NotAdded`) and their animations never played. Now the graph is ticked one tick past
+the collision (`PuppetDrive::was_colliding`), so the exit runs; and the owner's word ends a
+knockdown this copy still plays: when the owner's sample says up while the copy lies down, with
+no knockdown contact awaiting confirmation (or one older than 60 ticks, a refusal), the collision
+is closed as its own completion closes it and `End` follows on the next tick. A contact is awaited
+only when it is a knockdown (a standing one has no flag to confirm it). Proof: the demo mission's
+census `down` agreement 33 % → 99.3 % (`../bench/evidence/2026-11-11-crawl-demo-standup.md`);
+a diagnostic shove at the waterfront, predicted at tick 2400, confirmed by the owner at 2405, the
+owner up at 2825 and the puppet up at 2825, `down` agreeing in 2176 of 2178 pairs
+(`../bench/evidence/probe/2026-11-11-shove-standup-*.log`). Still apart in the demo: flags agree in
+59 % of pairs while each seat's skater stands inside the other's spectators and hits them every
+three ticks (open item 50).
 
 **Measured (2026-11-10, two seats on one Mac, the waterfront):** seat 1 owned 9-11 pedestrians
 in range of 12 in its roster and sent 3.4-5.3 KB/s; seat 2 held 9-10 puppets, owned 2-3 of its

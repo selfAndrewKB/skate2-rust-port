@@ -21,11 +21,16 @@ pub(crate) struct PuppetDrive {
     /// and waiting to be reported to the owner: force, direction, the skater's velocity and
     /// angular velocity at the hit.
     pub(crate) pending_contact: Option<(u8, u8, [f32; 3], [f32; 3])>,
+    /// Whether the entity was in or entering its colliding behaviour at the last graph gate:
+    /// the graph is ticked once more after the collision ends, so its exit (the behaviour's
+    /// `End`, which clears the knocked-down flag and releases the collision's intent packet)
+    /// runs. Without it a puppet stayed knocked down for good (2026-11-11).
+    pub(crate) was_colliding: bool,
 }
 
 impl PuppetDrive {
     pub(crate) fn new(target: Transform) -> Self {
-        Self { target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None }
+        Self { target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None, was_colliding: false }
     }
 
     /// The owner's next sample.

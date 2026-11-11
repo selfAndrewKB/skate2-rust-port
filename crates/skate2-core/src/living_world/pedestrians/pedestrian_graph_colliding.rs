@@ -96,6 +96,8 @@ fn scalar(attributes: &AttributeRuntimeInstance, key: u64) -> Result<f32, String
     Ok(f32::from_bits(attributes.try_scalar_word(key, 0).map_err(|e| e.to_string())?.unwrap_or(0)))
 }
 const RECOVERY_TIME: u64 = 0xad3c_483f_0c9d_ad67;
+/// Co-op fork: `SKATE2_TRACE_COOP_PUPPET=1` traces a puppet's colliding state for the bench.
+static TRACE_PUPPET: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 const UP_SHIFT: u64 = 0xa062_9152_63ce_2bec;
 
 impl CollidingBehaviour {
@@ -181,6 +183,22 @@ impl CollidingBehaviour {
     pub(crate) fn update<S: CollidingServices>(&self, instance: &mut CollidingInstance,
         entity: &mut PedestrianConstruction, dt: f32, services: &mut S) -> Result<(), String> {
         entity.collision.as_ref().ok_or("collision Update requires collision object")?;
+        // Co-op fork, diagnostic: a puppet's colliding state every three seconds, for the bench.
+        if entity.puppet.is_some() && *TRACE_PUPPET.get_or_init(|| std::env::var_os("SKATE2_TRACE_COOP_PUPPET").is_some()) {
+            static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 180 == 0 {
+                let state = match instance.state { CollisionState::Standing => "standing", CollisionState::Falling => "falling", CollisionState::Recovering => "recovering", CollisionState::Complete => "complete" };
+                let id = packet(entity).ok();
+                let done = id.and_then(|id| complete(entity, id).ok());
+                let stage = id.and_then(|id| entity.intent_queue.as_ref()?.packet(id).ok()).map(|p| (p.active_stage_number(), p.state as u32));
+                let collision = entity.collision.as_ref().unwrap();
+                let animation = entity.animation.as_ref();
+                let major = animation.map(|a| (a.ai_input.major_intent_complete, a.motion_intents.valid, a.has_current_animation(), a.frame.offset_time));
+                let motion = animation.and_then(|a| a.motion.as_ref()).map(|m| (m.current, m.delegate.declarations().states.get(usize::from(m.current)).map_or("?", |st| st.name), m.last));
+                let losim = entity.core.as_ref().map(|c| c.current_losim);
+                crate::coop::trace(format_args!("puppet entity {:#x} colliding: {state}, timer {:.2}, required {}, forced {}, packet complete {done:?}, packet (stage, state) {stage:?}, (major complete, intents valid, has animation, offset) {major:?}, motion (current, name, last) {motion:?}, losim {losim:?}, flags1 {:#x}", entity.id, instance.recovery_timer, collision.required_to_begin_colliding, collision.forced_to_recover, entity.state.as_ref().map_or(0, |st| st.flags[1])));
+            }
+        }
         match instance.state {
             CollisionState::Standing => {
                 entity.collision.as_mut().unwrap().required_to_begin_colliding = false;

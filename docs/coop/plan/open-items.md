@@ -193,31 +193,26 @@ Front page: [README](../README.md).
     the native trace). When the AI skaters land (45), a campaign round must give the scripts'
     AI players indexes past the humans, or map them in the natives (`DoesSkaterExist`, `PinAI`,
     `StartPath`, `SpawnAIAtLocation`); until then every AI mission is at best in step and failing.
-49. `m_6p_01_demo_first_job` runs the same path on both seats 58 ticks apart (`run_round` at
-    1799 and 1741): the demo's `setup_round`/`countdown` take a local time. To fix with the demo
-    kind; a lockstep campaign owes the same tick.
-50. A puppet never stands up locally. The crawl's demo mission showed it first: from tick 1543
-    each seat's skater stands inside the other seat's spectators, every three ticks each console
-    reports a contact on those puppets (the owner sees it at 2.7 to 59 m/s and applies the
-    knockdown), the owners' pedestrians stay up while the puppets, which predicted the knockdown,
-    read `down` to the end (`down` agrees in 33 % of the census pairs, flags in 23 %). M6's logs
-    say the same of confirmed knockdowns: a puppet knocked down by its owner reads `down` until it
-    is culled, the owner's "up again" notwithstanding. Causes ([world](topics/world.md), "Not
-    done"): the puppet's graph is not ticked once `colliding` falls, so the colliding behaviour's
-    `End` (the only exit that clears `flags[1] & 4`) never runs; and on a puppet the getup's major
-    intent never completes, so the behaviour never reaches its end at all (the trace of
-    2026-11-11, `../bench/evidence/probe/standup-trace-*`). A stand-up by `forced_to_recover` from
-    the sample handler was tried and reverted: it reaches neither, and left set it drops every
-    later hit on the puppet. Also found on the way: `awaiting` is set for Standing contacts too
-    and only a knockdown flag clears it, so a Standing contact leaves it stale; and a hold on
-    predicted knockdowns must still play a knockdown the owner accepts. The fix is the puppet's
-    graph and animation first (tick the graph while its state is Colliding; find the major intent),
-    then the owner's "up" as the word that stands a lying puppet up, with the demo mission as
-    the proof (`down` agreement toward 100 %).
-51. `m_2a_01` and `m_4g_01_spotfilm_johnson` keep both scripts in `challenge_running` after every
-    objective completed at the win; `m_2a_01`'s photo scene starts 1800 ticks after the win amid
-    repeating Hall of Meat start lines. In step, so not co-op's divergence; what the graph waits
-    for after the win is to read.
+49. `m_6p_01_demo_first_job` runs the same path on both seats 58 ticks apart: `setup_round`
+    (both at 1527) teleports the skater to the demo's start locator and waits for the teleport to
+    finish, which is local timing (`countdown` at 1618 on seat 1, 1560 on seat 2; `run_round`
+    at 1799 and 1741). The start locator stands in the demo's crowd, so each skater lands inside
+    the other seat's spectators (50). To fix with the demo kind: the teleport's end as a fact
+    both seats wait for, and the start spots apart.
+50. Fixed (2026-11-11, [world](topics/world.md), "A puppet stands up"): a puppet never stood up
+    after a knockdown, its own graph not being ticked past the collision's end, and the owner's
+    "up" now ends a knockdown this copy still plays. The demo mission's census `down` agreement
+    went from 33 % to 99.3 %; a diagnostic shove's puppet stood up with its owner. Left in the
+    demo: flags agree in 59 % of pairs while each seat's skater stands inside the other's
+    spectators and hits them every three ticks (the demo's placement, 49); standing collisions
+    there show `NotAdded` packets in the trace, to look at with the demo kind.
+51. Resolved (2026-11-11): `m_2a_01` and `m_4g_01_spotfilm_johnson` were not waiting after their
+    win; the crawl's win at tick 1800 fell inside their intro scene (the pro's to tick 2453, the
+    Shut-Down-of-SanVan scene to 4033), before `challenge_running`, so the scripts never saw a
+    completion and the 170 s deadline cut them. Rerun with the win after the scene
+    (`CRAWL_WIN_AT=3600`, `4500`) both pass through `challenge_cleanup`
+    (`../bench/evidence/2026-11-11-crawl-long-intro.md`). A crawl's win must follow the mission's
+    own `challenge_running`; the driver could wait for that state instead of a fixed tick.
 52. The seven film-team missions (`m_6p_03_demo_pool_team_03`, `m_6p_05_film_team_05`,
     `m_6p_09_photo_sm_04`, `m_6p_10_film_team_10`, `m_6p_10_photo_sm_5`, `m_8_01_04`, `m_8_01_05`)
     complete themselves 182 ticks after the execute (`initial→challenge_running→complete`) and

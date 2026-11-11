@@ -86,7 +86,8 @@ Seat 1's live audit over every mission ([missions](missions.md), "Synchronizatio
 within 0.5 m 99.6 to 100 % of samples in every mission (the worst sample 11 to 24 m in eleven
 missions, the bench's teleport frames, 10 at most a mission); yaw within 5° 88 to 97 %; speed
 within 0.5 m/s 51 to 96 %, 75 to 82 % in most (open item 39); flags equal 100 % in every mission
-but five (89 to 96 %) and the demo `m_6p_01_demo_first_job` (24.6 %, open item 50). Pedestrians:
+but five (89 to 96 %) and the demo `m_6p_01_demo_first_job` (24.6 % on the crawl's build: its
+puppets never stood up, fixed the next day, open item 50; 59 % after, the demo's placement, 49). Pedestrians:
 up to 25 at once (12 owned, 13 puppets), stream peaks 2.5 to 6.7 kB/s a seat; props 0 known
 everywhere (none streamed yet); contacts sent in 14 missions (up to 555 in the demo), applied by
 the owner, 0 to 2 confirmed knockdowns; handoffs, promotions, demotions 0 throughout; stalled

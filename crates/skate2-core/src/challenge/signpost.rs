@@ -1036,6 +1036,12 @@ fn execute_challenge(world: &mut World, signpost: u64) {
                 .and_then(|a| a.text(0))
                 .unwrap_or_default()
                 .to_owned();
+            // Co-op fork: four campaign missions carry no `MapStartLocation` (the Training
+            // Facility teleports, `m_2a_01_goto`, `m_3a_01_goto`); the native location lookup
+            // fails on the empty name and nothing moves, so nothing is asked here either.
+            if location.is_empty() {
+                return;
+            }
             let player = world.local_player;
             super::teleport::teleport_player(world, player, &location, player, false, 0.0, false);
         }
