@@ -113,6 +113,7 @@ mod tests {
         assert!(claim_wins(Some((1, 0)), 2, 1));
         assert!(!claim_wins(Some((2, 0)), 2, 1), "a tie goes to the lower slot");
         assert!(claim_wins(Some((2, 1)), 2, 0));
+        assert!(!claim_wins(Some((2, 0)), 2, 0), "the owner's own continuing samples do not win: the receiver passes them as the owner's (coop_world), not as claims");
     }
 }
 

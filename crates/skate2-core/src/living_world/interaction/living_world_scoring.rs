@@ -85,10 +85,12 @@ impl LivingWorldGrindServices {
                             .ok_or(ScoringEntitiesError::Missing("DMO contact actor"))?
                             .try_player_index()
                             .map_err(query)?;
-                        dmo.skater_collision_flags |= 1u32.checked_shl(player & 63).unwrap_or(0);
+                        let bit = 1u32.checked_shl(player & 63).unwrap_or(0);
+                        dmo.skater_collision_flags |= bit;
                         // Co-op fork (M5): a touch claims the prop for this console (only a
-                        // local skater has a body).
+                        // local skater has a body: the human's or, on the owner, an AI's).
                         dmo.touched = true;
+                        dmo.touched_by |= bit;
                     }
                     SimulationContactEntityOwner::LivingWorld(_) => dmo.add_entity_contact(part, force),
                 }

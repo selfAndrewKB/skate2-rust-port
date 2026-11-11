@@ -584,8 +584,10 @@ pub(crate) struct DynamicObject {
     /// Co-op fork (M5): another console owns this prop; its target transform is the owner's
     /// last sample and its body is driven there (as a hand prop's is), never read back.
     pub(crate) coop_puppet: bool,
-    /// Co-op fork (M5): a local skater's body touched it since the campaign last looked.
+    /// Co-op fork (M5): a local skater's body touched it since the campaign last looked, and
+    /// which players' (a bit per player index, the AI skaters' included; M10.1).
     pub(crate) touched: bool,
+    pub(crate) touched_by: u32,
 }
 
 impl DynamicObject {
@@ -1933,6 +1935,7 @@ impl<W: DmoWorld> DmoFrame<'_, W> {
             online_static: false,
             coop_puppet: false,
             touched: false,
+            touched_by: 0,
         };
         self.objects.spawn_unfinished=Some(object);
         self.objects
@@ -2027,6 +2030,7 @@ impl<W: DmoWorld> DmoFrame<'_, W> {
             online_static: true,
             coop_puppet: false,
             touched: false,
+            touched_by: 0,
         };
         self.objects.spawn_unfinished = Some(object);
         self.objects

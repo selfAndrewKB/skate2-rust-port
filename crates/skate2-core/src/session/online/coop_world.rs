@@ -132,7 +132,18 @@ struct PropOwner {
     /// The last sampled position, so a resting prop is not sent every run.
     sent: Option<[f32; 3]>,
     runs: u32,
+    /// While it is another console's: the tick its last sample arrived, whether that sample
+    /// had it moving, and how many touches here have waited on it (M10.1).
+    sampled: u32,
+    moving: bool,
+    waited: u32,
 }
+
+/// A touch here does not take a prop whose owner's latest sample, this recent, still has it
+/// moving: two consoles' actors leaning on one prop would otherwise claim it back and forth
+/// (the M9 S.K.A.T.E., each console's own pro: twelve claims of one rail in forty frames, a
+/// puppet up to 4.7 m behind). The owner's samples come every third tick while a prop moves.
+const CONTEST_TICKS: u32 = 30;
 
 /// Props at rest are repeated every this many runs, so a receiver that missed a run or
 /// joined late still gets them.
@@ -147,7 +158,8 @@ pub(in super::super) struct CoopWorld {
     props: BTreeMap<u64, PropOwner>,
     /// The owners' prop samples received, applied at the next tick.
     prop_updates: Vec<PropState>,
-    nudged: bool,
+    /// The nudges done, an index into `diagnostic_nudges`.
+    nudged: usize,
     /// Every entity the table knows, by world id (M6): this console's own and the puppets.
     entities: BTreeMap<u32, Tracked>,
     /// This console's local entity ids and their world ids.
@@ -194,12 +206,25 @@ fn diagnostic_shove_tick() -> Option<u32> {
     *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_SHOVE").ok().and_then(|tick| tick.parse().ok()))
 }
 
-/// `SKATE2_DIAGNOSTIC_COOP_NUDGE=<tick>`: at that tick the nearest prop with a locator within
-/// 30 m is given a velocity here as a push would, and counts as touched by this console's
-/// skater, so the bench proves a prop's claim and its stream without steering a skater into it.
-fn diagnostic_nudge_tick() -> Option<u32> {
-    static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_NUDGE").ok().and_then(|tick| tick.parse().ok()))
+/// `SKATE2_DIAGNOSTIC_COOP_NUDGE=<tick>[,<tick>...]`: at each tick the nearest prop with a
+/// locator within 30 m is given a velocity here as a push would, and counts as touched by this
+/// console's skater, so the bench proves a prop's claim and its stream without steering a
+/// skater into it; `SKATE2_DIAGNOSTIC_COOP_NUDGE_ROUND` counts in round ticks instead, so two
+/// seats' nudges can be timed against each other.
+fn diagnostic_nudges() -> (&'static [u32], bool) {
+    static NUDGES: std::sync::OnceLock<(Vec<u32>, bool)> = std::sync::OnceLock::new();
+    let (ticks, round) = NUDGES.get_or_init(|| {
+        let parse = |ticks: String| {
+            let mut ticks = ticks.split(',').filter_map(|tick| tick.trim().parse().ok()).collect::<Vec<u32>>();
+            ticks.sort_unstable();
+            ticks
+        };
+        match std::env::var("SKATE2_DIAGNOSTIC_COOP_NUDGE_ROUND") {
+            Ok(ticks) => (parse(ticks), true),
+            Err(_) => (std::env::var("SKATE2_DIAGNOSTIC_COOP_NUDGE").ok().map_or_else(Vec::new, parse), false),
+        }
+    });
+    (ticks, *round)
 }
 
 /// `SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>[;<tick>:<x>,<y>,<z>...]`: at each tick the
@@ -325,15 +350,32 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
         }
         for prop in run.props {
-            let known = coop.props.get(&prop.locator).map(|known| (known.claim, match known.owner { Owner::Local => local_slot, Owner::Remote(slot) => slot }));
-            if !ownership::claim_wins(known, prop.claim, owner) {
+            let record = coop.props.get(&prop.locator);
+            let known = record.map(|known| (known.claim, match known.owner { Owner::Local => local_slot, Owner::Remote(slot) => slot }));
+            let same_owner = record.is_some_and(|known| known.owner == Owner::Remote(owner));
+            // The owner's continuing stream carries the claim it holds: its samples are the
+            // puppet's. (Until M10.1 only a higher claim passed, so a puppet prop took the
+            // first sample of each claim and no other: the sample of the touch's own tick,
+            // before the prop had moved, and the puppet stood where the original fell.)
+            let same = same_owner && record.is_some_and(|known| known.claim == prop.claim);
+            if !same && !ownership::claim_wins(known, prop.claim, owner) {
                 continue;
             }
             let old = coop.props.get(&prop.locator).map(|known| known.owner);
             if old != Some(Owner::Remote(owner)) {
                 ownership::decide(Kind::Prop, prop.locator as u32, old, Owner::Remote(owner), &format!("its skater touched it last (claim {})", prop.claim));
             }
-            coop.props.insert(prop.locator, PropOwner { owner: Owner::Remote(owner), claim: prop.claim, touched: 0, sent: None, runs: 0 });
+            // The record keeps its sample count across samples (the convergence trace's
+            // "every 60th" counted from 1 each sample before).
+            let runs = if same { record.map_or(0, |known| known.runs) } else { 0 };
+            // A sample that raises the claim is a fresh touch: it counts as moving until the
+            // owner's next sample says otherwise (the sender says the same of a touch's own
+            // tick, whose cached velocity is the step before's; this covers a sample from before
+            // the record knew the claim).
+            let moving = !prop.resting || !same;
+            // A contest ends when the prop rests or the prop changes hands: the next one traces again.
+            let waited = if moving && same_owner { record.map_or(0, |known| known.waited) } else { 0 };
+            coop.props.insert(prop.locator, PropOwner { owner: Owner::Remote(owner), claim: prop.claim, touched: 0, sent: None, runs, sampled: self.completed_frames, moving, waited });
             coop.prop_updates.push(prop);
         }
         coop.despawns.extend(run.despawns.into_iter().filter(|id| coop.entities.get(id).is_some_and(|known| known.owner == Owner::Remote(owner))));
@@ -532,10 +574,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                         object.target_transform = stream::transform_of(sample.position, sample.rotation);
                         object.velocity = [sample.velocity[0], sample.velocity[1], sample.velocity[2], 0.];
                         object.touched = false;
+                        object.touched_by = 0;
                     }
-                    if let Some(at) = diagnostic_nudge_tick()
-                        && tick >= at
-                        && !coop.nudged
+                    let (nudges, on_round_ticks) = diagnostic_nudges();
+                    if let Some(&at) = nudges.get(coop.nudged)
+                        && let Some(now) = if on_round_ticks { round_tick } else { Some(tick) }
+                        && now >= at
                     {
                         let nearest = by_locator
                             .values()
@@ -547,13 +591,15 @@ impl<T, C> SelectedLiveSession<T, C> {
                             .filter(|(d2, _)| *d2 <= 30. * 30.)
                             .min_by(|a, b| a.0.total_cmp(&b.0));
                         if let Some((d2, id)) = nearest {
-                            coop.nudged = true;
+                            coop.nudged += 1;
                             let object = objects.object_mut(id).expect("listed");
-                            object.coop_puppet = false;
+                            // The claim below decides whether the touch takes it (a puppet
+                            // its owner is moving stays driven, the push lost).
                             object.touched = true;
+                            object.touched_by |= 1;
                             world.try_set_dmo_part_velocity(&object.body, 0, [0., 3., 4.])?;
                             trace(format_args!("diagnostic: nudged prop {:016x} (entity {id:#x}) at {:.1} m at {tick}: a touch by this console's skater", object.locator_id, d2.sqrt()));
-                        } else if tick == at {
+                        } else if now == at {
                             trace(format_args!("diagnostic: no prop within 30 m to nudge at {tick}"));
                         }
                     }
@@ -563,15 +609,23 @@ impl<T, C> SelectedLiveSession<T, C> {
                             continue;
                         }
                         object.touched = false;
-                        let known = coop.props.get(&locator);
-                        if known.is_some_and(|known| known.owner == Owner::Local) {
+                        let players = std::mem::take(&mut object.touched_by);
+                        let (old, claim) = coop.props.get(&locator).map_or((None, 1), |known| (Some(known.owner), known.claim + 1));
+                        if old == Some(Owner::Local) {
                             coop.props.get_mut(&locator).expect("known").touched = tick;
                             continue;
                         }
-                        let claim = known.map_or(1, |known| known.claim + 1);
-                        ownership::decide(Kind::Prop, locator as u32, known.map(|known| known.owner), ownership::owner(Kind::Prop, Owner::Local), &format!("this console's skater touched it last (claim {claim})"));
+                        // M10.1: the owner keeps a prop it is still moving; the touch here waits.
+                        if let Some(known) = coop.props.get_mut(&locator).filter(|known| known.moving && tick.saturating_sub(known.sampled) <= CONTEST_TICKS) {
+                            known.waited += 1;
+                            if known.waited == 1 {
+                                trace(format_args!("prop {locator:016x}: touched here (players {players:#b}) while {:?} is moving it (its sample at {}): the touch waits, the puppet stays driven, at {tick}", known.owner, known.sampled));
+                            }
+                            continue;
+                        }
+                        ownership::decide(Kind::Prop, locator as u32, old, ownership::owner(Kind::Prop, Owner::Local), &format!("this console's skater touched it last (players {players:#b}, claim {claim})"));
                         object.coop_puppet = false;
-                        coop.props.insert(locator, PropOwner { owner: Owner::Local, claim, touched: tick, sent: None, runs: 0 });
+                        coop.props.insert(locator, PropOwner { owner: Owner::Local, claim, touched: tick, sent: None, runs: 0, sampled: 0, moving: false, waited: 0 });
                     }
                 }
 
@@ -858,7 +912,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                             continue;
                         }
                         owner.sent = Some(position);
-                        run.props.push(PropState { locator, claim: owner.claim, position, rotation: stream::quaternion_of(&object.transform), velocity, resting: speed2 <= 1e-4 });
+                        // A prop touched this tick is not at rest, whatever its cached velocity
+                        // (read back from the transforms after the step) says.
+                        run.props.push(PropState { locator, claim: owner.claim, position, rotation: stream::quaternion_of(&object.transform), velocity, resting: speed2 <= 1e-4 && owner.touched != tick });
                     }
                 }
                 run.despawns = coop.gone.keys().copied().collect();

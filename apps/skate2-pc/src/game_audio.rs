@@ -601,6 +601,8 @@ struct Output {
     clock: Arc<DeviceClock>,
     device_rate: f64,
     weather: crate::weather_audio::Voice,
+    /// `SKATE2_DIAGNOSTIC_MUTE`: the device gets silence, the mix runs as ever.
+    muted: bool,
 }
 
 impl Output {
@@ -639,7 +641,10 @@ impl Output {
         for frame in data.chunks_mut(channels) {
             let [left, right] = self.next_frame();
             for (channel, sample) in frame.iter_mut().enumerate() {
+                // Co-op fork: `SKATE2_DIAGNOSTIC_MUTE` keeps the mix and the device clock running
+                // (every bench seat's timing as it is) and gives the device silence.
                 let value = match (channels, channel) {
+                    _ if self.muted => 0.0,
                     (1, _) => (left + right) * 0.5,
                     (_, 0) => left,
                     (_, 1) => right,
@@ -830,6 +835,7 @@ impl GameAudio {
             clock: Arc::clone(&clock),
             device_rate: f64::from(config.sample_rate),
             weather: Default::default(),
+            muted: std::env::var_os("SKATE2_DIAGNOSTIC_MUTE").is_some(),
         };
         let stream = match supported.sample_format() {
             cpal::SampleFormat::F32 => build_stream::<f32>(&device, config, output)?,

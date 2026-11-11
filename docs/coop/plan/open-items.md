@@ -326,18 +326,33 @@ Front page: [README](../README.md).
     frames, `online_owned_slot_changed`), 31 KB each; the second send is owed only to a spawn
     at a slot whose puppet still wears another recipe, so clearing the record on the slot's
     destruction alone would halve it.
-67. **Props an AI skater moves are not shared** (the player, 2026-11-11, in play): a railing an
-    AI skater knocks down on one instance stands on the other, and the AI there runs through it
-    as if it were not there. The prop rule is `LastToucher` with the touch being this console's
-    own skater's contact (the scoring pass marks the object `touched`, `coop_world.rs`;
-    [world](topics/world.md), M5): an AI skater's hit, an ambient skater's, a car's or a
-    pedestrian's claims nothing, so the object moves on the console that simulates the hitter
-    and nowhere else. With M10 the other console's AI is a puppet without a body, so it hits
-    nothing and runs through the standing copy. The fix is in the claim: on the owner's console
-    an owned AI skater's contact with a prop is a touch (the AI actors' contact pass marks the
-    object as the first player's does), so the prop is claimed for that console and streamed;
-    an ambient skater's hit likewise claims for its own console (each console's own ambient
-    skaters, 53). Props a car or a pedestrian moves are the same gap ([world](topics/world.md)).
+67. **Props an AI skater moves** (the player, 2026-11-11, in play): a railing an AI skater
+    knocks down on one instance stands on the other, and the AI there runs through it as if it
+    were not there. The first reading (that an AI's hit claims nothing) was wrong: the scoring
+    pass marks a prop touched for any skater body's contact, the AI's included, and the M10
+    S.K.A.T.E. logs show the pro's hits claiming two props on seat 1 during the leader's run
+    (claims at seat 2's ticks 2421 and 2502, the crawl's human idle, both puppets on seat 2
+    within 0.04 m of the sample). What the M9 logs show instead is a contest: with each
+    console's own AI copy, one rail (`ad4ab2b1`) changed owner twelve times in forty frames
+    (claims 1 to 12 between seat 1's frames 2799 and 2835, every touch on the non-owner taking
+    it back with the next claim number), the other rail's puppet up to 4.7 m behind its sample,
+    each console's copy a puppet one tick and a body the next; that is a prop down on one
+    screen and standing on the other. And the sighting's plain cause, found by the M10.1
+    probe (run 4): since M5 the receiver passed a prop sample only when its claim beat the
+    known one, which the owner's own continuing samples never do, so a puppet prop took the
+    first sample of each claim and no other, the sample of the touch's own tick, before the
+    prop had moved; the owner's copy fell and the puppet stood where it had been (every
+    convergence trace in every kept log is "sample 1"). M10.1 takes the owner's continuing
+    samples (run 5: samples 1, 61, 121 applied, the puppet 0.1 m behind); M10 ends the contest
+    for the challenge AI (one owner: two claims, no flip in three S.K.A.T.E. runs; the
+    non-owner's AI puppet has no body to hit anything with, by design); M10.1 closes it for
+    the rest (two humans, or each console's own ambient skaters, 53): a touch does not take a
+    prop whose owner's latest sample, within 30 ticks, still has it moving; the touch waits,
+    the puppet stays driven, and the next touch after it rests claims it
+    ([world](topics/world.md)). What stays unclaimed is a living-world body's push: a car's or
+    a pedestrian's contact is not a touch, so a prop one of those moves is the mover's
+    console's alone and not streamed (`SimulationContactEntityOwner::LivingWorld` in the
+    scoring pass). Not yet played by the player.
 68. On the M10 regression run (`2026-11-11-crawl-m10`) seat 2 unloaded and reloaded the hub's
     hull `ur_hotel_pool_drain` (its graph restarting at `initial`) once more than seat 1 after
     the win of `m_1a_03_tutorial_fliptricks` (at round tick 2057) and `m_6p_03_demo_pool_team_03`

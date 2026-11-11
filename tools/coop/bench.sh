@@ -27,6 +27,9 @@
 #                       SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>  the nearest puppet pedestrian
 #                         knocked down as a hit would, the contact sent to its owner (M1)
 #   Every seat traces online, career and coop decisions (SKATE2_TRACE_*=1): never blind.
+#   SEAT_AUDIO        set to let the seats sound; by default they are muted (SKATE2_DIAGNOSTIC_MUTE,
+#                     the mix and its clock running, the device given silence), so the desktop's
+#                     audio stays yours.
 #   BENCH_VISIBLE     set to show the seats' windows, tiled side by side from the top left (seat N
 #                     at x = (N-1) * width); by default they open inactive and off-screen
 #                     (SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW), so the desktop stays yours. A pad drives
@@ -127,10 +130,12 @@ start_seat() {
             if [ "$i" -eq 1 ]; then online="create:8"; else online="join:8"; fi
         fi
         eval "extra=\"\${SEAT_EXTRA_$i:-}\""
+        # Muted unless SEAT_AUDIO is set (the switch is set-or-absent: an empty value still mutes).
+        mute=SKATE2_DIAGNOSTIC_MUTE=1; [ -n "${SEAT_AUDIO:-}" ] && mute=
         echo "seat $i: SKATE2_DIAGNOSTIC_ONLINE=$online ${SEAT_EXTRA:-} $extra (log $dir/seat.log)"
         # The seat's whole environment is kept beside its log (seat.env), so a switch that did
         # not take is never a guess.
-        (cd "$dir" && exec env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_DIAGNOSTIC_ONLINE="$online" \
+        (cd "$dir" && exec env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_DIAGNOSTIC_ONLINE="$online" $mute \
             SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" $(window_env "$i") ${SEAT_EXTRA:-} $extra \
             sh -c 'env | grep "^SKATE2_" | sort > seat.env; exec "$0" "$@"' "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) < /dev/null > /dev/null 2>&1 &
         echo $! > "$dir/pid"

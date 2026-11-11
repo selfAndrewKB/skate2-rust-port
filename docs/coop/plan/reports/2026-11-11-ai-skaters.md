@@ -139,6 +139,40 @@ the first frame, and again when the slot's creation reaches the owner: 31 KB eac
 next build can halve. The nine-mission regression on the tagged build:
 `../bench/evidence/2026-11-11-crawl-m10.md` [see the run note in missions].
 
+## The night: a contested prop (M10.1)
+
+The player's note after M10: a railing an AI knocks down on one instance stands on the other,
+and the AI there runs through it. The first reading, that an AI's hit claims nothing, was wrong
+on the logs: the scoring pass marks a prop touched for any skater body's contact, and the M10
+S.K.A.T.E. runs show the pro's hits claiming two rails on seat 1 during the leader's run (the
+crawl's human idle), puppets on seat 2 within 0.04 m. The M9 S.K.A.T.E. logs, each console's
+own pro, show the sighting's mechanism instead: one rail changed owner twelve times in forty
+frames, every touch on the non-owner taking it back with the next claim number, the other
+rail's puppet 4.7 m behind its sample; a prop down on one screen and standing on the other.
+M10 ends that for the challenge AI (two claims, no flip in three runs). M10.1 ends it for the
+rest, two humans or each console's own ambient skaters: a touch does not take a prop whose
+owner's latest sample, within 30 ticks, still has it moving; the touch waits, the puppet stays
+driven, the next touch after it rests claims it. The probe's fourth run then found the plain
+cause of the sighting, older than any of this: since M5 the receiver passed a prop sample only
+when its claim beat the known one, which the owner's own continuing samples never do, so a
+puppet prop took the first sample of each claim and no other, the sample of the touch's own
+tick, before the prop had moved; the owner's copy fell, the puppet stood. Every convergence
+trace in every kept log reads "sample 1" (62 lines); the M5 proof's 44 samples were the
+sender's count, demoted in the version ledger. The owner's continuing samples are the puppet's
+now. The claim's trace names the touching players (`touched_by`, recorded at the contact, since
+the scoring flags are cleared before the claim runs), the nudge takes a list of ticks and round
+ticks, and every bench seat is muted (`SKATE2_DIAGNOSTIC_MUTE`, the mix and its clock running).
+Proof (`../bench/evidence/probe/2026-11-11-m10-1-props.md`, six runs, two of them failing a
+criterion and each fixing a rule, the sixth on the tagged build): run 5, seat 1's nudge at round tick 2400 claimed the
+tutorial's prop, seat 2's at 2430 waited on a sample three ticks old, seat 2's after 3600 took
+it with claim 2, and seat 1 as the puppet took samples 1, 61 and 121 at 0.14, 0.11 and 0.09 m
+behind while the prop settled 1.4 m lower. The review (six findings) moved the "not resting"
+of a touch's own tick to the sender, reset the wait counter when a prop changes hands, sorted
+the nudge ticks and pinned the equal-claim tie in a test; the regression crawl of the
+S.K.A.T.E. and the follow on the tagged build (`../bench/evidence/2026-11-11-crawl-m10-1.md`)
+[see the run note in missions]. What stays: a car's or a pedestrian's push claims nothing
+(67).
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

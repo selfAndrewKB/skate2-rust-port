@@ -41,8 +41,10 @@ removes the run's `SKATER.P.*.bak`, so a run never continues from the autosaves 
 Seat windows open inactive and off-screen (`SKATE2_DIAGNOSTIC_BACKGROUND_WINDOW`), so the
 desktop stays the person's; `BENCH_VISIBLE=1` shows them tiled side by side
 (`SKATE2_DIAGNOSTIC_WINDOW_POSITION`, seat N at x = (N-1) × width; `WINDOW_SIZE=720x405` fits two
-on a 1470-wide display), and a pad drives the focused window's skater: the way to play. Every seat traces online, career and
-coop decisions. Priming needs the career demo (`--live-controls-demo career`) with
+on a 1470-wide display), and a pad drives the focused window's skater: the way to play. The
+seats are muted (`SKATE2_DIAGNOSTIC_MUTE`: the mix and its device clock run as ever, the device
+gets silence), so the desktop's audio stays the person's; `SEAT_AUDIO=1` lets them sound. Every
+seat traces online, career and coop decisions. Priming needs the career demo (`--live-controls-demo career`) with
 `SKATE2_DIAGNOSTIC_MOVIE_SKIP`, a profile name, the first mission completed by
 `SKATE2_DIAGNOSTIC_COMPLETE_CHALLENGES` and a quit by `SKATE2_DIAGNOSTIC_CAREER_QUIT_END`; the
 autosave writes `SKATER.P` at the save root.
@@ -76,9 +78,11 @@ with the sign-up boxes and every player's tester; `SKATE2_DIAGNOSTIC_COOP_PROMPT
 <answer>[;...]` presses as the pad would (`yes`, `no`, `option:<n>`, `skate101`, `unlock`,
 `signup` for the D-pad press, `release`, `choice:<n>`, `cancel`, `accept`, `decline`,
 `service:<n>`, `service_cancel`), so the press goes through the same funnel as a player's and
-the answer rides the facts as a note; `SKATE2_DIAGNOSTIC_COOP_NUDGE=<tick>` gives the nearest
-prop within 30 m a velocity and counts it as touched by this seat's skater (its claim and
-stream follow); `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>` scans the security guard areas
+the answer rides the facts as a note; `SKATE2_DIAGNOSTIC_COOP_NUDGE=<tick>[,<tick>...]` gives
+the nearest prop within 30 m a velocity at each tick and counts it as touched by this seat's
+skater (its claim and stream follow, or the touch waits while another seat is moving it,
+M10.1), `SKATE2_DIAGNOSTIC_COOP_NUDGE_ROUND` the same in round ticks, so two seats' nudges can
+be timed against each other; `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>` scans the security guard areas
 within 1500 m of the skater and traces the nearest point of each (the bench's way into a
 chase).
 The career's own `SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a

@@ -64,7 +64,7 @@ traces every decision (entity, old owner, new owner, reason). The table:
 | ambient pedestrian | `Spawner`: the census that spawned it, for life (M1) | yes |
 | story character (a pedestrian a challenge placed) | `EachConsole`: every console spawns and simulates its own copy where its own skater is (M5) | no |
 | security guard | `Chasee`: the console of the player it chases, which is its spawner until M6's migration (a guard chases only the skater of the console that simulates it) (M5) | yes, as a pedestrian |
-| prop (a dynamic object with a locator) | `LastToucher`: the console whose skater touched it last, by claim number, the highest claim winning everywhere and a tie the lower slot (M5) | yes, in the run's prop list |
+| prop (a dynamic object with a locator) | `LastToucher`: the console whose skater touched it last, by claim number, the highest claim winning everywhere and a tie the lower slot (M5); a touch waits while the owner's latest sample still moves it (M10.1) | yes, in the run's prop list |
 
 Nearest-player ownership with hysteresis and migration: M6.
 
@@ -73,13 +73,41 @@ samples it in the run's prop list (format 2: locator, claim, position, a unit qu
 velocity, resting; 38 B) while it moves, for 120 ticks after a touch and every 20th run at
 rest; the receiver's object becomes a puppet: its target transform is the owner's sample and its
 body is driven there as a hand prop's is, never read back. A touch (the scoring pass's skater
-contact, the bench's nudge) claims it; the touch is the console's own skater's alone, so a prop
-an AI skater, a car or a pedestrian moves is not claimed and not streamed (seen in play: a
-railing knocked down by an AI on one instance standing on the other, open item 67). Proof (`../bench/evidence/2026-11-10-m5a-*.log`): the
-nudge on seat 1 at its frame 2700 claimed the tutorial's prop (locator `ccf33c75656ac459`, claim
-1); seat 2 took it as a puppet at its frame 2231; 44 samples in the next 600 frames while it
-moved, 10 per 600 at rest. The puppet's convergence (its distance behind the sample) is traced
-every 60th sample [ASSUMPTION: not yet read in a run].
+contact, the bench's nudge) claims it. The touch is any skater body's on this console: the
+human's, and on the AI's owner the pro's (M10; the M10 S.K.A.T.E. logs show the pro's hits
+claiming two rails on seat 1, puppets on seat 2), each recorded by player bit (`touched_by`,
+in the claim's trace). A car's or a pedestrian's push is not a touch (the scoring pass's
+living-world contacts), so a prop one of those moves is not claimed and not streamed (open
+item 67). Proof (`../bench/evidence/2026-11-10-m5a-*.log`): the nudge on seat 1 at its frame
+2700 claimed the tutorial's prop (locator `ccf33c75656ac459`, claim 1); seat 2 took it as a
+puppet at its frame 2231; 44 samples in the next 600 frames while it moved, 10 per 600 at
+rest. **Demoted (2026-11-11):** the 44 samples were the sender's count; the receiver passed a
+sample only when its claim beat the known one (`claim_wins`, false for the owner's own equal
+claim), so from M5 to M10 a puppet prop took the first sample of each claim and no other, the
+sample of the touch's own tick, before the prop had moved: a prop knocked down on the owner's
+screen stood on the other (the player's sighting, open item 67). Every convergence trace in
+every kept log is "sample 1" (62 lines). Since M10.1 the owner's continuing samples are the
+puppet's; read in `../bench/evidence/probe/2026-11-11-m10-1-props.md` run 5: samples 1, 61 and
+121 applied 180 ticks apart, the puppet 0.14, 0.11 and 0.09 m behind, the prop settling 1.4 m
+lower than it stood; and on the tagged build's S.K.A.T.E. crawl (`2026-11-11-crawl-m10-1`) the
+rails the pro hit (claimed by seat 1 with `players 0b100`, the leader's bit) followed on seat 2
+through samples 61, 121 and 181 at 0.11, 0.01 and 0.00 m behind.
+
+**A contested prop (M10.1).** Two consoles' actors leaning on one prop claimed it back and
+forth: each touch on the non-owner took it with the next claim number, the owner's next touch
+took it back, and each copy was a puppet one tick and a body the next (the M9 S.K.A.T.E.,
+each console's own pro: twelve claims of one rail in forty frames, a puppet 4.7 m behind; a
+prop down on one screen and standing on the other, open item 67). Now a touch does not take a
+prop whose owner's latest sample, within 30 ticks (`CONTEST_TICKS`; samples come every third
+tick while a prop moves), still has it moving: the touch waits, traced once per contest, the
+puppet stays driven, and the next touch after the prop rests claims it. A sample that raises
+the claim counts as moving until the owner's next sample (the touch's own tick samples the
+velocity before the physics step reads it back, so that sample says resting). Two touches in
+the same tick on two consoles fall to the tie rule as before (the lower slot). Proof
+(`../bench/evidence/probe/2026-11-11-m10-1-props.md`, six runs): seat 1's nudge at round
+tick 2400 claimed the tutorial's prop; seat 2's nudge at 2430 waited ("while Remote(0) is
+moving it", its sample 3 ticks old); seat 2's nudge after 3600, the prop at rest, took it with
+claim 2 and seat 1 became the puppet.
 
 **Story characters (M5):** each console's own, never streamed; the box test is the local
 tester's again (M3's test per player released and re-queued an entry every tick while the
