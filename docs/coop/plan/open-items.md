@@ -128,23 +128,24 @@ Front page: [README](../README.md).
 43. One campaign per server: the save file is keyed by the lobby's constant key, so two campaign
     lobbies on one server would share a file. Fine for one server per group of friends; a key
     per lobby (the host's player id) if a public server is ever wanted.
-45. The AI skaters stop 19 missions of the crawl, on both seats alike. The AI skater manager
-    is ported in part (`SelectCharacters`, `AI.SpawnAIAtLocation`, `AI.StartPath`): in the photo,
-    spot-film, pro-film, S.K.A.T.E., best-trick and demo missions the spawn fails with
-    `AI skater manager: challenge recipe None was not requested` (no character chosen: the
-    group draw lands on no character, or the selection never ran) and the script loops its
-    check (`check_ai`, `check_players`) or stops in `spawn_player`; in the pro follows and the
-    Thrasher photos the character is chosen (`career: AI player 1 ... "Darren Navarrette"`) and
-    `wait_for_assetload` never ends (the manager's asset load does not complete). The port's,
-    not co-op's ([ledger](missions.md)); the families' rules are proven only when it lands.
-46. A location challenge's execute teleports to its `MapStartLocation`, and the port reports
-    every one the crawl met as "teleport to unknown location `<mission>_challengelocator01`,
-    held": the missions' locators are not in the port's table (the go-tos `m_1b_05_goto_mikey`
-    and on, `2026-11-10-crawl-rest`). The crawl completes those by name instead; in play the
-    go-to's own arrival trigger is what matters, and whether it fires is unproven.
-47. `m_1a_07_follow_slappy` stops in `wait_for_assetload` on both seats after
-    `AI.SpawnAIAtLocation: unknown location m_1a_07_follow_slappy_startlocator01`: the follow
-    missions need the AI skater (the port's blocker, 45) and its start locator (46).
+45. Resolved in the main (2026-11-11, the AI day): the AI skaters never stopped a mission for
+    want of a port; four co-op faults did (55 to 58: the manager thought the campaign a network
+    game, the scripts' index space, the AI's messages dropped, the hull's locators registered
+    after the crawl's spawn). With them fixed the photo, follow, demo and S.K.A.T.E. missions
+    probed run the same states at the same ticks on both seats (`2026-11-11-crawl-ai2`: six
+    missions, every state sequence identical). Each console runs its own AI skaters (53): a
+    follow's pro skates its path on each console alone. Left to play: how a follow heat ends on
+    the bench (the pro's path runs past the deadline), a demo lost by a bench that does no tricks
+    (its end-options screen), S.K.A.T.E. rounds whose AI leaders fail in turn; and whether two
+    consoles' own copies of one pro diverge enough to matter.
+46. Resolved (2026-11-11): a teleport to a location no registered arena holds now falls back to
+    the world's own table (`BAM_Sim.loc`, which holds 52 of the missions' `*_challengelocator01`);
+    none of the crawl's "unknown location" stops was among those: every one was a mission hull's
+    own locator, registered a few frames after the crawl's execute (58). The go-tos' arrival
+    triggers in play are still unproven.
+47. Fixed (2026-11-11): `m_1a_07_follow_slappy` spawns its pro at `m_1a_07_follow_slappy_startlocator01`
+    once the crawl preloads the mission's assets before the execute (58), and runs its heat in
+    step on both seats (`2026-11-11-crawl-ai2`).
 44. No notice is shown to the player while the rejoin runs (the career sits held behind the
     fade); a HUD line is to add.
 
@@ -185,20 +186,14 @@ Front page: [README](../README.md).
 
 ## Missions ([ledger](missions.md), the crawl of 2026-11-10)
 
-48. The scripts' AI player is player 1, and in a two-seat campaign player 1 is the other human.
-    Eight photo and spot-film missions diverged at `check_ai`: after the failed spawn,
-    `Entity.DoesSkaterExist(1)` is true on seat 1 (the guest's skater is its player 1; seat 1
-    went on to `countdown` and drove player 1 with `AI.StartPath`) and false on seat 2, which
-    waited to the deadline (`../bench/evidence/probe/probe-m_5a_01_photo_thrasher-seat-N.log`,
-    the native trace). When the AI skaters land (45), a campaign round must give the scripts'
-    AI players indexes past the humans, or map them in the natives (`DoesSkaterExist`, `PinAI`,
-    `StartPath`, `SpawnAIAtLocation`); until then every AI mission is at best in step and failing.
-49. `m_6p_01_demo_first_job` runs the same path on both seats 58 ticks apart: `setup_round`
-    (both at 1527) teleports the skater to the demo's start locator and waits for the teleport to
-    finish, which is local timing (`countdown` at 1618 on seat 1, 1560 on seat 2; `run_round`
-    at 1799 and 1741). The start locator stands in the demo's crowd, so each skater lands inside
-    the other seat's spectators (50). To fix with the demo kind: the teleport's end as a fact
-    both seats wait for, and the start spots apart.
+48. Fixed (2026-11-11): the scripts' AI player is an ordinal in the career's own index space,
+    which a campaign's scripts now see on every console (56); the AI skates at a slot after the
+    humans, the same slot on both seats.
+49. `m_6p_01_demo_first_job` ran the same path on both seats 58 ticks apart on 2026-11-10
+    (`setup_round` waited for a local teleport). On 2026-11-11 (`2026-11-11-crawl-ai2`, the
+    assets preloaded) both seats ran its 14 states at the same ticks, to `end_options` at 11026;
+    one run, so the split may return with a slower teleport: the teleport's end as a fact both
+    seats wait for stays the fix if it does. The start spots apart (50) still owed.
 50. Fixed (2026-11-11, [world](topics/world.md), "A puppet stands up"): a puppet never stood up
     after a knockdown, its own graph not being ticked past the collision's end, and the owner's
     "up" now ends a knockdown this copy still plays. The demo mission's census `down` agreement

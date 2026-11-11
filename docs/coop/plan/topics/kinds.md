@@ -27,11 +27,23 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
   campaign's `GameReset`, as the design intends, is owed: [open items](../open-items.md) 37).
 - **`BestOf` beyond completion:** the best run's score on the results screen and the
   leaderboard stay each console's own display [open item].
-- **The AI photographer and cameraman** are each console's, as every AI is; both players skate
-  [ASSUMPTION]. The crawl reached `m_1a_05_photo_rail` and `m_1a_06_photo_puzzle` and both
-  stopped on both seats alike in the script's `check_ai` wait, before the objectives: the
-  port has no AI skaters yet (`docs/career/HANDOFF.md`, "AI skaters: the career blocker"), so
-  the photo family waits on the port, not on co-op ([open items](../open-items.md) 45).
+- **The AI skaters are each console's own (2026-11-11, the AI day)** [CONFIRMED on the bench,
+  six missions]: the original's challenge AI is offline-only, so a campaign's AI skater manager
+  runs as the career's on every console; each console selects the mission's characters at its
+  asset load, streams their recipes, and spawns and drives its own copies (the pro you follow,
+  the photographer's subject, a demo's judges and competitors, S.K.A.T.E.'s leaders). The
+  scripts see the career's own index space (themselves 0, their AI 1 on; [design](../design.md)
+  §7), so a script's AI player lands on the same slot after the humans on every console, and its
+  `cMsgSkaterCreated` arrives with the ordinal the script expects. Measured
+  (`2026-11-11-crawl-ai2`): the photo `m_5a_01`, the follows `m_4b_01` and `m_1a_07`, the
+  S.K.A.T.E. `m_4a_01`, the demos `m_7a_01` and `m_6p_01` ran identical state sequences at
+  identical ticks on both seats (8 to 53 states each, no difference). What differs between the
+  consoles is the AI's own skating: two copies of one pro, each following the path on its own
+  console, not streamed (open items 45, 53); whether that shows in play is play's to say. The
+  photo missions pass; the follows run their heat, the demos their rounds to the end-options
+  screen, S.K.A.T.E. its rounds, all past the diagnostic win: the bench does no tricks, so those
+  families' own ends (the pro's path, the demo's score, a human's set trick) are not reached on
+  it [UNKNOWN in play].
 - **The families in the data.** The campaign's `challenge_global_data` uses `ChallengeType`
   0 (tutorial, 9 missions), 2, 4, 6 (photo, 5), 15 (jam, 3), 23 (follow, 7), 30 (go-to, 13),
   38 (30 photo missions), 39 (11 film), 40 (20 spot film), 41 (4 pro film), 43 (7 film/demo

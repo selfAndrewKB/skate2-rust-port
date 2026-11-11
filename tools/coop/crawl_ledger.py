@@ -232,6 +232,10 @@ def _last(s):
     return (s.get('last_state') or (0, ''))[1]
 
 
+# the states a mission sits in while it runs or ends on its own terms (the follows' heat, the
+# demos' rounds and end screen, S.K.A.T.E.'s rounds)
+RUNNING_ON = {'run_heat', 'run_round', 'end_round', 'results_screen', 'end_options', 'wait_for_leader', 'wait_for_scoring', 'leader_failure', 'process_round', 'round_setup', 'challenge_running'}
+
 CAUSES = [
     ('crash', lambda m: any('panicked' in f for s in m['seats'].values() for f in s.get('failed', []))),
     ('net: dropped', lambda m: any(s.get('failed') for s in m['seats'].values())),
@@ -241,6 +245,10 @@ CAUSES = [
     # the co-op causes come first: a lockstep campaign owes identical scripts on every seat
     ('co-op: seats diverged', lambda m: m.get('paths_agree') is False),
     ('co-op: out of step', lambda m: m.get('paths_agree') and not m['in_step']),
+    # both seats ran the same states at the same ticks through the win and the mission is still
+    # on (a heat, a round, its end screen): what the bench cannot finish, play does
+    ('in step: the mission runs on', lambda m: m.get('paths_agree') and m['in_step']
+        and all(s.get('won') and _last(s) in RUNNING_ON for s in m['seats'].values())),
     ('port: unknown locator', lambda m: any('unknown location' in _errs(s) or (m['kind'] == 'location' and s.get('teleport_unknown')) for s in m['seats'].values())),
     ('port: AI skater', lambda m: any((s.get('loop') and any(x.startswith('check_') for x in s['loop'])) or 'AI skater manager' in _errs(s) for s in m['seats'].values())),
     ('port: AI assets never load', lambda m: any(_last(s) == 'wait_for_assetload' and s.get('ai_players') for s in m['seats'].values())),
