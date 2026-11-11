@@ -154,6 +154,7 @@ def seat(name, path):
     errs = Counter(normalize(re.sub(r'^.*career script error in ', '', l)) for l in log if 'career script error' in l)
     r['script_errors'] = [{'error': e, 'count': c} for e, c in errs.most_common()]
     r['teleport_unknown'] = [l[8:160] for l in log if 'teleport to unknown location' in l][:3]
+    r['ai_players'] = [f'{m.group(1)}: {m.group(2)}' for m in g(r'career: AI player (\d+) character 0x[0-9a-f]+ names .* => \("([^"]*)"')]
     unk = Counter(normalize(l) for l in log if UNKNOWN.search(l) and not NOISE.search(l) and 'career script error' not in l and 'ScriptError' not in l)
     r['unknown'] = [{'line': e, 'count': c} for e, c in unk.most_common(12)]
     # synchronization
@@ -208,16 +209,27 @@ def server(name, path):
     return r
 
 
+def _errs(s):
+    return ' '.join(e['error'] for e in s.get('script_errors', []))
+
+
+def _last(s):
+    return (s.get('last_state') or (0, ''))[1]
+
+
 CAUSES = [
-    ('port: AI skater', lambda m: any(s.get('loop') and 'check_ai' in s['loop'] for s in m['seats'].values())),
     ('crash', lambda m: any('panicked' in f for s in m['seats'].values() for f in s.get('failed', []))),
     ('net: dropped', lambda m: any(s.get('failed') for s in m['seats'].values())),
     ('not executed', lambda m: m['kind'] == 'main' and any(s.get('executed') is False for s in m['seats'].values())),
-    ('port: unknown location', lambda m: m['kind'] == 'location' and any(s.get('teleport_unknown') for s in m['seats'].values())),
     ('not completed by name', lambda m: m['kind'] != 'main' and any(s.get('completed') is None for s in m['seats'].values())),
     ('no log', lambda m: any(not s.get('lines') for s in m['seats'].values())),
-    ('script error', lambda m: any(s.get('script_errors') for s in m['seats'].values()) and not m['passed']),
-    ('co-op: seats diverged', lambda m: not m['passed'] and len({(s.get('last_state') or (0, ''))[1] for s in m['seats'].values()}) > 1),
+    # the co-op causes come first: a lockstep campaign owes identical scripts on every seat
+    ('co-op: seats diverged', lambda m: m.get('paths_agree') is False),
+    ('co-op: out of step', lambda m: m.get('paths_agree') and not m['in_step']),
+    ('port: unknown locator', lambda m: any('unknown location' in _errs(s) or (m['kind'] == 'location' and s.get('teleport_unknown')) for s in m['seats'].values())),
+    ('port: AI skater', lambda m: any((s.get('loop') and any(x.startswith('check_') for x in s['loop'])) or 'AI skater manager' in _errs(s) for s in m['seats'].values())),
+    ('port: AI assets never load', lambda m: any(_last(s) == 'wait_for_assetload' and s.get('ai_players') for s in m['seats'].values())),
+    ('script error', lambda m: any(s.get('script_errors') for s in m['seats'].values())),
 ]
 
 
@@ -238,7 +250,7 @@ def classify(m):
 def verdict_from_logs(m):
     seats = m['seats']
     if m['kind'] == 'main':
-        both = all(s.get('executed') and s.get('cleanup') is not None for s in seats.values())
+        both = all(s.get('executed') and (s.get('cleanup') is not None or s.get('complete') is not None) for s in seats.values())
     else:
         both = all(s.get('completed') is not None for s in seats.values())
     saves = [s.get('save') for s in seats.values()]
@@ -311,7 +323,9 @@ def main():
         m['verdict'] = verdict_from_logs(m) if any(s.get('lines') for s in m['seats'].values()) else (m['history'][-1][1] if m['history'] else 'NOT RUN')
         m['passed'] = m['verdict'].startswith('PASS')
         s1, s2 = m['seats'][1], m['seats'][2]
-        m['in_step'] = bool(s1.get('last_state') and s2.get('last_state') and s1['last_state'] == s2['last_state'])
+        l1, l2 = s1.get('last_state'), s2.get('last_state')
+        m['in_step'] = (l1 == l2) if (s1.get('lines') and s2.get('lines')) else False
+        m['paths_agree'] = s1.get('path') == s2.get('path') if (s1.get('lines') and s2.get('lines')) else None
         m['cause'] = classify(m) if m['verdict'] != 'NOT RUN' else '—'
         m['note'] = note_mission.get(name, '')
         missions.append(m)
@@ -339,7 +353,7 @@ def main():
     L.append('')
     L.append('### Missions')
     L.append('')
-    L.append('Verdicts: PASS (both seats through `challenge_cleanup`, saves agreeing), PASS (no save), PASS (saves differ), STOPPED, NOT EXECUTED, CRASHED, DROPPED, NOT RUN. '
+    L.append('Verdicts: PASS (both seats through `challenge_cleanup`, or through `complete` for a challenge that completes on execute, saves agreeing), PASS (no save), PASS (saves differ), STOPPED, NOT EXECUTED, CRASHED, DROPPED, NOT RUN. '
              '"In step": both seats\' scripts ended in the same state at the same round tick. The details, one section a mission: [missions-detail](missions-detail.md).')
     L.append('')
     L.append('Kind, from `challenge_global_data.Global`: main (3, 4: executed and won), location (2: executed, then completed by name), none (0: completed by name). Families marked † are named from the missions, the enumeration being unread.')
@@ -468,6 +482,8 @@ def main():
             D.append(f"  - Sync: audit {a['samples']} samples in {a['windows']} windows, position {pct(a['pos_ok'], a['samples'])}, yaw {pct(a['yaw_ok'], a['samples'])}, speed {pct(a['speed_ok'], a['samples'])}, flags {pct(a['flags_ok'], a['samples'])}, worst {a['worst_pos_m']:.2f} m / {a['worst_yaw_deg']}°; "
                      f"stream {w['windows']} windows, {w['bytes']} B, peak {w['peak_bps']} B/s, peak {w['peak_pedestrians']} pedestrians here ({w['peak_owned']} owned, {w['peak_puppets']} puppets), props {w['peak_props_owned']} owned of {w['peak_props_known']}, contacts {w['contacts_sent']}/{w['contacts_applied']}/{w['contacts_confirmed']}, {w['older_epoch']} older-epoch records; "
                      f"handoffs {s['handoffs']}, promotions {s['promotions']}, demotions {s['demotions']}, knockdowns {s['knockdowns']}; stalled {s['stalled_ticks']}, starved {s['starved_ticks']}, teleport frames {s['teleport_frames']}")
+            if s.get('ai_players'):
+                D.append('  - AI players selected: ' + ', '.join(s['ai_players']))
             if s['script_errors']:
                 D.append('  - Script errors: ' + '; '.join(f"`{e['error']}` ×{e['count']}" for e in s['script_errors'][:6]))
             if s['teleport_unknown']:

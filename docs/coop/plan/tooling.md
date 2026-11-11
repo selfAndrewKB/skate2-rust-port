@@ -201,6 +201,11 @@ mission's logs are kept as `crawl-<name>-seat-N.log` and `-server.log`, with a `
 marker where the bench's teardown begins, and the census dump on for the offline audit.
 One to three minutes a mission.
 
+**Probes.** `CRAWL_EXTRA='SKATE2_TRACE_CAREER_NATIVES=1 SKATE2_TRACE_AI=1'` adds seat variables
+to a crawl (`--missions <one> --keep --out <scratch>.md` reruns one mission without touching the
+ledger's run reports; move the kept logs aside first, the crawl overwrites them). A main mission
+is also done when both scripts enter `complete` (the film-team kind completes on execute).
+
 **The ledger.** `python3 tools/coop/crawl_ledger.py` reads every kept log and every run report
 and regenerates [missions.md](missions.md) (one row a mission: family, kind, rule, verdict, where
 it stopped, the cause classified from the log, whether the seats ended in step, every run's

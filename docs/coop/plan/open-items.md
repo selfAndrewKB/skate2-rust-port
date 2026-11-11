@@ -128,11 +128,15 @@ Front page: [README](../README.md).
 43. One campaign per server: the save file is keyed by the lobby's constant key, so two campaign
     lobbies on one server would share a file. Fine for one server per group of friends; a key
     per lobby (the host's player id) if a public server is ever wanted.
-45. The crawl stops at the photo missions (`m_1a_05_photo_rail`, `m_1a_06_photo_puzzle`): the
-    script loops `check_ai` → `wait` every 16 ticks from `spawn_player` on, on both seats alike,
-    waiting for an AI skater the port has not ported (`docs/career/HANDOFF.md`). Not co-op's;
-    the crawl past them (`--from m_1a_07_...`) says how far the rest goes, and the photo family's
-    rules are proven only when the port's AI skaters land.
+45. The AI skaters stop 19 missions of the crawl, on both seats alike. The AI skater manager
+    is ported in part (`SelectCharacters`, `AI.SpawnAIAtLocation`, `AI.StartPath`): in the photo,
+    spot-film, pro-film, S.K.A.T.E., best-trick and demo missions the spawn fails with
+    `AI skater manager: challenge recipe None was not requested` (no character chosen: the
+    group draw lands on no character, or the selection never ran) and the script loops its
+    check (`check_ai`, `check_players`) or stops in `spawn_player`; in the pro follows and the
+    Thrasher photos the character is chosen (`career: AI player 1 ... "Darren Navarrette"`) and
+    `wait_for_assetload` never ends (the manager's asset load does not complete). The port's,
+    not co-op's ([ledger](missions.md)); the families' rules are proven only when it lands.
 46. A location challenge's execute teleports to its `MapStartLocation`, and the port reports
     every one the crawl met as "teleport to unknown location `<mission>_challengelocator01`,
     held": the missions' locators are not in the port's table (the go-tos `m_1b_05_goto_mikey`
@@ -178,3 +182,36 @@ Front page: [README](../README.md).
 23. The mission's end phase waits for its outro scene now (about 700 ticks longer than M3's
     run, whose outro was unpresented), so a bench recipe's sign-up teleports must follow it
     ([tooling](tooling.md), "A typical M4 run").
+
+## Missions ([ledger](missions.md), the crawl of 2026-11-10)
+
+48. The scripts' AI player is player 1, and in a two-seat campaign player 1 is the other human.
+    Eight photo and spot-film missions diverged at `check_ai`: after the failed spawn,
+    `Entity.DoesSkaterExist(1)` is true on seat 1 (the guest's skater is its player 1; seat 1
+    went on to `countdown` and drove player 1 with `AI.StartPath`) and false on seat 2, which
+    waited to the deadline (`../bench/evidence/probe/probe-m_5a_01_photo_thrasher-seat-N.log`,
+    the native trace). When the AI skaters land (45), a campaign round must give the scripts'
+    AI players indexes past the humans, or map them in the natives (`DoesSkaterExist`, `PinAI`,
+    `StartPath`, `SpawnAIAtLocation`); until then every AI mission is at best in step and failing.
+49. `m_6p_01_demo_first_job` runs the same path on both seats 58 ticks apart (`run_round` at
+    1799 and 1741): the demo's `setup_round`/`countdown` take a local time. To fix with the demo
+    kind; a lockstep campaign owes the same tick.
+50. In the demo (49), from tick 2400 on, the live audit sees 800 samples a window at equal
+    positions with unequal flags (7 to 200 of 800 equal; ids `120000a8`–`120000ab`): the
+    demo's own entities stand still with their flags apart. Which flag bits, and whose entities,
+    is to read from the census dump (`tools/coop/sync_audit.py`).
+51. `m_2a_01` and `m_4g_01_spotfilm_johnson` keep both scripts in `challenge_running` after every
+    objective completed at the win; `m_2a_01`'s photo scene starts 1800 ticks after the win amid
+    repeating Hall of Meat start lines. In step, so not co-op's divergence; what the graph waits
+    for after the win is to read.
+52. The seven film-team missions (`m_6p_03_demo_pool_team_03`, `m_6p_05_film_team_05`,
+    `m_6p_09_photo_sm_04`, `m_6p_10_film_team_10`, `m_6p_10_photo_sm_5`, `m_8_01_04`, `m_8_01_05`)
+    complete themselves 182 ticks after the execute (`initial→challenge_running→complete`) and
+    autosave with one hash. The crawl counts that a pass; what the mission asks of a player in
+    play (a team film the diagnostic cannot make) is unproven.
+53. The ambient AI skaters are each console's own: at the same two spots seat 1 spawned
+    `ai_skater_06` and `sammy`, seat 2 `seb` and `ai_skater_06` (the probe's `ai:` lines). Not
+    streamed, not in the inventory's counts; a player sees different skaters than the other.
+54. Four location missions (`m_08_01_teleport_trainingfacility_in`/`_out`, `m_2a_01_goto`,
+    `m_3a_01_goto`) carry an empty `MapStartLocation` (the execute's teleport names hash 0, held);
+    the crawl completes them by name. Where the original puts the player is to read.

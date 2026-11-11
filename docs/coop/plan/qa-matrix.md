@@ -24,6 +24,7 @@ claim is never wider than its run. Front page: [README](../README.md).
 | 2 | one Mac | the mission crawl's first slice, the eight opening missions one bench start each with the saves carried forward | M8, 2026-11-10 [CONFIRMED on the bench]: 6 PASS, the two photo missions STOPPED at the port's AI-skater blocker ([open items](open-items.md) 45) |
 | 2 | one Mac | a seat leaves (quits) and rejoins a running campaign by choice | not run; the lost-connection path is the same code [ASSUMPTION] |
 | 2 | one Mac, two windows side by side, one pad | played by the player (M5 build, the waterfront): "synchronization appears to be very solid foundation-wise"; pedestrians' positions and the dodge when run into synced; their models, their startled runs and their falls not ([open items](open-items.md) 31) | 2026-11-10 [CONFIRMED in play] |
+| 2 | one Mac | the whole mission crawl: 115 missions one bench start each, saves carried, the diagnostic execute and win | M8+, 2026-11-10 [CONFIRMED on the bench]: 81 PASS (34 with one save hash, 47 with no save), 34 STOPPED: 19 at the port's AI skaters (45), 8 diverged at `check_ai` (48), 4 at unknown locators (47), 2 in `challenge_running` after the win (51), 1 out of step (49); the ledger: [missions](missions.md) |
 
 Transitions to play in each row: a hull reload (the 160-tick stall at Continue Career), a map
 travel, a scene, the pause menu, a save.

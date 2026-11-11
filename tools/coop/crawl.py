@@ -73,9 +73,10 @@ def run_one(name, kind, keep):
     subprocess.run(['pkill', '-f', 'dist/macos/skate2-pc'], capture_output=True)
     time.sleep(2)
     extra = ['SKATE2_DIAGNOSTIC_COOP_ANSWER=no', 'SKATE2_TRACE_COOP_CENSUS=1']  # the census dump feeds the offline audit per mission
+    extra += os.environ.get('CRAWL_EXTRA', '').split()  # a probe's extra seat variables, e.g. SKATE2_TRACE_CAREER_NATIVES=1
     if kind == 'main':
         extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}']
-        done = 'enter challenge_cleanup|panicked|kicked|disconnected'
+        done = r'enter challenge_cleanup|enter complete\b|panicked|kicked|disconnected'  # `complete`: a challenge that completes on execute (film team)
     elif kind == 'location':
         extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={WIN_AT}:{name}']
         done = 'diagnostic: complete challenge|panicked|kicked|disconnected'
@@ -116,7 +117,7 @@ def run_one(name, kind, keep):
         executed = grep(log, f'diagnostic: execute {re.escape(name)} at round tick')
         won = grep(log, 'diagnostic: won the main challenge')
         completed = grep(log, f'diagnostic: complete challenge {re.escape(name)}')
-        cleanup = grep(log, 'enter challenge_cleanup')
+        cleanup = grep(log, r'enter challenge_cleanup|enter complete\b')
         saved = grep(log, 'campaign save at')
         failed = [l for l in grep(log, 'panicked|kicked|disconnected') if 'crawl: stop' not in l][:1]
         last = grep(log, 'career graph .* enter ')

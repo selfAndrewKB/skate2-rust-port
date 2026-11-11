@@ -39,6 +39,12 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
   (the enumeration past 34 is unread) and fall to the table's default, `Anyone`, which is what
   the design gives photo and film anyway ([missions](../missions.md) names them from the
   missions, marked †). A rule for those families by number works today; naming them is owed.
+- **The families in the crawl** (2026-11-10, [missions](../missions.md)): every tutorial (9),
+  go-to (13), property teleport (2), film pool team (11) and the film-team kind (7, which
+  completes on execute) passed; photo (team) 21 of 30, spot film 15 of 20, pro film 1 of 4,
+  S.K.A.T.E. 1 of 2, jam 1 of 3 passed; every follow (7), photo (5) and demo (2) stopped. Every
+  stop but the eight `check_ai` divergences and one out-of-step demo is the port's AI skater or
+  a locator ([open items](../open-items.md) 45, 47 to 52).
 - **Not done:** the lobby's settings page for the table (the file and the switch suffice on the
   bench; a page is play's to ask for).
 
