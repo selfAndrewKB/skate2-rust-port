@@ -171,6 +171,7 @@ def main():
     ap.add_argument('--missions', default='')
     ap.add_argument('--from', dest='start', default='')
     ap.add_argument('--count', type=int, default=0)
+    ap.add_argument('--keep', action='store_true', help='carry the saves in from the first mission (a continued crawl)')
     ap.add_argument('--out', default=str(BENCH / 'evidence' / f'{time.strftime("%Y-%m-%d")}-crawl.md'))
     args = ap.parse_args()
     table = {n: (t, g) for n, t, g in missions()}
@@ -195,7 +196,7 @@ def main():
             f.write('# The mission crawl\n\n| Mission | Verdict | Seat 1 last state | Seat 2 last state | Won | Save | Driver, stop |\n| --- | --- | --- | --- | --- | --- | --- |\n')
         for i, name in enumerate(names):
             kind = driver(table.get(name, (0, 0))[1])
-            r = run_one(name, kind, keep=i > 0 or bool(args.start))
+            r = run_one(name, kind, keep=i > 0 or bool(args.start) or args.keep)
             v = verdict(r)
             won = r[1]['won'] if kind == 'main' else ('completed by name' if r[1]['completed'] else 'not completed')
             line = f"| `{name}` | {v} | {r[1]['last_state']} | {r[2]['last_state']} | {won} | {'agree' if r['agree'] else r[1]['save'] + ' / ' + r[2]['save']} | {kind}, {r['reason']} |"
