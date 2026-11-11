@@ -3,6 +3,8 @@
 //! wire format. The session glue (what is sent each tick, the puppets, the contacts) is
 //! `session/online/coop_world.rs`; the relay is `skate2-net`'s `ClientMessage::World`.
 
+#[path = "outcomes.rs"]
+pub mod outcomes;
 #[path = "ownership.rs"]
 pub mod ownership;
 #[path = "prompts.rs"]

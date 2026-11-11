@@ -446,6 +446,12 @@ fn resume_suspended_global_challenges(world: &mut World) {
 /// `cActivityManager::StartMainChallenge` (`0x82cda588`): the old main challenge reset, the new
 /// one run with the sub-controllers' `RunMainActivity`, then the globals suspended.
 pub fn start_main_challenge(world: &mut World, key: u64) {
+    // Co-op fork (M9): a new attempt's outcomes start from nothing.
+    if let Some(campaign) = world.coop.as_mut() {
+        campaign.won.retain(|(k, _)| *k != key);
+        campaign.lost.retain(|(k, _, _)| *k != key);
+        campaign.decided.retain(|k| *k != key);
+    }
     if let Some(previous) = world.activities.main.take() {
         world.activities.add_to_pending_reset(previous);
     }

@@ -289,4 +289,20 @@ Front page: [README](../README.md).
     mission's flow does not read the AI's run; S.K.A.T.E., jams and contests do. The competing
     kinds need one AI outcome for both consoles (an owner's AI streamed, or its round results as
     facts) before they can be in step; until then they are each console's own game
-    ([kinds](topics/kinds.md)).
+    ([kinds](topics/kinds.md)). M9 (2026-11-11) takes the second way: a script's decision about
+    its own player (an objective forced complete, the objectives failed, the mission won or lost
+    on its own terms) rides that player's facts as an outcome note and every console applies it
+    to that player's copy at the note's tick; the rules settle the mission. Proven with the
+    bench's win on seat 1 alone: both seats applied the two notes at tick 1884 and entered
+    `challenge_cleanup` together (`../bench/evidence/probe/2026-11-11-m9-one-seat-win-*.log`).
+    The AI's run itself stays each console's own; a S.K.A.T.E. still plays its rounds twice,
+    once per console, and the first human to win (or every human, by the rule) ends it for all.
+63. A player who leaves a round and rejoins (a new stint, its note numbers starting again at 1)
+    has its first prompts and outcomes dropped on the consoles that keep the old high-water
+    marks (`prompts_applied`, `outcomes_applied` in `Round`, never reset for a slot). Seen in the
+    M9 review, not on the bench. The fix is to reset a slot's marks when that player's stint
+    changes.
+64. `CampaignWorld.players` never shrinks when a player leaves, so after a departure a rule's
+    count of copies (`Everyone`'s completion, `Anyone`'s failure, the won and lost notes') is
+    one more than the players left and can never be met. Pre-existing in the objective copies
+    (`siblings.len()`), noted in the M9 review; the leave handling is where to shrink it.

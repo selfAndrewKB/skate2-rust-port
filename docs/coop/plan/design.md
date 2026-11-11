@@ -316,5 +316,20 @@ challenge AI skaters (the original's challenge AI is offline-only); their frames
 scripts' per-player frames on that console alone, so an AI's path is each console's own, like the
 ambient skaters' (53).
 
+**The competing kinds: outcomes as notes (2026-11-11, M9).** Each console plays a S.K.A.T.E.,
+jam or contest against its own AI, and a script that reads its AI's run decides for its own
+player alone. Such a decision (an objective forced complete, the objectives all failed, the
+mission won or lost on the script's own terms) is not applied where it is made: it travels as a
+note on that player's facts (`FactsNotes.outcomes`, protocol 122) and every console, the
+decider's included, applies it to that player's copy at the note's tick
+(`coop::outcomes`, `World::apply_coop_outcome`). The rules then settle the mission from every
+player's copy as they already do for the objective kinds: `Anyone` and `Compete { false }` at
+the first win, `Everyone` and `Compete { true }` once every human has won; a loss ends the
+mission when the rule's failure count is met. A `Challenge.CompleteChallenge` that follows the
+shared objective completion still applies at once, the same tick everywhere. What is not
+shared is the AI's run itself: two consoles' copies of one pro skate their own paths; a
+streamed, owned AI skater remains the alternative if play finds the copies' difference
+matters.
+
 **Route (2026-11-10):** D, distributed ownership. A was the first choice the same day and was
 set aside for the reasons in §2; its checksum remains available as a test instrument.

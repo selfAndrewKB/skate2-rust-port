@@ -284,6 +284,11 @@ pub(super) struct Round {
     /// Co-op fork: the round is a campaign's, the whole session long: every player paces it,
     /// its objective groups each read their own player, and it never completes.
     pub(super) campaign: bool,
+    /// Co-op fork (M9): the outcomes this console's scripts decided and not yet carried by a tick,
+    /// numbered; the newest applied of each player's.
+    outcomes_pending: Vec<skate2_net::protocol::Outcome>,
+    outcome_seq: u32,
+    outcomes_applied: [u32; MAX_PLAYERS],
     /// Co-op fork: the prompts this console answered and not yet carried by a tick, numbered;
     /// the next number; and the last number of each player's applied.
     prompts_pending: Vec<skate2_net::protocol::Prompt>,
@@ -368,6 +373,9 @@ impl Round {
             prompts_pending: Vec::new(),
             prompt_seq: 0,
             prompts_applied: [0; MAX_PLAYERS],
+            outcomes_pending: Vec::new(),
+            outcome_seq: 0,
+            outcomes_applied: [0; MAX_PLAYERS],
             streamer: None,
             diagnostic_voted: false,
             diagnostic_entered: Vec::new(),
@@ -523,13 +531,20 @@ impl Round {
     fn notes(&self) -> FactsNotes {
         let left = self.leaving.iter().filter_map(|&user_id| self.player_index(user_id)).filter_map(|index| u8::try_from(index).ok()).collect();
         let prompts = self.prompts_pending.iter().take(skate2_net::protocol::MAX_PROMPTS).copied().collect();
-        FactsNotes { votes: self.votes.iter().map(|(&player, &score)| (player, score)).collect(), left, prompts, ..FactsNotes::default() }
+        let outcomes = self.outcomes_pending.iter().take(skate2_net::protocol::MAX_OUTCOMES).copied().collect();
+        FactsNotes { votes: self.votes.iter().map(|(&player, &score)| (player, score)).collect(), left, prompts, outcomes, ..FactsNotes::default() }
     }
 
     /// Co-op fork: a prompt this console answered, to travel with its next facts.
     pub(super) fn queue_prompt(&mut self, kind: u8, value: i32) {
         self.prompt_seq += 1;
         self.prompts_pending.push(skate2_net::protocol::Prompt { seq: self.prompt_seq, kind, value });
+    }
+
+    /// Co-op fork (M9): an outcome this console's scripts decided, to travel with its next facts.
+    pub(super) fn queue_outcome(&mut self, kind: u8, activity: u64, value: i32) {
+        self.outcome_seq += 1;
+        self.outcomes_pending.push(skate2_net::protocol::Outcome { seq: self.outcome_seq, kind, activity, value });
     }
 
     /// The frame a player stands at for a tick it sends no facts for.
@@ -616,7 +631,10 @@ impl Round {
 
     /// The tick's frames of every player still in the round, once the facts of every player
     /// pacing it are in; the players who disconnect at it; the local skater's whole frame.
-    fn next_tick(&mut self) -> Option<(Vec<MissionFrame>, Vec<i32>, Option<MissionFrame>, Vec<Presented>, Vec<(i32, skate2_net::protocol::Prompt)>)> {
+    #[expect(clippy::type_complexity, reason = "one tick's deliveries, taken apart by the caller")]
+    fn next_tick(
+        &mut self,
+    ) -> Option<(Vec<MissionFrame>, Vec<i32>, Option<MissionFrame>, Vec<Presented>, Vec<(i32, skate2_net::protocol::Prompt)>, Vec<(i32, skate2_net::protocol::Outcome)>)> {
         let tick = self.processed;
         let mut frames = Vec::with_capacity(self.players.len());
         let mut notes = Vec::new();
@@ -673,6 +691,22 @@ impl Round {
                 self.prompts_pending.retain(|prompt| prompt.seq > applied);
             }
         }
+        // Co-op fork (M9): each player's outcomes, applied once each in order, the decider's own
+        // pending ones done with once its own facts carried them.
+        let mut outcomes = Vec::new();
+        for (player, note) in &notes {
+            let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
+            for &outcome in &note.outcomes {
+                if outcome.seq > self.outcomes_applied[slot] {
+                    self.outcomes_applied[slot] = outcome.seq;
+                    outcomes.push((*player, outcome));
+                }
+            }
+            if *player == self.local {
+                let applied = self.outcomes_applied[slot];
+                self.outcomes_pending.retain(|outcome| outcome.seq > applied);
+            }
+        }
         let notes: Vec<FactsNotes> = notes.into_iter().map(|(_, note)| note).collect();
         for note in &notes {
             for &(voter, score) in &note.votes {
@@ -721,7 +755,7 @@ impl Round {
         let presented = candidates.into_iter().filter(|&presented| self.deliver_presented(presented)).collect();
         self.processed += 1;
         self.ticks += 1;
-        Some((frames, disconnects, own, presented, prompts))
+        Some((frames, disconnects, own, presented, prompts, outcomes))
     }
 
     /// The players pacing the next tick, after the challenge ran this one. A player who starts
@@ -1095,7 +1129,14 @@ impl<T, C> SelectedLiveSession<T, C> {
         world.players = Some(Arc::new(backend));
         world.local_player = local_index;
         world.online = Some(OnlineChallenge { local_player: local_index, players: i32::try_from(count).unwrap_or(0), ..OnlineChallenge::default() });
-        world.coop = Some(crate::coop::rules::CampaignWorld { rules, players: (0..i32::try_from(count).unwrap_or(0)).collect(), chase_on: false });
+        world.coop = Some(crate::coop::rules::CampaignWorld {
+            rules,
+            players: (0..i32::try_from(count).unwrap_or(0)).collect(),
+            won: Vec::new(),
+            lost: Vec::new(),
+            decided: Vec::new(),
+            chase_on: false,
+        });
         // Co-op fork (open items 45, 53): this console's AI skaters, ambient and challenge, seat
         // themselves after the campaign's humans; one already in a human's slot leaves.
         if let (Some(ai), Some(player)) = (self.inner.ai.as_mut(), self.inner.player.as_ref()) {
@@ -1716,11 +1757,17 @@ impl<T, C> SelectedLiveSession<T, C> {
                 // Co-op fork: the prompts answered here since the last facts ride the next.
                 if let Some(career) = self.career.as_mut() {
                     let answered = career.take_pending_prompts();
+                    let decided = std::mem::take(&mut career.system.world_mut().coop_outcomes);
                     if let Some(round) = self.online.round.as_mut() {
                         for answer in answered {
                             let (kind, value) = answer.to_wire();
                             round.queue_prompt(kind, value);
                             crate::coop::trace(format_args!("prompt {answer:?} answered here: queued for the next facts"));
+                        }
+                        for outcome in decided {
+                            let (kind, activity, value) = outcome.to_wire();
+                            round.queue_outcome(kind, activity, value);
+                            crate::coop::trace(format_args!("outcome {outcome:?} decided here: queued for the next facts"));
                         }
                     }
                 }
@@ -1748,7 +1795,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     self.online.send(ClientMessage::Stalled { user_id, tick });
                 }
                 for _ in 0..ticks {
-                    let Some((frames, disconnects, own, presented, prompts)) = self.online.round.as_mut().filter(|round| round.running()).and_then(Round::next_tick) else { break };
+                    let Some((frames, disconnects, own, presented, prompts, outcomes)) = self.online.round.as_mut().filter(|round| round.running()).and_then(Round::next_tick) else { break };
                     if std::env::var_os("SKATE2_TRACE_ONLINE_INPUTS").is_some() {
                         self.trace_online_inputs(&frames);
                     }
@@ -1788,6 +1835,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                                     career.apply_prompt(answer);
                                 }
                                 None => crate::coop::trace(format_args!("prompt kind {} from player {player} unknown at tick {tick}", prompt.kind)),
+                            }
+                        }
+                        for (player, outcome) in outcomes {
+                            match crate::coop::outcomes::Outcome::from_wire(outcome.kind, outcome.activity, outcome.value) {
+                                Some(outcome) => career.system.apply_coop_outcome(player, outcome, tick),
+                                None => crate::coop::trace(format_args!("outcome kind {} from player {player} unknown at tick {tick}", outcome.kind)),
                             }
                         }
                     }

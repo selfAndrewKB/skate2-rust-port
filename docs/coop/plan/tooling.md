@@ -61,9 +61,12 @@ finds the hull's locators registered, open item 47); `SKATE2_DIAGNOSTIC_COOP_EXE
 tick>:<name>[;...]` runs named challenges; `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>|running+<ticks>[;...]` completes every
 objective of the main challenge as a win would (points objectives included), so the real win,
 outro and `challenge_cleanup` play: the crawl's way through a mission whose objectives need
-tricks; `running+300` places the win 300 round ticks after the main challenge's graph enters
-`challenge_running`, past an intro scene of any length (the crawl's default since 2026-11-11,
-open item 51; `CRAWL_WIN_AT` overrides it); `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[@<player>][;...]` completes the main
+tricks; `running+300` places the win 300 round ticks after the main challenge's graph enters its
+running state (`challenge_running`, `run_heat`, `run_round` or `round_setup`), past an intro
+scene of any length (the crawl's default since 2026-11-11, open item 51; `CRAWL_WIN_AT`
+overrides it); in a campaign the win is the seat's own player's decision and travels as outcome
+notes on its facts (M9), so a win on one seat alone (`SEAT_EXTRA_1`) completes the mission on
+both under an `Anyone` rule, at the notes' tick; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[@<player>][;...]` completes the main
 challenge's active objective of every group (or of that player's group alone, M7) as its script
 would; `SKATE2_DIAGNOSTIC_COOP_ANSWER=
 yes|no[:<round ticks>]` answers the progression's Yes/No dialog; `SKATE2_DIAGNOSTIC_COOP_TRIGGERS=

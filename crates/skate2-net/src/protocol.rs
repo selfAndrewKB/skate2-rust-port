@@ -414,7 +414,25 @@ pub struct FactsNotes {
     /// sign-up press), numbered in order, for every console to apply at this tick; a prompt
     /// travels until a tick carries it (`docs/coop/plan/topics/prompts.md`).
     pub prompts: Vec<Prompt>,
+    /// Co-op fork (M9): what this player's scripts decided about this player (an objective forced
+    /// complete, the objectives failed, the mission won or lost: `skate2-core`'s
+    /// `coop::outcomes::Outcome`), numbered in order, for every console to apply to this player's
+    /// copy at this tick; an outcome travels until a tick carries it.
+    pub outcomes: Vec<Outcome>,
 }
+
+/// Co-op fork (M9): one decision of a player's scripts about that player: its number in the
+/// player's run of them, the kind, the activity's challenge key and the kind's value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Outcome {
+    pub seq: u32,
+    pub kind: u8,
+    pub activity: u64,
+    pub value: i32,
+}
+
+/// The most outcomes one facts frame carries.
+pub const MAX_OUTCOMES: usize = 7;
 
 /// Co-op fork: one answered prompt: its number in the player's run of them, the kind
 /// (`skate2-core`'s `coop::prompts::PromptAnswer`) and the kind's value.
@@ -436,7 +454,7 @@ pub const MAX_PROMPTS: usize = 7;
 impl FactsNotes {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.votes.is_empty() && self.left.is_empty() && !self.syncing && self.presented.is_empty() && self.prompts.is_empty()
+        self.votes.is_empty() && self.left.is_empty() && !self.syncing && self.presented.is_empty() && self.prompts.is_empty() && self.outcomes.is_empty()
     }
 
     fn write(&self, w: &mut Writer) {
@@ -446,7 +464,8 @@ impl FactsNotes {
                 | (count(self.left.len(), MAX_PLAYERS) << 4)
                 | (u64::from(self.syncing) << 8)
                 | (count(self.presented.len(), MAX_PRESENTED) << 9)
-                | (count(self.prompts.len(), MAX_PROMPTS) << 13),
+                | (count(self.prompts.len(), MAX_PROMPTS) << 13)
+                | (count(self.outcomes.len(), MAX_OUTCOMES) << 16),
         );
         for &(player, score) in self.votes.iter().take(MAX_PLAYERS) {
             w.u8(player);
@@ -478,13 +497,19 @@ impl FactsNotes {
             w.u8(prompt.kind);
             w.signed(i64::from(prompt.value));
         }
+        for outcome in self.outcomes.iter().take(MAX_OUTCOMES) {
+            w.varint(u64::from(outcome.seq));
+            w.u8(outcome.kind);
+            w.varint(outcome.activity);
+            w.signed(i64::from(outcome.value));
+        }
     }
 
     fn read(r: &mut Reader<'_>) -> DecodeResult<Self> {
         let counts = r.varint_u32()?;
         let field = |shift: u32, mask: u32| usize::try_from((counts >> shift) & mask).unwrap_or(usize::MAX);
-        let (votes, left, syncing, presented, prompts) = (field(0, 0xf), field(4, 0xf), field(8, 1), field(9, 0xf), field(13, 0x7));
-        if votes > MAX_PLAYERS || left > MAX_PLAYERS || counts >> 16 != 0 {
+        let (votes, left, syncing, presented, prompts, outcomes) = (field(0, 0xf), field(4, 0xf), field(8, 1), field(9, 0xf), field(13, 0x7), field(16, 0x7));
+        if votes > MAX_PLAYERS || left > MAX_PLAYERS || counts >> 19 != 0 {
             return Err(DecodeError("facts notes"));
         }
         let player = |r: &mut Reader<'_>| -> DecodeResult<u8> {
@@ -512,7 +537,17 @@ impl FactsNotes {
         let prompts = (0..prompts)
             .map(|_| Ok(Prompt { seq: r.varint_u32()?, kind: r.u8()?, value: i32::try_from(r.signed()?).map_err(|_| DecodeError("prompt"))? }))
             .collect::<DecodeResult<_>>()?;
-        Ok(Self { votes, left, syncing: syncing == 1, presented, prompts })
+        let outcomes = (0..outcomes)
+            .map(|_| {
+                Ok(Outcome {
+                    seq: r.varint_u32()?,
+                    kind: r.u8()?,
+                    activity: r.varint()?,
+                    value: i32::try_from(r.signed()?).map_err(|_| DecodeError("outcome"))?,
+                })
+            })
+            .collect::<DecodeResult<_>>()?;
+        Ok(Self { votes, left, syncing: syncing == 1, presented, prompts, outcomes })
     }
 }
 
@@ -1215,7 +1250,7 @@ mod tests {
             ClientMessage::Complete,
             ClientMessage::Results(GameResult { event_time: 12.5, score: -3, finish_reason: 1, ranking: 2, players_choice: true }),
             ClientMessage::Facts { tick: 600, stint: 2, notes: FactsNotes::default(), data: vec![9; 40] },
-            ClientMessage::Facts { tick: 601, stint: 3, notes: FactsNotes { votes: vec![(1, 3), (2, -1)], left: vec![4], syncing: false, presented: vec![Presented::Nis { seq: 7, notification: 1 }, Presented::Speech { character: 40, id: -4004, seq: 2 }, Presented::Fmv { seq: 1 }], prompts: vec![Prompt { seq: 1, kind: 1, value: 0 }, Prompt { seq: 2, kind: 8, value: -1 }] }, data: vec![] },
+            ClientMessage::Facts { tick: 601, stint: 3, notes: FactsNotes { votes: vec![(1, 3), (2, -1)], left: vec![4], syncing: false, presented: vec![Presented::Nis { seq: 7, notification: 1 }, Presented::Speech { character: 40, id: -4004, seq: 2 }, Presented::Fmv { seq: 1 }], prompts: vec![Prompt { seq: 1, kind: 1, value: 0 }, Prompt { seq: 2, kind: 8, value: -1 }], outcomes: vec![Outcome { seq: 1, kind: 3, activity: 0x1b0b_db3e_8c09_9e26, value: 0 }, Outcome { seq: 2, kind: 1, activity: 7, value: -3 }] }, data: vec![] },
             ClientMessage::Frames(EncodedRun { tick: 70, count: 3, frame: Some(66), frame_before: Some(65), sample: None, sample_before: Some(60), payload: vec![5, 6, 7] }),
             ClientMessage::FrameAcks(vec![(1, 500, 0xffff), (3, 2, 0)]),
             ClientMessage::Ping { time: 123_456 },
@@ -1262,7 +1297,7 @@ mod tests {
             ServerMessage::ExitPostChallenge,
             ServerMessage::GameChange { challenge_type: challenge::JAM, challenge_key: 5, delay: 5000 },
             ServerMessage::Kicked { reason: leave::KICKED_BY_HOST },
-            ServerMessage::Facts { slot: 2, tick: 10, stint: 1, notes: FactsNotes { votes: vec![(0, 1)], left: vec![], syncing: true, presented: vec![], prompts: vec![Prompt { seq: 9, kind: 3, value: 2 }] }, data: vec![1] },
+            ServerMessage::Facts { slot: 2, tick: 10, stint: 1, notes: FactsNotes { votes: vec![(0, 1)], left: vec![], syncing: true, presented: vec![], prompts: vec![Prompt { seq: 9, kind: 3, value: 2 }], outcomes: vec![] }, data: vec![1] },
             ServerMessage::RemoteFrames { slot: 5, run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: Some(8), sample_before: Some(6), payload: vec![] } },
             ServerMessage::FrameAck { latest: 44, mask: 3 },
             ServerMessage::Pong { time: 8 },

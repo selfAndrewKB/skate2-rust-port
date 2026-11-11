@@ -579,6 +579,19 @@ fn objective_group(world: &World, value: &Value) -> Option<u32> {
     world.pointers.object(value, ObjectKind::ObjectiveGroup)
 }
 
+/// Co-op fork (M9): in a campaign a script's forced outcome on its group is its own player's
+/// decision and travels as a note (`coop::outcomes`): the group's activity key and its ordinal
+/// among that player's groups of the activity, or `None` outside a campaign or for a group the
+/// world does not hold.
+fn own_outcome_group(world: &World, value: &Value) -> Option<(u64, u8)> {
+    world.coop.as_ref()?;
+    let group = objective_group(world, value)?;
+    let gi = world.objectives.group_index(group)?;
+    let g = &world.objectives.groups[gi];
+    let ordinal = world.objectives.groups.iter().filter(|x| x.activity == g.activity && x.player == g.player).position(|x| x.id == g.id)?;
+    Some((world.activities.activities[g.activity].key, u8::try_from(ordinal).ok()?))
+}
+
 /// Co-op fork, the ledger's "everyone" kind: the groups a script's group operation applies to.
 /// Under an `Everyone` rule the script holds the first player's group and means the activity's
 /// objectives, so the operation reaches every player's copy; otherwise the one group.
@@ -856,6 +869,10 @@ fn objectives_set_evaluation_status(_: &mut Lua<World>, world: &mut World, call:
 /// `Objectives.FailAllObjectiveStatus(group)` (`0x82d4d410`): every objective failed
 /// (`cChallengeObjectiveGroup::FailAllObjectiveStatus` `0x82d4c8a8`).
 fn objectives_fail_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
+    if let Some((key, ordinal)) = own_outcome_group(world, call.arg(0)) {
+        world.coop_outcomes.push(crate::coop::outcomes::Outcome::ObjectivesFailed { activity: key, group: ordinal });
+        return none();
+    }
     for group in objective_groups(world, call.arg(0)) {
         let count = world.objectives.group_index(group).map_or(0, |index| world.objectives.groups[index].objectives.len());
         for index in 0..count {
@@ -867,6 +884,12 @@ fn objectives_fail_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall)
 
 /// `Objectives.ForceObjectiveComplete(group, index)` (`0x82d51740`).
 fn objectives_force_complete(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
+    if let Some((key, ordinal)) = own_outcome_group(world, call.arg(0)) {
+        if let Ok(index) = u8::try_from(get_int(call, 1)) {
+            world.coop_outcomes.push(crate::coop::outcomes::Outcome::ObjectiveComplete { activity: key, group: ordinal, index });
+        }
+        return none();
+    }
     if let Ok(index) = usize::try_from(get_int(call, 1)) {
         for group in objective_groups(world, call.arg(0)) {
             super::objectives::force_complete(world, group, index);
@@ -890,6 +913,11 @@ fn challenge_is_replaying(_: &mut Lua<World>, world: &mut World, _: &NativeCall)
 fn challenge_lose(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     if let Some(activity) = activity_arg(lua, call, 0) {
         let key = world.activities.activities[activity].key;
+        // Co-op fork (M9): this player's loss travels as a note; the rules end the mission.
+        if world.coop.is_some() {
+            world.coop_outcomes.push(crate::coop::outcomes::Outcome::Lost { activity: key, result: 1 });
+            return none();
+        }
         signpost::end_challenge_unwon(world, key, 1);
     }
     none()
@@ -1269,6 +1297,20 @@ fn challenge_win(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) -> 
 fn challenge_complete(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     let Some(a) = activity_arg(lua, call, 0) else { return none() };
     let process = get_bool_or(call, 1, true);
+    // Co-op fork (M9): a script that completes a mission its objective copies have not
+    // completed under the rule decided on its own terms (a S.K.A.T.E. won against this console's
+    // AI); the decision travels as a note and the rules settle it. One that follows the shared
+    // objective completion (the copies complete to the rule's threshold, the same tick on every
+    // console), or a mission without objective copies, applies here as before.
+    if let Some((rule, _, _)) = super::coop_rule(world, a) {
+        let copies: Vec<&super::objectives::ObjectiveGroup> = world.objectives.groups.iter().filter(|g| g.activity == a).collect();
+        let complete = copies.iter().filter(|g| g.objectives.iter().all(|o| o.state == super::objectives::Status::Complete)).count();
+        if !copies.is_empty() && complete < rule.threshold(copies.len()) {
+            let key = world.activities.activities[a].key;
+            world.coop_outcomes.push(crate::coop::outcomes::Outcome::Won { activity: key, process });
+            return none();
+        }
+    }
     activity::complete_challenge(world, a);
     if process {
         signpost::process_challenge_results(world);

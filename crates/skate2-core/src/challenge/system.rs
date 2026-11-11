@@ -546,6 +546,10 @@ pub struct World {
     /// Co-op fork (M5): the prompts a HUD inside the challenge world (the phone) answered this
     /// update instead of acting, for the session's prompt funnel to queue as notes.
     pub coop_prompts: Vec<crate::coop::prompts::PromptAnswer>,
+    /// Co-op fork (M9): what the scripts decided about this console's player this update (an
+    /// objective forced complete, the objectives failed, the mission won or lost on their own
+    /// terms), for the session to send as notes on the next facts instead of applying here.
+    pub coop_outcomes: Vec<crate::coop::outcomes::Outcome>,
     /// The network game an online challenge runs in, installed by the session.
     pub online: Option<super::players::OnlineChallenge>,
     /// The skater manager's skaters' completed outputs this update, in index order.
@@ -863,6 +867,7 @@ impl ChallengeSystem {
                 player: PlayerState::default(),
                 player_states: Vec::new(),
                 coop_prompts: Vec::new(),
+                coop_outcomes: Vec::new(),
                 hom_enabled: true,
                 objective_notification_window: 1.0,
                 stop_threshold: 1.2,
@@ -1300,6 +1305,28 @@ impl ChallengeSystem {
     /// points objectives included; how many were.
     pub fn diagnostic_win_main_challenge(&mut self) -> usize {
         let Some(main) = self.world.activities.main else { return 0 };
+        // In a campaign the win is this console's player's decision and travels as outcome notes
+        // (M9); every console completes that player's copy at the notes' tick.
+        if self.world.coop.is_some() {
+            let local = super::players::network_local_player(&self.world);
+            let key = self.world.activities.activities[main].key;
+            let targets: Vec<(usize, usize)> = self
+                .world
+                .objectives
+                .groups
+                .iter()
+                .filter(|g| g.activity == main && g.player == local)
+                .enumerate()
+                .flat_map(|(ordinal, g)| g.objectives.iter().enumerate().filter(|(_, o)| o.state != objectives::Status::Complete).map(move |(index, _)| (ordinal, index)))
+                .collect();
+            let count = targets.len();
+            for (ordinal, index) in targets {
+                if let (Ok(group), Ok(index)) = (u8::try_from(ordinal), u8::try_from(index)) {
+                    self.world.coop_outcomes.push(crate::coop::outcomes::Outcome::ObjectiveComplete { activity: key, group, index });
+                }
+            }
+            return count;
+        }
         let targets: Vec<(u32, usize)> = self
             .world
             .objectives
@@ -1313,6 +1340,81 @@ impl ChallengeSystem {
             objectives::force_complete(&mut self.world, group, index);
         }
         count
+    }
+
+    /// Co-op fork (M9): a player's outcome note applied at its tick on this console: the
+    /// player's copy of the objectives takes the forced completion or failure; a win or loss on
+    /// the player's own terms counts toward the activity's rule, which settles the mission once
+    /// (`Rule::completes`, `Rule::fails`) as the script's `CompleteChallenge` or `LoseChallenge`
+    /// would have on every console at once.
+    pub fn apply_coop_outcome(&mut self, player: i32, outcome: crate::coop::outcomes::Outcome, tick: u32) {
+        use crate::coop::outcomes::Outcome;
+        let world = &mut self.world;
+        let key = outcome.activity();
+        let Some(activity) = world.activities.find(key) else {
+            crate::coop::trace(format_args!("outcome {outcome:?} from player {player} at tick {tick}: no activity {key:#018x}"));
+            return;
+        };
+        let ordinal = match outcome {
+            Outcome::ObjectiveComplete { group, .. } | Outcome::ObjectivesFailed { group, .. } => usize::from(group),
+            Outcome::Won { .. } | Outcome::Lost { .. } => 0,
+        };
+        let group = world
+            .objectives
+            .groups
+            .iter()
+            .filter(|g| g.activity == activity && g.player == player)
+            .nth(ordinal)
+            .map(|g| (g.id, g.objectives.len()));
+        let humans = world.coop.as_ref().map_or(1, |campaign| campaign.players.len());
+        let rule = super::coop_rule(world, activity).map(|(rule, _, name)| (rule, name));
+        crate::coop::trace(format_args!("outcome {outcome:?} from player {player} applied at tick {tick}: group {group:?}, rule {rule:?}"));
+        match outcome {
+            Outcome::ObjectiveComplete { index, .. } => {
+                if let Some((id, _)) = group {
+                    objectives::force_complete(world, id, usize::from(index));
+                }
+            }
+            Outcome::ObjectivesFailed { .. } => {
+                if let Some((id, count)) = group {
+                    for index in 0..count {
+                        objectives::set_status(world, id, index, objectives::Status::Failed);
+                    }
+                }
+            }
+            Outcome::Won { process, .. } => {
+                let Some(campaign) = world.coop.as_mut() else { return };
+                if !campaign.won.contains(&(key, player)) {
+                    campaign.won.push((key, player));
+                }
+                let won = campaign.won.iter().filter(|(k, _)| *k == key).count();
+                let settled = campaign.decided.contains(&key);
+                let completes = rule.as_ref().is_some_and(|(rule, _)| rule.completes(won, humans));
+                if completes && !settled {
+                    campaign.decided.push(key);
+                    crate::coop::trace(format_args!("rule: {}: {won} of {humans} players won on their own terms: the challenge completes at tick {tick}", rule.as_ref().map_or("", |(_, name)| name)));
+                    super::activity::complete_challenge(world, activity);
+                    if process {
+                        super::signpost::process_challenge_results(world);
+                    }
+                    super::activity::reevaluate_prereq_activities(world);
+                }
+            }
+            Outcome::Lost { result, .. } => {
+                let Some(campaign) = world.coop.as_mut() else { return };
+                if !campaign.lost.iter().any(|(k, p, _)| *k == key && *p == player) {
+                    campaign.lost.push((key, player, result));
+                }
+                let lost = campaign.lost.iter().filter(|(k, _, _)| *k == key).count();
+                let settled = campaign.decided.contains(&key);
+                let fails = rule.as_ref().is_some_and(|(rule, _)| rule.fails(lost, humans));
+                if fails && !settled {
+                    campaign.decided.push(key);
+                    crate::coop::trace(format_args!("rule: {}: {lost} of {humans} players lost: the challenge ends unwon at tick {tick}", rule.as_ref().map_or("", |(_, name)| name)));
+                    super::signpost::end_challenge_unwon(world, key, result);
+                }
+            }
+        }
     }
 
     /// [`MarkerRules`] for the current challenge state.

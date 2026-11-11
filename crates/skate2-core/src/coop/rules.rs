@@ -239,6 +239,12 @@ impl RuleTable {
 pub struct CampaignWorld {
     pub rules: RuleTable,
     pub players: Vec<i32>,
+    /// M9: the players whose scripts won an activity on their own terms (challenge key, player)
+    /// and lost one (key, player, result), from the outcome notes; the activities the rules have
+    /// settled from them, so a second note settles nothing again.
+    pub won: Vec<(u64, i32)>,
+    pub lost: Vec<(u64, i32, i32)>,
+    pub decided: Vec<u64>,
     /// Whether any player's facts said "chased" at the last tick (the local chase messages'
     /// edge, M5).
     pub chase_on: bool,
