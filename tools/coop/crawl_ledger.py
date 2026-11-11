@@ -183,9 +183,9 @@ def seat(name, path):
         audit['speed_ok'] += int(m.group(7))
         audit['flags_ok'] += int(m.group(8))
     r['audit'] = audit
-    ws = {'windows': 0, 'peak_entity_samples': 0, 'peak_bps': 0, 'peak_owned': 0, 'peak_pedestrians': 0, 'peak_puppets': 0, 'peak_props_known': 0, 'peak_props_owned': 0, 'contacts_sent': 0, 'contacts_applied': 0, 'contacts_confirmed': 0, 'older_epoch': 0, 'bytes': 0}
-    for m in g(r'coop: world stream at (\d+): (\d+) runs, (\d+) entity samples, (\d+) prop samples, (\d+) B \((\d+) B/s, (\d+) B/s per streamed pedestrian\), (\d+) owned in range of (\d+) pedestrians here, (\d+) puppets, (\d+) props owned of (\d+) known, contacts sent (\d+) applied (\d+) confirmed (\d+), (\d+) records ignored'):
-        v = [int(x) for x in m.groups()]
+    ws = {'windows': 0, 'peak_entity_samples': 0, 'peak_bps': 0, 'peak_owned': 0, 'peak_pedestrians': 0, 'peak_puppets': 0, 'peak_props_known': 0, 'peak_props_owned': 0, 'contacts_sent': 0, 'contacts_applied': 0, 'contacts_refused': 0, 'contacts_confirmed': 0, 'older_epoch': 0, 'bytes': 0}
+    for m in g(r'coop: world stream at (\d+): (\d+) runs, (\d+) entity samples, (\d+) prop samples, (\d+) B \((\d+) B/s, (\d+) B/s per streamed pedestrian\), (\d+) owned in range of (\d+) pedestrians here, (\d+) puppets, (\d+) props owned of (\d+) known, contacts sent (\d+) applied (\d+) confirmed (\d+)(?: refused (\d+))?, (\d+) records ignored'):
+        v = [int(x) if x is not None else 0 for x in m.groups()]  # refused: logged since the stand-up fix
         ws['windows'] += 1
         ws['peak_entity_samples'] = max(ws['peak_entity_samples'], v[2])
         ws['bytes'] += v[4]
@@ -198,7 +198,8 @@ def seat(name, path):
         ws['contacts_sent'] += v[12]
         ws['contacts_applied'] += v[13]
         ws['contacts_confirmed'] += v[14]
-        ws['older_epoch'] += v[15]
+        ws['contacts_refused'] += v[15]
+        ws['older_epoch'] += v[16]
     r['world'] = ws
     r['handoffs'] = len(g(r'coop: .*handed to')) ; r['promotions'] = len(g(r'coop: .*promoted')); r['demotions'] = len(g(r'coop: .*demoted')); r['knockdowns'] = len(g(r'coop: .*knocked down'))
     stalls = [int(m.group(2)) for m in g(r'online: round at tick (\d+): \d+ ready, stalled (\d+) of the last \d+ ticks')]
@@ -392,14 +393,14 @@ def main():
     L.append('The live audit compares every streamed pedestrian\'s puppet with its owner\'s sample (tolerances 0.5 m, 5°, 0.5 m/s); the world stream line counts what was shared. '
              'Zero samples means no pedestrian was near both seats (the bench\'s teleports put them at the mission\'s locator). Stalled: round ticks the lockstep waited for a peer; starved: ticks the interpolation ran past its newest sample.')
     L.append('')
-    L.append('| Mission | Audit samples | Position ok | Yaw ok | Speed ok | Flags ok | Worst pos / yaw | Peak pedestrians (owned / puppets) | Peak B/s | Props known | Contacts sent/applied/confirmed | Handoffs | Stalled / starved ticks | Last round tick |')
+    L.append('| Mission | Audit samples | Position ok | Yaw ok | Speed ok | Flags ok | Worst pos / yaw | Peak pedestrians (owned / puppets) | Peak B/s | Props known | Contacts sent/applied/confirmed/refused | Handoffs | Stalled / starved ticks | Last round tick |')
     L.append('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
     for m in ran:
         s = m['seats'][1]
         if not s.get('lines'):
             continue
         a, w = s['audit'], s['world']
-        L.append(f"| `{m['mission']}` | {a['samples']} | {pct(a['pos_ok'], a['samples'])} | {pct(a['yaw_ok'], a['samples'])} | {pct(a['speed_ok'], a['samples'])} | {pct(a['flags_ok'], a['samples'])} | {a['worst_pos_m']:.2f} m / {a['worst_yaw_deg']}° | {w['peak_pedestrians']} ({w['peak_owned']} / {w['peak_puppets']}) | {w['peak_bps']} | {w['peak_props_known']} | {w['contacts_sent']}/{w['contacts_applied']}/{w['contacts_confirmed']} | {s['handoffs']} | {s['stalled_ticks']} / {s['starved_ticks']} | {s['round_tick_last']} |")
+        L.append(f"| `{m['mission']}` | {a['samples']} | {pct(a['pos_ok'], a['samples'])} | {pct(a['yaw_ok'], a['samples'])} | {pct(a['speed_ok'], a['samples'])} | {pct(a['flags_ok'], a['samples'])} | {a['worst_pos_m']:.2f} m / {a['worst_yaw_deg']}° | {w['peak_pedestrians']} ({w['peak_owned']} / {w['peak_puppets']}) | {w['peak_bps']} | {w['peak_props_known']} | {w['contacts_sent']}/{w['contacts_applied']}/{w['contacts_confirmed']}/{w['contacts_refused']} | {s['handoffs']} | {s['stalled_ticks']} / {s['starved_ticks']} | {s['round_tick_last']} |")
     # ---- the states catalog
     seen = defaultdict(set)
     terminal = Counter()
@@ -528,7 +529,7 @@ def main():
             D.append(f"  - Presentation: {p['groups']} groups, {p['events']} events of kinds {p['kinds']}, {p['finished']} finished; scenes: " + (', '.join(f'{n}@{t}' for n, t in s['scenes']) or 'none') + (f"; characters instanced {s['scene_characters']}" if s['scene_characters'] else '') + f"; triggers entered {s['triggers']}")
             a, w = s['audit'], s['world']
             D.append(f"  - Sync: audit {a['samples']} samples in {a['windows']} windows, position {pct(a['pos_ok'], a['samples'])}, yaw {pct(a['yaw_ok'], a['samples'])}, speed {pct(a['speed_ok'], a['samples'])}, flags {pct(a['flags_ok'], a['samples'])}, worst {a['worst_pos_m']:.2f} m / {a['worst_yaw_deg']}°; "
-                     f"stream {w['windows']} windows, {w['bytes']} B, peak {w['peak_bps']} B/s, peak {w['peak_pedestrians']} pedestrians here ({w['peak_owned']} owned, {w['peak_puppets']} puppets), props {w['peak_props_owned']} owned of {w['peak_props_known']}, contacts {w['contacts_sent']}/{w['contacts_applied']}/{w['contacts_confirmed']}, {w['older_epoch']} older-epoch records; "
+                     f"stream {w['windows']} windows, {w['bytes']} B, peak {w['peak_bps']} B/s, peak {w['peak_pedestrians']} pedestrians here ({w['peak_owned']} owned, {w['peak_puppets']} puppets), props {w['peak_props_owned']} owned of {w['peak_props_known']}, contacts {w['contacts_sent']}/{w['contacts_applied']}/{w['contacts_confirmed']}/{w['contacts_refused']}, {w['older_epoch']} older-epoch records; "
                      f"handoffs {s['handoffs']}, promotions {s['promotions']}, demotions {s['demotions']}, knockdowns {s['knockdowns']}; stalled {s['stalled_ticks']}, starved {s['starved_ticks']}, teleport frames {s['teleport_frames']}")
             if s.get('ai_players'):
                 D.append('  - AI players selected: ' + ', '.join(s['ai_players']))

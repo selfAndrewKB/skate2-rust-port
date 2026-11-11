@@ -119,7 +119,24 @@ pedestrian (the prediction) and is recorded on the drive; the next run carries i
 direction, the skater's velocity and angular velocity); the owner applies it through the same
 funnel; the owner's flags come back and confirm it ("the owner confirmed the knockdown"). The
 bench's shove: predicted on seat 2 at its tick 4800, applied on seat 1 at its 5271, confirmed on
-seat 2 at 4805 (five ticks); the puppet up again with the owner's 420 ticks later.
+seat 2 at 4805 (five ticks); the puppet up again with the owner's 420 ticks later ("up again" is
+the owner's flag: the local copy itself never got up, see below).
+
+**Not done (2026-11-11): a puppet never stands up locally.** Once knocked down, by its owner's
+flags or by this console's prediction, a puppet reads `down` in every census until it is culled
+(M6's logs, the crawl's demo mission, the stand-up probes in `../bench/evidence/probe/`). Two
+causes, both read in the code and seen in a trace of the colliding state: the puppet's graph
+ticks only while `required_to_begin_colliding || colliding` holds (`own_graph` in the pedestrian
+execution), so when the colliding behaviour completes and clears `colliding`, the graph is never
+ticked again and the exit that runs the behaviour's `End` (which clears `flags[1] & 4`, releases
+the monitored intent packet, pops head tracking) never happens; and the getup's major intent never
+completes on a puppet (the trace: `recovering, forced true, packet complete false, major intent
+complete false` for the whole round), so the behaviour does not complete at all. Setting
+`forced_to_recover` from the sample handler when the owner says up (tried, reverted) changes
+neither and, left set, makes `resolve_full_collision` drop every later hit on that puppet. The
+fix: tick the puppet's graph while its graph state is still Colliding so the exit runs, find why
+the getup animation never reports its major intent on a puppet, and only then the owner's "up"
+as the word that stands a lying puppet up. Open item 50.
 
 **Measured (2026-11-10, two seats on one Mac, the waterfront):** seat 1 owned 9-11 pedestrians
 in range of 12 in its roster and sent 3.4-5.3 KB/s; seat 2 held 9-10 puppets, owned 2-3 of its
