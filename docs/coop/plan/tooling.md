@@ -184,13 +184,31 @@ CAPTURE_FROM=100 CAPTURE_EVERY=20 CAPTURE_COUNT=6 ./tools/coop/bench.sh start 2
 ## The mission crawl
 
 `python3 tools/coop/crawl.py --list` names the campaign's 115 `m_*` missions from the career
-database (`SKATE2_CAREER_DB`); `--run [--from NAME] [--count N]` runs them on the bench one
-start at a time with the saves carried forward (`BENCH_KEEP`), each executed by name at round
-tick 900 and won by diagnostic at 1800, and appends one row per mission to
-`../bench/evidence/<date>-crawl.md`: PASS (both seats reached `challenge_cleanup` and the saves
-agree), PASS (no save) (a tutorial that autosaves nothing), PASS (saves differ), STOPPED (with
-each seat's last state), NOT EXECUTED, CRASHED. Each mission's logs are
-kept as `crawl-<name>-seat-N.log`. About three minutes a mission.
+database (`SKATE2_CAREER_DB`) with their `ChallengeType` and `Global`; `--run [--from NAME]
+[--count N] [--missions a,b]` runs them on the bench one start at a time with the saves carried
+forward (`BENCH_KEEP`), each driven as its kind needs: a main challenge (`Global` 3 or 4, 96
+missions) executed by name at round tick 900 and won by diagnostic at 1800; a location
+challenge (`Global` 2: the 12 go-tos and the two Training Facility teleports) executed at 900
+(the teleport to its start location) and completed by name at 1800
+(`SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE`, the progression's own `CompleteChallenge`); the
+five entries without a global type (the `_ol` online variants and three others) completed by
+name alone. One row per mission goes to `../bench/evidence/<date>-crawl.md`: PASS (both seats
+through `challenge_cleanup`, or both completed by name, the saves agreeing), PASS (no save),
+PASS (saves differ), STOPPED (with each seat's last state), NOT EXECUTED, CRASHED, DROPPED, and
+the driver and why the wait ended (done, deadline 170 s, or `loop a→b`: both scripts cycling
+between two states for 30 s after the win, the known AI-skater stall, stopped early). Each
+mission's logs are kept as `crawl-<name>-seat-N.log` and `-server.log`, with a `crawl: stop`
+marker where the bench's teardown begins, and the census dump on for the offline audit.
+One to three minutes a mission.
+
+**The ledger.** `python3 tools/coop/crawl_ledger.py` reads every kept log and every run report
+and regenerates [missions.md](missions.md) (one row a mission: family, kind, rule, verdict, where
+it stopped, the cause classified from the log, whether the seats ended in step, every run's
+verdict, your note) and [missions-detail.md](missions-detail.md) (one section a mission: the
+script's path with its loops folded, the ticks, objectives, presentations, scenes, script
+errors, and the synchronization numbers: the live audit, the world stream's peaks, handoffs,
+stalls), plus `../bench/evidence/crawl-ledger.json`. Hand-kept notes live under `## Notes` in
+missions.md and are merged into the tables; everything else there is overwritten.
 
 ## The synchronization audit
 

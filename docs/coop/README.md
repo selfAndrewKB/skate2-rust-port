@@ -39,6 +39,9 @@ tagged ([versions](plan/versions.md)).
 - [plan/tooling.md](plan/tooling.md): the bench, the switches, building; per-machine notes in
   [setup-macos.md](plan/setup-macos.md) and [setup-windows.md](plan/setup-windows.md).
 - [plan/qa-matrix.md](plan/qa-matrix.md): seats × machines × situations, exercised or not.
+- [plan/missions.md](plan/missions.md): the mission ledger, every campaign mission's standing in
+  co-op from the crawl's logs, regenerated after every crawl; the details per mission in
+  [plan/missions-detail.md](plan/missions-detail.md).
 - [plan/sync-inventory.md](plan/sync-inventory.md): every field of a pedestrian's state, streamed,
   derived or local, generated from the code; measured by `tools/coop/sync_audit.py`.
 - [plan/open-items.md](plan/open-items.md): seen and not yet fixed or explained.

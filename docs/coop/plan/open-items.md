@@ -133,6 +133,14 @@ Front page: [README](../README.md).
     waiting for an AI skater the port has not ported (`docs/career/HANDOFF.md`). Not co-op's;
     the crawl past them (`--from m_1a_07_...`) says how far the rest goes, and the photo family's
     rules are proven only when the port's AI skaters land.
+46. A location challenge's execute teleports to its `MapStartLocation`, and the port reports
+    every one the crawl met as "teleport to unknown location `<mission>_challengelocator01`,
+    held": the missions' locators are not in the port's table (the go-tos `m_1b_05_goto_mikey`
+    and on, `2026-11-10-crawl-rest`). The crawl completes those by name instead; in play the
+    go-to's own arrival trigger is what matters, and whether it fires is unproven.
+47. `m_1a_07_follow_slappy` stops in `wait_for_assetload` on both seats after
+    `AI.SpawnAIAtLocation: unknown location m_1a_07_follow_slappy_startlocator01`: the follow
+    missions need the AI skater (the port's blocker, 45) and its start locator (46).
 44. No notice is shown to the player while the rejoin runs (the career sits held behind the
     fade); a HUD line is to add.
 

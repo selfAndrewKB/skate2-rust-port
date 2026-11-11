@@ -32,6 +32,13 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
   stopped on both seats alike in the script's `check_ai` wait, before the objectives: the
   port has no AI skaters yet (`docs/career/HANDOFF.md`, "AI skaters: the career blocker"), so
   the photo family waits on the port, not on co-op ([open items](../open-items.md) 45).
+- **The families in the data.** The campaign's `challenge_global_data` uses `ChallengeType`
+  0 (tutorial, 9 missions), 2, 4, 6 (photo, 5), 15 (jam, 3), 23 (follow, 7), 30 (go-to, 13),
+  38 (30 photo missions), 39 (11 film), 40 (20 spot film), 41 (4 pro film), 43 (7 film/demo
+  team) and 45 (the two Training Facility teleports); 38 to 43 are not named in `rules::family`
+  (the enumeration past 34 is unread) and fall to the table's default, `Anyone`, which is what
+  the design gives photo and film anyway ([missions](../missions.md) names them from the
+  missions, marked †). A rule for those families by number works today; naming them is owed.
 - **Not done:** the lobby's settings page for the table (the file and the switch suffice on the
   bench; a page is play's to ask for).
 

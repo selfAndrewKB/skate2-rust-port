@@ -103,15 +103,27 @@ fn diagnostic_zones() -> Option<u32> {
 /// a list for the crawl, M8).
 fn diagnostic_execute() -> &'static [(u32, String)] {
     static SPEC: std::sync::OnceLock<Vec<(u32, String)>> = std::sync::OnceLock::new();
-    SPEC.get_or_init(|| {
-        std::env::var("SKATE2_DIAGNOSTIC_COOP_EXECUTE").ok().map_or_else(Vec::new, |spec| {
-            spec.split(';')
-                .filter_map(|entry| {
-                    let (tick, name) = entry.split_once(':')?;
-                    Some((tick.trim().parse().ok()?, name.trim().to_owned()))
-                })
-                .collect()
-        })
+    SPEC.get_or_init(|| tick_names("SKATE2_DIAGNOSTIC_COOP_EXECUTE"))
+}
+
+/// `SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE=<round tick>:<name>[;...]`: at each round tick the
+/// named challenge is completed as the progression's own `CompleteChallenge(name)` does it (a
+/// go-to's arrival, a location challenge's trigger): the crawl's way through a mission that has
+/// no main challenge to execute and win (`challenge_global_data.Global` 0 or 2) (M8).
+fn diagnostic_complete_challenges() -> &'static [(u32, String)] {
+    static SPEC: std::sync::OnceLock<Vec<(u32, String)>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| tick_names("SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE"))
+}
+
+/// `<round tick>:<name>[;...]` from the variable, the malformed entries dropped.
+fn tick_names(variable: &str) -> Vec<(u32, String)> {
+    std::env::var(variable).ok().map_or_else(Vec::new, |spec| {
+        spec.split(';')
+            .filter_map(|entry| {
+                let (tick, name) = entry.split_once(':')?;
+                Some((tick.trim().parse().ok()?, name.trim().to_owned()))
+            })
+            .collect()
     })
 }
 
@@ -246,6 +258,14 @@ impl<T, C> SelectedLiveSession<T, C> {
             {
                 let executed = career.system.diagnostic_execute_challenge(name);
                 trace(format_args!("diagnostic: execute {name} at round tick {tick}: {executed}"));
+            }
+        }
+        for (at, name) in diagnostic_complete_challenges() {
+            if *at == tick
+                && let Some(career) = self.career.as_mut()
+            {
+                career.system.diagnostic_complete_challenge(name);
+                trace(format_args!("diagnostic: complete challenge {name} at round tick {tick}"));
             }
         }
         if diagnostic_wins().contains(&tick)
