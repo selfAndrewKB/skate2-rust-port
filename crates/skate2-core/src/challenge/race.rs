@@ -313,14 +313,14 @@ fn reset_race_stats(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R 
 
 /// `Race.AddPlayerToRace(player)` (`0x82893f40`).
 fn add_player_to_race(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    world.race.add_player(get_int(call, 0));
+    world.race.add_player(super::players::script_slot(world, get_int(call, 0)));
     Ok(Vec::new())
 }
 
 /// `Race.FinishPlayer(player, time)` (`0x82893fd8`).
 fn finish_player(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     let time = get_float(call, 1);
-    if let Some(player) = world.race.player_at(get_int(call, 0)) {
+    if let Some(player) = world.race.player_at(super::players::script_slot(world, get_int(call, 0))) {
         player.finished = true;
         player.finished_time = time;
     }
@@ -329,7 +329,7 @@ fn finish_player(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R 
 
 /// `Race.PlayerDisconnected(player)` (`0x82894090`).
 fn player_disconnected(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some(player) = world.race.player_at(get_int(call, 0)) {
+    if let Some(player) = world.race.player_at(super::players::script_slot(world, get_int(call, 0))) {
         player.disconnected = true;
     }
     Ok(Vec::new())
@@ -338,7 +338,7 @@ fn player_disconnected(_: &mut Lua<World>, world: &mut World, call: &NativeCall)
 /// `Race.RegisterPlayerTimer(player, timer)` (`0x82894128`).
 fn register_player_timer(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     let timer = get_int(call, 1);
-    if let Some(player) = world.race.player_at(get_int(call, 0)) {
+    if let Some(player) = world.race.player_at(super::players::script_slot(world, get_int(call, 0))) {
         player.race_timer_id = timer;
     }
     Ok(Vec::new())
@@ -348,7 +348,7 @@ fn register_player_timer(_: &mut Lua<World>, world: &mut World, call: &NativeCal
 fn set_player_progress(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     let leg = u32::from_ne_bytes(get_int(call, 1).to_ne_bytes());
     let gate = u32::from_ne_bytes(get_int(call, 2).to_ne_bytes());
-    if let Some(player) = world.race.player_at(get_int(call, 0)) {
+    if let Some(player) = world.race.player_at(super::players::script_slot(world, get_int(call, 0))) {
         player.current_leg = leg;
         player.current_gate = gate;
     }
@@ -392,7 +392,7 @@ fn get_rank(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
 /// `Race.GetRacerDistance(player, volume)` (`0x8288ea60`): from the player's base position to
 /// the volume's centre, 0 without the volume.
 fn get_racer_distance(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = super::players::script_slot(world, get_int(call, 0));
     let volume = get_float(call, 1);
     let distance = match (world.host.trigger_volume_center(volume), super::skate::skater(world, player)) {
         (Some(centre), Some(frame)) => vmx::length3(vmx::sub(vmx::v3(centre), vmx::v3(frame.tester_base))),

@@ -255,30 +255,12 @@ fn index_of(player: i32) -> Option<usize> {
     usize::try_from(player).ok().filter(|&index| index < 8)
 }
 
-/// Co-op fork (open item 48): a script's AI player as the single-player career numbers it. The
-/// career's scripts count their AI skaters from the local player up (`m_5a_01` on the bench:
-/// seat 1, player 0, spawned "player 1"; seat 2, player 1, spawned "player 2"), so in a campaign
-/// round an index past the local player is the AI's ordinal, 1 on, as the original's local
-/// player 0 would have named it; an index at or below the local player is a human's and stays.
-pub(crate) fn script_ai_player(world: &World, player: i32) -> i32 {
-    match world.coop.as_ref() {
-        Some(_) if player > world.local_player => player - world.local_player,
-        _ => player,
-    }
-}
-
-/// Co-op fork (open item 48): the slot a script's AI player skates at. In a campaign round the
-/// humans hold slots 0 to N-1, so the AI's ordinal `k` ([`script_ai_player`]) takes slot
-/// `N - 1 + k`, the same on every console whatever its local player; the selected characters,
-/// their names and spawn points go by the ordinal. Outside a campaign the index is the slot, as
-/// the original's.
+/// Co-op fork (open items 48, 56): the slot a script's AI player skates at, through the one
+/// funnel of the scripts' index space (`players::script_slot`): in a campaign round AI player
+/// `k` takes slot `N - 1 + k` after the N humans, the same on every console; its character,
+/// name and spawn point go by `k`, as the original's.
 pub(crate) fn ai_slot(world: &World, player: i32) -> i32 {
-    match world.coop.as_ref() {
-        Some(campaign) if player > world.local_player => {
-            i32::try_from(campaign.players.len()).unwrap_or(1) - 1 + script_ai_player(world, player)
-        }
-        _ => player,
-    }
+    super::players::script_slot(world, player)
 }
 
 /// `cChallengeCompetitorsManager::GetNumCompetitors` (`0x825af3d0`): with a dynamic flag the
@@ -740,13 +722,11 @@ fn spawn_ai_at_location(_: &mut Lua<World>, world: &mut World, call: &NativeCall
         script_error(world, "AI.SpawnAIAtLocation", "no location");
         return Ok(Vec::new());
     };
-    let script_player = player;
-    let player = script_ai_player(world, script_player);
     let Some(transform) = link.locations.spawn_location(&name, player) else {
         script_error(world, "AI.SpawnAIAtLocation", format!("unknown location {name}"));
         return Ok(Vec::new());
     };
-    let skater_slot = ai_slot(world, script_player);
+    let skater_slot = ai_slot(world, player);
     let Some(slot) = usize::try_from(skater_slot).ok().filter(|&slot| slot <= 8) else {
         script_error(world, "AI.SpawnAIAtLocation", format!("player {player} (slot {skater_slot})"));
         return Ok(Vec::new());
@@ -754,9 +734,7 @@ fn spawn_ai_at_location(_: &mut Lua<World>, world: &mut World, call: &NativeCall
     let rows: [V4; 4] = std::array::from_fn(|row| std::array::from_fn(|column| transform[row * 4 + column]));
     let profile = character_profile(world, player).unwrap_or_default();
     let recipe = character_recipe(world, player);
-    trace(format_args!(
-        "SpawnAIAtLocation: the script's player {script_player} (AI player {player}) at slot {skater_slot}, location {name:?}, recipe {recipe:x?}, profile {profile:?}"
-    ));
+    trace(format_args!("SpawnAIAtLocation: AI player {player} at slot {skater_slot}, location {name:?}, recipe {recipe:x?}, profile {profile:?}"));
     let result = {
         let mut manager = link.manager();
         manager
@@ -981,7 +959,7 @@ fn selected_character(world: &World, index: i32) -> u64 {
 /// `AI.GetCharacterName(player)` (`0x8288d800`): `GetCharacterName(player - 1)`, the
 /// character's layout name text.
 fn get_character_name(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let character = selected_character(world, script_ai_player(world, get_int(call, 0)) - 1);
+    let character = selected_character(world, get_int(call, 0) - 1);
     let name = world.db.layout_text(AI_CHARACTERS, character, LAYOUT_CHARACTER_NAME);
     Ok(vec![name.map_or(Value::Nil, Value::from)])
 }
@@ -989,7 +967,7 @@ fn get_character_name(_: &mut Lua<World>, world: &mut World, call: &NativeCall) 
 /// `AI.GetCharacterModel(player)` (`0x8288d8b8`): `GetCharacterModel(player - 1)`, the recipe's
 /// layout name; empty without a character.
 fn get_character_model(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let character = selected_character(world, script_ai_player(world, get_int(call, 0)) - 1);
+    let character = selected_character(world, get_int(call, 0) - 1);
     if character == 0 {
         return Ok(vec![Value::from("")]);
     }
@@ -1000,7 +978,7 @@ fn get_character_model(_: &mut Lua<World>, world: &mut World, call: &NativeCall)
 
 /// `AI.GetCharacterPercentageWillDoABDTrick(player)` (`0x8288dc20`).
 fn get_character_percentage_will_do_abd_trick(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let character = selected_character(world, script_ai_player(world, get_int(call, 0)));
+    let character = selected_character(world, get_int(call, 0));
     let percentage = world.db.attribute(AI_CHARACTERS, character, key::PERCENTAGE_WILL_DO_ABD_TRICK).and_then(|a| a.i16(0)).unwrap_or(0);
     Ok(vec![int(i32::from(percentage))])
 }

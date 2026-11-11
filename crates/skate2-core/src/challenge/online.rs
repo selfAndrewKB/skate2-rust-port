@@ -15,7 +15,7 @@ type R = LuaResult<Vec<Value>>;
 
 /// `Online.GetSkaterName(player)` (`0x82882f88`): `PlayersBackEnd::GetPlayerName` (`0x8255a728`).
 fn get_skater_name(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = super::players::script_slot(world, get_int(call, 0));
     let name = world.players.as_deref().map(|players| players.player_name(player)).unwrap_or_default();
     Ok(vec![Value::string(&name)])
 }

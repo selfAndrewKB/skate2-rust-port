@@ -387,7 +387,7 @@ fn skate_matched_pattern(_: &mut Lua<World>, world: &mut World, call: &NativeCal
 
 /// `Skate.GetPlayerSpeed(player)` (`0x8288b218`): `mSkateboardMotion->mDeckSpeed`.
 fn skate_get_player_speed(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let speed = skater(world, get_int(call, 0)).map_or(0.0, |f| f.deck_speed);
+    let speed = skater(world, super::players::script_slot(world, get_int(call, 0))).map_or(0.0, |f| f.deck_speed);
     Ok(vec![Value::Number(speed)])
 }
 
@@ -432,7 +432,7 @@ fn skate_reset_set_item(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -
 /// `Skate.SetPlayerRank(player, rank)` (`0x82883200`): `PlayersBackEnd::SetPlayerRank`
 /// (`0x8255a538`); a player of 8 or more is the native's assertion.
 fn skate_set_player_rank(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let (player, rank) = (super::binding::get_int(call, 0), super::binding::get_int(call, 1));
+    let (player, rank) = (super::players::script_slot(world, super::binding::get_int(call, 0)), super::binding::get_int(call, 1));
     if let Some(players) = world.players.as_deref() {
         players.set_player_rank(player, rank);
     }
@@ -443,7 +443,7 @@ fn skate_set_player_rank(_: &mut Lua<World>, world: &mut World, call: &NativeCal
 
 /// `Lua::ModuleTrick::GetPlayerPhysOut` (`0x82887240`): the first argument's skater.
 fn player_frame<'a>(world: &'a World, call: &NativeCall) -> Option<&'a MissionFrame> {
-    skater(world, get_int(call, 0))
+    skater(world, super::players::script_slot(world, get_int(call, 0)))
 }
 
 /// `Trick.DeactivatePattern()` (`0x8287f5c8`).

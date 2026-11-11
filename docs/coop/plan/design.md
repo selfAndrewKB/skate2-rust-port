@@ -304,5 +304,17 @@ set to, and real sessions decide. Nothing is fixed here on purpose.
 
 **Player count (2026-11-10):** designed for N seats, played and tested with two.
 
+**The scripts' index space (2026-11-11):** a campaign's scripts see the career's own players,
+as the single-player game numbers them: themselves as 0 (`Online.GetLocalPlayerID`), their AI
+skaters 1 on; one funnel (`challenge::players::script_slot`) turns a script's player into the
+simulation's slot, 0 to this console's skater, an AI's ordinal `k` to slot `N - 1 + k` after the
+N humans, the same slot on every console. The other humans have no script index: what a script
+learns of them comes through the rules and the facts. Decided on the bench: the shipped scripts
+count their AI three ways (a literal, the local player plus one, every index but their own), and
+only this view serves all three ([open items](open-items.md) 56). Each console runs its own
+challenge AI skaters (the original's challenge AI is offline-only); their frames join the
+scripts' per-player frames on that console alone, so an AI's path is each console's own, like the
+ambient skaters' (53).
+
 **Route (2026-11-10):** D, distributed ownership. A was the first choice the same day and was
 set aside for the reasons in §2; its checksum remains available as a test instrument.

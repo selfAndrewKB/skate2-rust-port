@@ -305,7 +305,8 @@ fn nis_reset_player_indexes(_: &mut Lua<World>, world: &mut World, _: &NativeCal
 
 /// `NIS.SubmitNISPlayerIndex(player)` (`0x8288be68`): `NISManager::AddActorID`.
 fn nis_submit_player_index(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    world.output(Output::AddNisActorId(get_int(call, 0)));
+    let player = super::players::script_slot(world, get_int(call, 0));
+    world.output(Output::AddNisActorId(player));
     none()
 }
 
@@ -440,9 +441,10 @@ fn hud_show_central_message(_: &mut Lua<World>, world: &mut World, call: &Native
 // ---- Online ---------------------------------------------------------------
 
 /// `Online.GetLocalPlayerID()` (`0x8288a570`): the skater manager's local
-/// index (single player: 0).
+/// index (single player: 0). Co-op fork: in a campaign the scripts see themselves as player 0
+/// (`players::script_slot`).
 fn online_get_local_player_id(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
-    Ok(vec![int(world.local_player)])
+    Ok(vec![int(super::players::script_index(world, world.local_player))])
 }
 
 // ---- AI -------------------------------------------------------------------
@@ -460,7 +462,7 @@ fn location_position(world: &World, name: &str) -> [f32; 3] {
 
 /// `AI.SkaterDistanceFromLocation(player, location)` (`0x8288de40`).
 fn ai_skater_distance_from_location(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = super::ai::ai_slot(world, get_int(call, 0));
+    let player = super::players::script_slot(world, get_int(call, 0));
     let mut distance = 0.0;
     if player <= 8
         && let Some(name) = location_name(world, call.arg(1))
@@ -480,7 +482,7 @@ fn ai_skater_distance_from_location(_: &mut Lua<World>, world: &mut World, call:
 fn ai_reposition(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     // The spawn point index stays the script's player; the skater moved is at its slot.
     let script_player = get_int(call, 0);
-    let player = super::ai::ai_slot(world, script_player);
+    let player = super::players::script_slot(world, script_player);
     let pos_id = get_int_or(call, 2, script_player);
     let reposition_marker = get_bool_or(call, 3, false);
     let location = location_name(world, call.arg(1))
@@ -948,22 +950,32 @@ fn num_players(world: &World) -> i32 {
     world.players.as_deref().map_or(0, |players| players.num_players())
 }
 
-/// `ChallengeSpeech::GetSkaterCharacterFromIndex` (`0x82888ed8`).
+/// Whether a script's player names a skater the back end knows: below the player count, or in a
+/// campaign an AI slot of this console's (`players::script_slot`; the online back end answers
+/// for the AI rows).
+fn names_a_skater(world: &World, index: i32) -> bool {
+    if world.coop.is_some() {
+        return index > 0;
+    }
+    index > 0 && index < num_players(world)
+}
+
+/// `ChallengeSpeech::GetSkaterCharacterFromIndex` (`0x82888ed8`), of the script's player.
 pub(crate) fn skater_character_from_index(world: &World, index: i32) -> i32 {
     if index <= 0 {
         return if index == 0 { character::PLAYER } else { character::MAX };
     }
-    if index >= num_players(world) {
+    if !names_a_skater(world, index) {
         return character::MAX;
     }
-    marquee_character(world, index).unwrap_or(character::MAX)
+    marquee_character(world, super::players::script_slot(world, index)).unwrap_or(character::MAX)
 }
 
 /// `ChallengeAudioManager::PlaySkaterSpeech` (`0x82da2e48`): `PlayMissionSpeech` with the
-/// player's character.
+/// player's character, the player the script's.
 fn play_skater_speech(world: &mut World, player: i32, id: i32) {
-    let character = if player > 0 && player < num_players(world) {
-        marquee_character(world, player).unwrap_or(character::UNKNOWN)
+    let character = if names_a_skater(world, player) {
+        marquee_character(world, super::players::script_slot(world, player)).unwrap_or(character::UNKNOWN)
     } else if player == 0 {
         character::PLAYER
     } else {
@@ -1004,6 +1016,7 @@ fn speech_play_npc(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> 
 /// `ChallengeSpeech.PlaySkaterSpeech(player, id)` (`0x82889b30`).
 fn speech_play_skater(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     play_skater_speech(world, get_int(call, 0), get_int(call, 1));
+    // (the script's player; `play_skater_speech` resolves its slot)
     none()
 }
 

@@ -47,7 +47,7 @@ fn contest_debug_ai_score_adjustment_ratio(_: &mut Lua<World>, _: &mut World, _:
 /// `PhysOut_SkateboardMotion::mSkateboardSurfaceSpeed` through `IActor::GetPhysOut`. The native
 /// asserts and reads through a null actor for a player without a skater.
 fn get_speed(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = super::players::script_slot(world, get_int(call, 0));
     let frame = skater(world, player).ok_or_else(|| lua.error(format!("Entity.GetSpeed: no skater {player}")))?;
     Ok(vec![Value::Number(frame.surface_speed)])
 }

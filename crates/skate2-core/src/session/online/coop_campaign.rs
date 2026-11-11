@@ -171,8 +171,10 @@ enum WinAt {
     AfterRunning(u32),
 }
 
-/// The state the win waits for under `running+<ticks>`.
-const RUNNING_STATE: &str = "challenge_running";
+/// The states the win waits for under `running+<ticks>`: each family's "the mission is on" state
+/// after its intro and setup (the crawl's state histogram: `challenge_running` for most,
+/// `run_heat` the follows, `run_round` the demos, `round_setup` S.K.A.T.E.).
+const RUNNING_STATES: [&str; 4] = ["challenge_running", "run_heat", "run_round", "round_setup"];
 
 fn win_ats_of(spec: &str) -> Vec<WinAt> {
     spec.split(';')
@@ -328,7 +330,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         {
             // The main challenge's entry into `challenge_running`, once per main challenge.
             match career.system.main_challenge_key_and_state() {
-                Some((key, state)) if state == RUNNING_STATE && self.online.coop_running_since.is_none_or(|(seen, _)| seen != key) => {
+                Some((key, state)) if RUNNING_STATES.contains(&state) && self.online.coop_running_since.is_none_or(|(seen, _)| seen != key) => {
                     self.online.coop_running_since = Some((key, tick));
                     trace(format_args!("diagnostic: the main challenge {key:#018x} is running from round tick {tick}"));
                 }

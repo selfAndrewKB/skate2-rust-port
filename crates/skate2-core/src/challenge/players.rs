@@ -62,6 +62,36 @@ pub(crate) fn network_local_player(world: &World) -> i32 {
     world.online.as_ref().map_or(OFFLINE_LOCAL_PLAYER_ID, |online| online.local_player)
 }
 
+/// Co-op fork (open items 48, 56): the scripts of a campaign round see the career's own index
+/// space, as the single-player game gives it: themselves as player 0 (`Online.GetLocalPlayerID`
+/// answers 0, `GetNumHumanSkaters` 1) and their AI skaters 1 on, whichever way a script counts
+/// them (a literal 1, the local player plus one, every index but its own: the follow, photo and
+/// demo scripts of the crawl). This funnel turns a script's player into the simulation's slot:
+/// 0 is this console's skater, `k` from 1 on is the AI's ordinal, at slot `N - 1 + k` after the
+/// N humans, the same on every console. Outside a campaign the index is the slot. The other
+/// humans have no script index; what the scripts learn of them comes through the rules and the
+/// facts, never by number.
+pub(crate) fn script_slot(world: &World, player: i32) -> i32 {
+    match world.coop.as_ref() {
+        Some(_) if player == 0 => world.local_player,
+        Some(campaign) if player > 0 => i32::try_from(campaign.players.len()).unwrap_or(1) - 1 + player,
+        _ => player,
+    }
+}
+
+/// Co-op fork: a slot as the scripts of a campaign number it ([`script_slot`] backwards): this
+/// console's skater 0, an AI skater its ordinal; another human has no index and keeps its slot.
+pub(crate) fn script_index(world: &World, slot: i32) -> i32 {
+    match world.coop.as_ref() {
+        Some(_) if slot == world.local_player => 0,
+        Some(campaign) => {
+            let humans = i32::try_from(campaign.players.len()).unwrap_or(1);
+            if slot >= humans { slot - humans + 1 } else { slot }
+        }
+        None => slot,
+    }
+}
+
 /// `Sk8::BE::PlayersBackEnd` as challenge natives use it; every index is a player index
 /// below 9.
 pub trait PlayersBackEnd: Send + Sync {
@@ -108,6 +138,10 @@ fn set_player(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
 /// `ChallengeManager.GetNumHumanSkaters()` (`0x82882650`): the `PT_Human` rows of the first
 /// eight players.
 fn get_num_human_skaters(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
+    if world.coop.is_some() {
+        // Co-op fork: the scripts' view is the career's, one human (`script_slot`).
+        return Ok(vec![int(1)]);
+    }
     let count = (0..8).filter(|&i| player_type(world, i) == PT_HUMAN).count();
     Ok(vec![int(i32::try_from(count).unwrap_or(0))])
 }
@@ -119,7 +153,7 @@ fn get_skater_count(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R 
 
 /// `ChallengeManager.SetManualsAreConnectors(value, player)` (`0x828824c0`).
 fn set_manuals_are_connectors(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let (value, player) = (get_bool(call, 0), get_int(call, 1));
+    let (value, player) = (get_bool(call, 0), script_slot(world, get_int(call, 1)));
     if let Some(b) = backend(world) {
         b.set_manuals_are_connectors(player, value);
     }
@@ -128,7 +162,7 @@ fn set_manuals_are_connectors(_: &mut Lua<World>, world: &mut World, call: &Nati
 
 /// `ChallengeManager.SetResetSequence(value, player)` (`0x82882528`).
 fn set_reset_sequence(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let (value, player) = (get_bool(call, 0), get_int(call, 1));
+    let (value, player) = (get_bool(call, 0), script_slot(world, get_int(call, 1)));
     if let Some(b) = backend(world) {
         b.set_reset_sequence(player, value);
     }
@@ -137,7 +171,7 @@ fn set_reset_sequence(_: &mut Lua<World>, world: &mut World, call: &NativeCall) 
 
 /// `ChallengeManager.SetResetScoring(value, player)` (`0x82882590`).
 fn set_reset_scoring(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let (value, player) = (get_bool(call, 0), get_int(call, 1));
+    let (value, player) = (get_bool(call, 0), script_slot(world, get_int(call, 1)));
     if let Some(b) = backend(world) {
         b.set_reset_scoring(player, value);
     }
@@ -146,16 +180,15 @@ fn set_reset_scoring(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -
 
 // ---- Entity ---------------------------------------------------------------
 
-/// `Entity.DoesSkaterExist(player)` (`0x82887068`): `SkaterManager::FindByIndex`. Co-op fork
-/// (open item 48): the career's scripts ask about their AI players, 1 on, which a campaign
-/// round seats after the humans (`ai::ai_slot`); the skater asked about is the one at that slot.
+/// `Entity.DoesSkaterExist(player)` (`0x82887068`): `SkaterManager::FindByIndex`, of the slot
+/// the script's player names ([`script_slot`]).
 fn does_skater_exist(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    Ok(vec![Value::Boolean(skater(world, super::ai::ai_slot(world, get_int(call, 0))).is_some())])
+    Ok(vec![Value::Boolean(skater(world, script_slot(world, get_int(call, 0))).is_some())])
 }
 
 /// `Entity.IsPlayerStanceRegular(player)` (`0x8287f2c0`).
 fn is_player_stance_regular(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = script_slot(world, get_int(call, 0));
     let regular = backend(world).map_or(world.stance_regular, |b| b.is_stance_regular(player));
     Ok(vec![Value::Boolean(regular)])
 }
@@ -175,14 +208,14 @@ fn get_num_online_skaters(_: &mut Lua<World>, world: &mut World, _: &NativeCall)
 /// `Online.IsPlayerDisconnected(player)` (`0x8288a768`): `PlayersBackEnd::
 /// GetPlayerIsDisconnected` in a network game, false outside one.
 fn is_player_disconnected(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = usize::try_from(get_int(call, 0)).ok();
+    let player = usize::try_from(script_slot(world, get_int(call, 0))).ok();
     let disconnected = world.online.as_ref().zip(player).is_some_and(|(online, player)| online.disconnected.get(player).copied().unwrap_or(false));
     Ok(vec![Value::Boolean(disconnected)])
 }
 
 /// `Online.SwitchCamera(player)` (`0x8288a4e0`): `SkaterManager::SetLocalIndex`.
 fn switch_camera(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = script_slot(world, get_int(call, 0));
     world.local_player = player;
     world.output(Output::SetLocalIndex { player });
     none()
@@ -209,13 +242,13 @@ fn pin(world: &mut World, player: i32, pin: bool) {
 }
 
 fn pin_ai(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = super::ai::ai_slot(world, get_int(call, 0));
+    let player = script_slot(world, get_int(call, 0));
     pin(world, player, true);
     none()
 }
 
 fn unpin_ai(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = super::ai::ai_slot(world, get_int(call, 0));
+    let player = script_slot(world, get_int(call, 0));
     pin(world, player, false);
     none()
 }
@@ -231,7 +264,7 @@ fn get_game_mode(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
 
 /// `Challenge.GetPlayerName(player = 0)` (`0x828809e0`).
 fn get_player_name(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int_or(call, 0, 0);
+    let player = script_slot(world, get_int_or(call, 0, 0));
     let name = backend(world).map(|b| b.player_name(player)).unwrap_or_default();
     Ok(vec![Value::from(name.as_str())])
 }
