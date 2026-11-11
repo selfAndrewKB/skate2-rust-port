@@ -202,10 +202,11 @@ Front page: [README](../README.md).
 50. Fixed (2026-11-11, [world](topics/world.md), "A puppet stands up"): a puppet never stood up
     after a knockdown, its own graph not being ticked past the collision's end, and the owner's
     "up" now ends a knockdown this copy still plays. The demo mission's census `down` agreement
-    went from 33 % to 99.3 %; a diagnostic shove's puppet stood up with its owner. Left in the
-    demo: flags agree in 59 % of pairs while each seat's skater stands inside the other's
-    spectators and hits them every three ticks (the demo's placement, 49); standing collisions
-    there show `NotAdded` packets in the trace, to look at with the demo kind.
+    went from 33 % to 99.2 %; a diagnostic shove's puppet stood up with its owner, and so did a
+    second knockdown the owner itself caused. Left in the demo: flags agree in 68 % of pairs
+    while each seat's skater stands inside the other's spectators and hits them every three
+    ticks (the demo's placement, 49); the trace shows hits during a collision rejected
+    (`NotAdded`), which is the queue's rule for a repeated major intent.
 51. Resolved (2026-11-11): `m_2a_01` and `m_4g_01_spotfilm_johnson` were not waiting after their
     win; the crawl's win at tick 1800 fell inside their intro scene (the pro's to tick 2453, the
     Shut-Down-of-SanVan scene to 4033), before `challenge_running`, so the scripts never saw a
@@ -221,6 +222,7 @@ Front page: [README](../README.md).
 53. The ambient AI skaters are each console's own: at the same two spots seat 1 spawned
     `ai_skater_06` and `sammy`, seat 2 `seb` and `ai_skater_06` (the probe's `ai:` lines). Not
     streamed, not in the inventory's counts; a player sees different skaters than the other.
-54. Four location missions (`m_08_01_teleport_trainingfacility_in`/`_out`, `m_2a_01_goto`,
-    `m_3a_01_goto`) carry an empty `MapStartLocation` (the execute's teleport names hash 0, held);
-    the crawl completes them by name. Where the original puts the player is to read.
+54. Fixed (2026-11-11): four location missions (`m_08_01_teleport_trainingfacility_in`/`_out`,
+    `m_2a_01_goto`, `m_3a_01_goto`) carry an empty `MapStartLocation`; the execute no longer asks
+    for a teleport to the empty name (the native lookup fails on it and moves nobody). The crawl
+    completes them by name.
