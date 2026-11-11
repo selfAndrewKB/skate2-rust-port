@@ -1514,8 +1514,8 @@ impl ChallengeSystem {
     }
 
     /// Diagnostics: `cSignPostManager::CompleteChallenge(name)` (`0x825e3098`).
-    pub fn diagnostic_complete_challenge(&mut self, name: &str) {
-        super::signpost::complete_challenge_by_name(&mut self.world, name);
+    pub fn diagnostic_complete_challenge(&mut self, name: &str) -> bool {
+        super::signpost::complete_challenge_by_name(&mut self.world, name)
     }
 
     /// Co-op fork, for the bench: the named challenge activated and executed now.

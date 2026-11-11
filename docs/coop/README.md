@@ -6,24 +6,30 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.9.0-whole-campaign`**
-(2026-11-10): M8, the whole campaign. The progression lives on the server and survives its
-restart; a console joining a running campaign brings every other member onto the newest save
-and the round starts again with everyone; a console whose connection drops keeps its career
-and rejoins by its player id, trying every three seconds; the mission crawl runs the campaign
-mission by mission on the bench. The crawl's first slice passed six of the eight opening
-missions; the two photo missions stop where the port itself stops (AI skaters not ported).
-Reviewed (six findings, all applied). The milestone pages: [saves](plan/topics/saves.md),
-[kinds](plan/topics/kinds.md), [tooling](plan/tooling.md), the ledger in
-[versions](plan/versions.md).
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.9.1-mission-ledger`**
+(2026-11-10): M8, the whole campaign, and its ledger. The progression lives on the server and
+survives its restart; a console joining a running campaign brings every other member onto the
+newest save and the round starts again with everyone; a console whose connection drops keeps
+its career and rejoins by its player id, trying every three seconds. The mission crawl ran every
+one of the campaign's 115 missions on the bench: 81 pass (every tutorial, go-to, teleport and
+film-pool mission among them), 34 stop, 19 of them at the port's AI skaters, 8 where the
+scripts' AI player is the second human (the co-op finding), 4 at unknown locators, 3 in the
+scripts' own flow; every mission's standing, cause, synchronization numbers and census audit are
+in [missions](plan/missions.md), regenerated from the kept logs. Reviewed (twelve findings, all applied: the complete-by-name
+diagnostic now reports whether it completed anything, the ledger refuses to run without the
+career database, and ten lesser ones). The milestone
+pages: [saves](plan/topics/saves.md), [kinds](plan/topics/kinds.md), [tooling](plan/tooling.md),
+the ledger in [versions](plan/versions.md).
 
 ## Current focus (2026-11-10)
 
-Play: the M8 build in the player's hands (every milestone so far was proven on the bench,
-M5's build alone was played); what the audits say in play (the puppet's speed, open item 39);
-the crawl beyond the opening missions once the port's AI skaters land (open item 45); Training
-Facility travel ([session](plan/topics/session.md)); the open items a person's play decides
-(New Career in a lobby, 41; a rejoin notice, 44).
+Play: the build in the player's hands (every milestone so far was proven on the bench, M5's
+build alone was played); what the audits say in play (the puppet's speed, open item 39; a puppet
+that stays knocked down after its owner refused the hit, 50). The 34 missions the crawl stops
+at, in order: the scripts' AI player in a campaign round (48) alongside the port's AI skaters
+(45); the demo kind (49, 50); the two scripts waiting after their win (51). Training Facility
+travel ([session](plan/topics/session.md)); the open items a person's play decides (New Career
+in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 

@@ -201,6 +201,10 @@ mission's logs are kept as `crawl-<name>-seat-N.log` and `-server.log`, with a `
 marker where the bench's teardown begins, and the census dump on for the offline audit.
 One to three minutes a mission.
 
+`SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE=<tick>:<name>[;<name>|<tick>:<name>...]` logs its result
+(`: true`, or `: false` for a name that is no signpost, a signpost without a challenge, or a
+replay); the crawl and the ledger count a completion only on `true`.
+
 **Probes.** `CRAWL_EXTRA='SKATE2_TRACE_CAREER_NATIVES=1 SKATE2_TRACE_AI=1'` adds seat variables
 to a crawl (`--missions <one> --keep --out <scratch>.md` reruns one mission without touching the
 ledger's run reports; move the kept logs aside first, the crawl overwrites them). A main mission

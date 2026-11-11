@@ -76,20 +76,20 @@ def run_one(name, kind, keep):
     extra += os.environ.get('CRAWL_EXTRA', '').split()  # a probe's extra seat variables, e.g. SKATE2_TRACE_CAREER_NATIVES=1
     if kind == 'main':
         extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}']
-        done = r'enter challenge_cleanup|enter complete\b|panicked|kicked|disconnected'  # `complete`: a challenge that completes on execute (film team)
+        done = rf'career graph {re.escape(name)} @\d+: enter (?:challenge_cleanup|complete\b)|panicked|kicked|disconnected'  # `complete`: a challenge that completes on execute (film team)
     elif kind == 'location':
         extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={WIN_AT}:{name}']
-        done = 'diagnostic: complete challenge|panicked|kicked|disconnected'
+        done = 'diagnostic: complete challenge .*: true|panicked|kicked|disconnected'
     else:
         extra += [f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={WIN_AT}:{name}']
-        done = 'diagnostic: complete challenge|panicked|kicked|disconnected'
+        done = 'diagnostic: complete challenge .*: true|panicked|kicked|disconnected'
     env = {'SEAT_ONLINE_1': 'create:9', 'SEAT_ONLINE_2': 'join:9', 'CAPTURE_COUNT': '0', 'SEAT_EXTRA': ' '.join(extra)}
     if keep:
         env['BENCH_KEEP'] = '1'
     bench('start', '2', env=env)
     logs = [BENCH / f'seat-{s}/seat.log' for s in (1, 2)]
     deadline = time.time() + WAIT_S
-    reason, loop_since = 'deadline', None
+    reason, loop_since, loop_seen = 'deadline', None, 0
     while time.time() < deadline:
         time.sleep(5)
         if all(grep(log, done) for log in logs):
@@ -98,8 +98,10 @@ def run_one(name, kind, keep):
         # the known stall: both scripts cycling between two states after the win
         tails = [states(log, name)[-8:] for log in logs]
         if all(len(t) == 8 and len(set(t)) <= 2 for t in tails) and all(grep(log, rf'round tick {WIN_AT}\b') for log in logs):
-            loop_since = loop_since or time.time()
-            if time.time() - loop_since >= LOOP_S:
+            seen = sum(len(states(log, name)) for log in logs)
+            if loop_since is None:
+                loop_since, loop_seen = time.time(), seen
+            if time.time() - loop_since >= LOOP_S and seen > loop_seen:  # still cycling, not halted
                 reason = 'loop ' + '→'.join(dict.fromkeys(tails[0][-2:]))
                 break
         else:
@@ -116,8 +118,8 @@ def run_one(name, kind, keep):
     for s, log in zip((1, 2), logs):
         executed = grep(log, f'diagnostic: execute {re.escape(name)} at round tick')
         won = grep(log, 'diagnostic: won the main challenge')
-        completed = grep(log, f'diagnostic: complete challenge {re.escape(name)}')
-        cleanup = grep(log, r'enter challenge_cleanup|enter complete\b')
+        completed = grep(log, f'diagnostic: complete challenge {re.escape(name)} at round tick \\d+: true')
+        cleanup = grep(log, rf'career graph {re.escape(name)} @\d+: enter (?:challenge_cleanup|complete\b)')
         saved = grep(log, 'campaign save at')
         failed = [l for l in grep(log, 'panicked|kicked|disconnected') if 'crawl: stop' not in l][:1]
         last = grep(log, 'career graph .* enter ')
@@ -130,17 +132,18 @@ def run_one(name, kind, keep):
             'failed': failed[0][:120] if failed else '',
             'last_state': last[-1].split('career graph ')[-1][:80] if last else '',
         }
-    server = grep(BENCH / 'server/server.log', 'campaign save from')
-    result['agree'] = bool(server) and 'agrees' in server[-1]
+    saves = [result[s]['save'] for s in (1, 2)]
+    result['agree'] = all(saves) and len(set(saves)) == 1
     bench('stop')
     subprocess.run(['pkill', '-f', 'dist/macos/skate2-pc'], capture_output=True)
     kept = [(log, BENCH / f'evidence/crawl-{name}-seat-{s}.log') for s, log in zip((1, 2), logs)]
     kept.append((BENCH / 'server/server.log', BENCH / f'evidence/crawl-{name}-server.log'))
+    (BENCH / 'evidence').mkdir(parents=True, exist_ok=True)
     for src, dst in kept:
         try:
             os.replace(src, dst)
-        except OSError:
-            pass
+        except OSError as error:
+            print(f'crawl: {src} not kept as {dst}: {error}', file=sys.stderr)
     return result
 
 

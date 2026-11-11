@@ -8,7 +8,7 @@ logs (`../bench/evidence/crawl-<mission>-seat-N.log`, `-server.log` when kept) a
                                       presentations, scenes, script errors, the synchronization numbers
   ../bench/evidence/crawl-ledger.json the same, machine-readable, for the next iteration
 
-    python3 tools/coop/crawl_ledger.py            # regenerate (needs SKATE2_CAREER_DB for the families)
+    python3 tools/coop/crawl_ledger.py            # regenerate (SKATE2_CAREER_DB required: the kinds and families)
 
 A mission's details come from its newest kept log; its verdict history comes from every report.
 Causes are classified from the log by pattern (see CAUSES); a mission no pattern names is "unknown",
@@ -134,8 +134,10 @@ def seat(name, path):
     if stop is not None:
         log = log[:stop]  # what follows is the bench's teardown
     g = lambda pat: [m for m in (re.search(pat, l) for l in log) if m]  # noqa: E731
-    m = g(rf'diagnostic: complete challenge {re.escape(name)} at round tick (\d+)')
-    r['completed'] = int(m[-1].group(1)) if m else None
+    m = g(rf'diagnostic: complete challenge {re.escape(name)} at round tick (\d+)(?:: (\w+))?')
+    # the result is logged since coop-v0.9.1; a line without one (the 2026-11-10 crawl) counts as completed, unverified
+    r['completed'] = int(m[-1].group(1)) if m and m[-1].group(2) in (None, 'true') else None
+    r['completed_unverified'] = bool(m) and m[-1].group(2) is None
     m = g(rf'diagnostic: execute {re.escape(name)} at round tick (\d+): (\w+)')
     r['executed'] = m[-1].group(2) == 'true' if m else None
     m = g(r'diagnostic: won the main challenge at round tick (\d+): (\d+) objectives completed')
@@ -232,9 +234,9 @@ def _last(s):
 CAUSES = [
     ('crash', lambda m: any('panicked' in f for s in m['seats'].values() for f in s.get('failed', []))),
     ('net: dropped', lambda m: any(s.get('failed') for s in m['seats'].values())),
-    ('not executed', lambda m: m['kind'] == 'main' and any(s.get('executed') is False for s in m['seats'].values())),
-    ('not completed by name', lambda m: m['kind'] != 'main' and any(s.get('completed') is None for s in m['seats'].values())),
     ('no log', lambda m: any(not s.get('lines') for s in m['seats'].values())),
+    ('not executed', lambda m: m['kind'] == 'main' and any(s.get('lines') and not s.get('executed') for s in m['seats'].values())),
+    ('not completed by name', lambda m: m['kind'] != 'main' and any(s.get('completed') is None for s in m['seats'].values())),
     # the co-op causes come first: a lockstep campaign owes identical scripts on every seat
     ('co-op: seats diverged', lambda m: m.get('paths_agree') is False),
     ('co-op: out of step', lambda m: m.get('paths_agree') and not m['in_step']),
@@ -272,7 +274,7 @@ def verdict_from_logs(m):
         return 'PASS (no save)'
     if both:
         return 'PASS (saves differ)'
-    if m['kind'] == 'main' and any(s.get('executed') is False for s in seats.values()):
+    if m['kind'] == 'main' and any(s.get('lines') and not s.get('executed') for s in seats.values()):
         return 'NOT EXECUTED'
     if any('panicked' in f for s in seats.values() for f in s.get('failed', [])):
         return 'CRASHED'
@@ -286,7 +288,7 @@ def verdict_from_logs(m):
 def runs():
     """Every crawl report: run id (file stem), its rows (mission → verdict), in date order."""
     out = []
-    for path in sorted(EVIDENCE.glob('*-crawl*.md')):
+    for path in sorted(EVIDENCE.glob('*-crawl*.md'), key=lambda p: (p.name[:10], p.stat().st_mtime)):
         rows = {}
         for l in lines(path):
             m = re.match(r'\| `([^`]+)` \| ([^|]+?) \|', l)
@@ -317,7 +319,9 @@ def main():
     fam = families()
     all_runs = runs()
     note_mission, note_run, old = notes()
-    names = {n: (t, g) for n, t, g in crawl.missions()} if os.environ.get('SKATE2_CAREER_DB') else {}
+    if not os.environ.get('SKATE2_CAREER_DB'):
+        sys.exit('crawl_ledger: SKATE2_CAREER_DB is needed (the missions\' kinds and families come from the career db); nothing written')
+    names = {n: (t, g) for n, t, g in crawl.missions()}
     for run in all_runs:
         for n in run['rows']:
             names.setdefault(n, (None, None))
@@ -337,8 +341,9 @@ def main():
         m['passed'] = m['verdict'].startswith('PASS')
         s1, s2 = m['seats'][1], m['seats'][2]
         l1, l2 = s1.get('last_state'), s2.get('last_state')
-        m['in_step'] = (l1 == l2) if (s1.get('lines') and s2.get('lines')) else False
-        m['paths_agree'] = s1.get('path') == s2.get('path') if (s1.get('lines') and s2.get('lines')) else None
+        evidence = bool(s1.get('lines') and s2.get('lines') and (s1.get('states') or s2.get('states')))
+        m['in_step'] = (l1 == l2) if evidence else None  # None: no mission-named state on either seat
+        m['paths_agree'] = (s1.get('path') == s2.get('path')) if evidence else None
         m['cause'] = classify(m) if m['verdict'] != 'NOT RUN' else '—'
         m['note'] = note_mission.get(name, '')
         missions.append(m)
@@ -378,7 +383,7 @@ def main():
         last = s1.get('last_state')
         where = '—' if m['passed'] else (f"`{last[1]}` @{last[0]}" if last else '—')
         hist = ', '.join(f"{run.split('-crawl')[0]}{run.split('-crawl')[1] or ''}: {v}" for run, v in m['history']) if m['history'] else '—'
-        step = '—' if m['verdict'] == 'NOT RUN' else ('yes' if m['in_step'] else 'no')
+        step = '—' if m['verdict'] == 'NOT RUN' or m['in_step'] is None else ('yes' if m['in_step'] else 'no')
         L.append(f"| `{m['mission']}` | {m['family']} | {m['kind']} | {m['rule']} | {m['verdict']} | {where} | {m['cause']} | {step} | {hist} | {m['note']} |")
     # ---- synchronization
     L.append('')
@@ -471,9 +476,15 @@ def main():
     generated = '\n'.join(L)
 
     if BEGIN in old and END in old:
+        if old.index(BEGIN) > old.index(END):
+            sys.exit('crawl_ledger: the ledger markers are reversed in missions.md; nothing written')
         new = old[:old.index(BEGIN)] + generated + old[old.index(END) + len(END):]
     else:
-        new = HEADER + generated + '\n\n## Notes\n\nHand-kept, one line a mission (`- \\`mission\\`: text`) or a run (`- run \\`id\\`: build, commit`); merged into the tables above.\n'
+        # the markers are gone (an edit above them): the hand-kept Notes are kept as they stand
+        notes_text = old[old.index('## Notes'):] if '## Notes' in old else 'Hand-kept, one line a mission (`- \\`mission\\`: text`) or a run (`- run \\`id\\`: build, commit`); merged into the tables above.\n'
+        if not notes_text.startswith('## Notes'):
+            notes_text = '## Notes\n\n' + notes_text
+        new = HEADER + generated + '\n\n' + notes_text
     LEDGER.write_text(new, encoding='utf-8')
 
     # ---- the detail document
@@ -490,7 +501,7 @@ def main():
             census_line = f"Census audit: {c['dumps']} dumps, {c['paired']} pairs, one seat only {c['only_a']} / {c['only_b']}, owner clashes {c['owner_disagree']}; {fields}; open at the end: {len(c['open'])}{(' (' + opened + ')') if opened else ''}."
         else:
             census_line = 'Census audit: no dumps paired.'
-        D.append(f"Family {m['family']} ({m['family_id']}), global {m['global']} ({m['kind']}), rule {m['rule']}. **{m['verdict']}**; cause: {m['cause']}; in step: {'yes' if m['in_step'] else 'no'}. "
+        D.append(f"Family {m['family']} ({m['family_id']}), global {m['global']} ({m['kind']}), rule {m['rule']}. **{m['verdict']}**; cause: {m['cause']}; in step: {'—' if m['in_step'] is None else 'yes' if m['in_step'] else 'no'}. "
                  + (f"Runs: {', '.join(f'{r}: {v}' for r, v in m['history'])}. " if m['history'] else '') + (f"Note: {m['note']}" if m['note'] else ''))
         D.append('')
         if m['server']:

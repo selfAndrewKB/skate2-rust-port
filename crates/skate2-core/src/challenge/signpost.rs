@@ -1199,12 +1199,13 @@ fn challenge_complete(world: &mut World, signpost: u64) {
 
 /// `cSignPostManager::CompleteChallenge(challengeKey, true)` (`0x825e1550`) of a challenge
 /// (neutrino) key: a nonzero key, outside a replay, is won and the results processed.
-pub(crate) fn complete_challenge_by_key(world: &mut World, challenge: u64) {
+pub(crate) fn complete_challenge_by_key(world: &mut World, challenge: u64) -> bool {
     if challenge == 0 || world.replaying_challenge {
-        return;
+        return false;
     }
     win_challenge(world, challenge);
     process_challenge_results(world);
+    true
 }
 
 /// `cSignPostManager::CompleteChallenge(name)` (`0x825e3098`): the name's
@@ -1221,10 +1222,12 @@ pub(crate) fn execute_challenge_by_name(world: &mut World, name: &str) -> bool {
     true
 }
 
-pub(crate) fn complete_challenge_by_name(world: &mut World, name: &str) {
-    let Some(signpost) = world.signpost.helper.names.get(&hash_value32(name)).copied() else { return };
-    let Some(challenge) = SignPost::challenge_key(&world.db, signpost) else { return };
-    complete_challenge_by_key(world, challenge);
+/// True when the challenge was won and processed: false for an unknown name, a signpost without
+/// a challenge, or during a replay (co-op fork: the bench's diagnostic reports it).
+pub(crate) fn complete_challenge_by_name(world: &mut World, name: &str) -> bool {
+    let Some(signpost) = world.signpost.helper.names.get(&hash_value32(name)).copied() else { return false };
+    let Some(challenge) = SignPost::challenge_key(&world.db, signpost) else { return false };
+    complete_challenge_by_key(world, challenge)
 }
 
 /// `cSignPostManager::ProcessChallengeResults` (`0x825e10c0`): trigger the

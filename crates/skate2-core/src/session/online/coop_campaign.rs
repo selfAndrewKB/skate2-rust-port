@@ -115,16 +115,29 @@ fn diagnostic_complete_challenges() -> &'static [(u32, String)] {
     SPEC.get_or_init(|| tick_names("SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE"))
 }
 
-/// `<round tick>:<name>[;...]` from the variable, the malformed entries dropped.
+/// `<round tick>:<name>[;<name>|<round tick>:<name>...]` from the variable: a bare name takes
+/// the tick before it; an entry whose tick does not parse, or a bare name before any tick, is
+/// dropped.
 fn tick_names(variable: &str) -> Vec<(u32, String)> {
-    std::env::var(variable).ok().map_or_else(Vec::new, |spec| {
-        spec.split(';')
-            .filter_map(|entry| {
-                let (tick, name) = entry.split_once(':')?;
-                Some((tick.trim().parse().ok()?, name.trim().to_owned()))
-            })
-            .collect()
-    })
+    std::env::var(variable).ok().map_or_else(Vec::new, |spec| tick_names_of(&spec))
+}
+
+fn tick_names_of(spec: &str) -> Vec<(u32, String)> {
+    let mut last = None;
+    spec.split(';')
+        .filter_map(|entry| {
+            let entry = entry.trim();
+            if entry.is_empty() {
+                return None;
+            }
+            let (tick, name) = match entry.split_once(':') {
+                Some((tick, name)) => (tick.trim().parse().ok()?, name.trim()),
+                None => (last?, entry),
+            };
+            last = Some(tick);
+            Some((tick, name.to_owned()))
+        })
+        .collect()
 }
 
 /// `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>[;...]`: at each round tick every objective of the
@@ -264,8 +277,8 @@ impl<T, C> SelectedLiveSession<T, C> {
             if *at == tick
                 && let Some(career) = self.career.as_mut()
             {
-                career.system.diagnostic_complete_challenge(name);
-                trace(format_args!("diagnostic: complete challenge {name} at round tick {tick}"));
+                let completed = career.system.diagnostic_complete_challenge(name);
+                trace(format_args!("diagnostic: complete challenge {name} at round tick {tick}: {completed}"));
             }
         }
         if diagnostic_wins().contains(&tick)
@@ -354,5 +367,18 @@ mod tests {
         assert_eq!(progression_blob(&with_position), progression_blob(&shared));
         assert_eq!(fnv1a(&progression_blob(&with_position)), fnv1a(&progression_blob(&other_position)));
         assert_ne!(fnv1a(&progression_blob(&shared)), fnv1a(&progression_blob(&shared[..1])));
+    }
+}
+
+#[cfg(test)]
+mod tick_names_tests {
+    use super::tick_names_of;
+
+    #[test]
+    fn entries_and_bare_names() {
+        let spec = tick_names_of("900:m_a; m_b ;1800:m_c;;x:m_d;1800:");
+        assert_eq!(spec, vec![(900, "m_a".to_owned()), (900, "m_b".to_owned()), (1800, "m_c".to_owned()), (1800, String::new())]);
+        assert!(tick_names_of("m_a;900:m_b").len() == 1, "a bare name before any tick is dropped");
+        assert!(tick_names_of("").is_empty());
     }
 }

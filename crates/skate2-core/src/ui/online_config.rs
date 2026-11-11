@@ -412,6 +412,7 @@ mod tests {
                 server: "203.0.113.7:32082".into(),
                 show_lobby_chat,
                 show_ghost_players: !show_lobby_chat,
+                player_id: "00000000deadbeef".into(),
             };
             assert_eq!(parse(&config.text()), Some(config));
         }
