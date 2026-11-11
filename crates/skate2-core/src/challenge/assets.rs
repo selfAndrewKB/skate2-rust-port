@@ -538,6 +538,9 @@ pub fn update(world: &mut World) {
             LoadState::WaitingForAccept | LoadState::WaitingForChallengeHull | LoadState::WaitingForChallengeHullUnload => continue,
         };
         if let Some(l) = world.assets.loads.get_mut(&hash) {
+            if l.state != next && std::env::var_os("SKATE2_TRACE_AI").is_some() {
+                eprintln!("ai: challenge asset load {:#018x}: {:?} -> {next:?}", l.key, l.state);
+            }
             l.state = next;
         }
     }

@@ -236,11 +236,13 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
         self.frontend_world.phase = Phase::Off;
         self.inner.try_destroy_ai_skaters().map_err(|e| error(Stage::ControlledPlayer, e))?;
+        // Co-op fork (open item 45): a campaign's AI manager is the career's, not a network game's.
+        let online_game = self.online.game.is_some() && !self.online_campaign();
         if let Some(ai) = self.inner.ai.as_mut() {
             ai.in_front_end = false;
             ai.local_player = Some(FIRST_PLAYER);
             let mut manager = ai.manager();
-            manager.load_game(self.online.game.is_some());
+            manager.load_game(online_game);
             manager.model_loading_mode = crate::ai::skater_manager::ModelLoadingMode::LoadAll;
         }
         self.inner

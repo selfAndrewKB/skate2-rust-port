@@ -40,8 +40,18 @@ pub(crate) struct LocationManager {
     arenas: Vec<(u64, Vec<Location>)>,
 }
 
-/// The named descriptors of one `tLocationDescData`.
+/// The named descriptors of one `tLocationDescData`; under `SKATE2_TRACE_CAREER` the names the
+/// scripts teleport and spawn by (`*locator*`, `*location*`), one line per data block.
 fn push_locations(data: &LocationDescData, locations: &mut Vec<Location>) {
+    if std::env::var_os("SKATE2_TRACE_CAREER").is_some() {
+        let named: Vec<&str> = data
+            .locations
+            .iter()
+            .filter_map(|desc| desc.name.as_deref())
+            .filter(|name| name.to_ascii_lowercase().contains("locat"))
+            .collect();
+        eprintln!("career: location data block: {} locations, locators {named:?}", data.locations.len());
+    }
     for desc in &data.locations {
         let Some(name) = desc.name.as_deref() else { continue };
         let first = desc
@@ -143,7 +153,11 @@ impl LocationManager {
             if self.arenas.iter().any(|(held, _)| *held == id) {
                 continue;
             }
-            self.arenas.push((id, locations_of(plan)?));
+            let locations = locations_of(plan)?;
+            if std::env::var_os("SKATE2_TRACE_CAREER").is_some() {
+                eprintln!("career: location arena {id:#018x} registered with {} locations", locations.len());
+            }
+            self.arenas.push((id, locations));
         }
         Ok(())
     }

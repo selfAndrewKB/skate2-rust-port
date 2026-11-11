@@ -460,7 +460,7 @@ fn location_position(world: &World, name: &str) -> [f32; 3] {
 
 /// `AI.SkaterDistanceFromLocation(player, location)` (`0x8288de40`).
 fn ai_skater_distance_from_location(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = super::ai::ai_slot(world, get_int(call, 0));
     let mut distance = 0.0;
     if player <= 8
         && let Some(name) = location_name(world, call.arg(1))
@@ -478,8 +478,10 @@ fn ai_skater_distance_from_location(_: &mut Lua<World>, world: &mut World, call:
 /// `cChallengeTeleportManager::TeleportPlayer`. An empty location falls back
 /// to a location in the fourth argument.
 fn ai_reposition(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
-    let pos_id = get_int_or(call, 2, player);
+    // The spawn point index stays the script's player; the skater moved is at its slot.
+    let script_player = get_int(call, 0);
+    let player = super::ai::ai_slot(world, script_player);
+    let pos_id = get_int_or(call, 2, script_player);
     let reposition_marker = get_bool_or(call, 3, false);
     let location = location_name(world, call.arg(1))
         .filter(|n| !n.is_empty())

@@ -226,3 +226,38 @@ Front page: [README](../README.md).
     `m_2a_01_goto`, `m_3a_01_goto`) carry an empty `MapStartLocation`; the execute no longer asks
     for a teleport to the empty name (the native lookup fails on it and moves nobody). The crawl
     completes them by name.
+55. Fixed (2026-11-11, the AI day): in a campaign round the AI skater manager believed it was in
+    a network game (`LoadGame(true)` on the online path), and `IsActivityAnAiChallenge` is false
+    online, so no challenge ever selected its characters at its asset load: every "recipe None"
+    of the crawl (45) was this, not a missing port. A campaign's manager now loads as the career's;
+    the photo mission `m_5a_01` selects Chris Haslam at its load on both seats, its asset streams
+    and the spawn finds the recipe (`../bench/evidence/probe/2026-11-11-crawl-ai-fix2.md`, the
+    `ai:` trace). Each console runs its own AI skaters, as every AI is each console's (53).
+56. The scripts count their AI players two ways: the photo script asks for `GetLocalPlayerID() + 1`
+    (seat 1 spawned "player 1", seat 2 "player 2", the same trace), the follow script for a literal
+    1 on both seats. A campaign maps a script's index past its local player to the AI's ordinal
+    (`player - local`), and an index at or below it to the human it names
+    (`challenge::ai::script_ai_player`); the AI's ordinal `k` skates at slot `N - 1 + k` on every
+    console (`ai_slot`), its character, name and spawn point by the ordinal. Left: on a seat whose
+    local player is 1 or more, a literal 1 in a mixed native (`PinAI`, `RepositionAI`,
+    `DoesSkaterExist`) names the human, since the online S.K.A.T.E. scripts mean humans by those
+    indexes; a follow mission's pin or reposition of its pro may land on seat 2's skater. The clean
+    way is one index space for the scripts (the local player as 0 on every console, every player
+    argument translated at one funnel); its cost is every native that reads a player
+    (`design.md` §3, "the player" ledger). Measured by the next crawl.
+57. Fixed (2026-11-11): a campaign dropped every message of the challenge queue (`cMsgSkaterCreated`,
+    `cMsgSkaterDestroyed`, the radius pair) since the local skater's are each console's own; the
+    follow family's `wait_for_assetload` waits for its AI's `cMsgSkaterCreated` and never heard it
+    (`m_4b_01`, the pro spawned at slot 2 and the script sat for good). The messages of this
+    console's own AI skaters now reach the scripts, their `PlayerID` the AI's ordinal. Their tick is
+    each console's own (the scene load's), a divergence the next crawl measures.
+58. Fixed (2026-11-11): a mission hull's own locators (`m_1a_07_follow_slappy_startlocator01` and
+    six more `*_startlocat*`, in the hull's `cSim_Global` arena) register with the location manager
+    when the hull's simulation collection streams in, a few frames after the crawl's execute; a
+    follow script spawns its pro as its first state enters, before that, and failed on "unknown
+    location" (47). In play the loading screen loads the challenge's assets before its scripts run
+    (`StateLoading::StartChallengeState`); the crawl now does the same: `SKATE2_DIAGNOSTIC_COOP_PRELOAD`
+    at round tick 600, the execute at 900. The world's own locators (`BAM_Sim.loc`, 52 of the
+    missions' `*_challengelocator01` among them) are now a teleport's fallback when no registered
+    arena holds the name (46); none of the crawl's unknown locators was among them, every one was a
+    hull's.

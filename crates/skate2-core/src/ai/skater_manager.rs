@@ -215,8 +215,28 @@ impl SkaterAsset {
         self.recipe_id = Some(recipe);
     }
 
-    /// `Update` 0x824baba0 with `UpdateLoading` 0x824baa90.
+    /// `Update` 0x824baba0 with `UpdateLoading` 0x824baa90; a status change is traced
+    /// (`SKATE2_TRACE_AI`).
     fn update(&mut self, streamed: Option<&std::collections::BTreeSet<u64>>) {
+        let before = (self.status, self.recipe_id, self.loader_loaded);
+        self.update_status(streamed);
+        let after = (self.status, self.recipe_id, self.loader_loaded);
+        if before != after && std::env::var_os("SKATE2_TRACE_AI").is_some() {
+            eprintln!(
+                "ai: asset {:#018x}: {:?} -> {:?}{}{}",
+                after.1.unwrap_or(0),
+                before.0,
+                after.0,
+                if after.2 && !before.2 { ", its scene streamed" } else { "" },
+                match streamed {
+                    Some(set) if after.0 != AssetStatus::Loaded => format!(", streamed {set:x?}"),
+                    _ => String::new(),
+                }
+            );
+        }
+    }
+
+    fn update_status(&mut self, streamed: Option<&std::collections::BTreeSet<u64>>) {
         match self.status {
             AssetStatus::Unloaded | AssetStatus::Loaded => {}
             AssetStatus::Loading | AssetStatus::LoadingRequiresUnload | AssetStatus::LoadingRequiresReplace => {

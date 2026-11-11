@@ -1228,6 +1228,17 @@ pub(crate) fn execute_challenge_by_name(world: &mut World, name: &str) -> bool {
     true
 }
 
+/// Co-op fork, for the bench: the named signpost's challenge assets start loading, as
+/// `StateLoading::StartChallengeState` loads them behind the loading screen before a
+/// challenge starts; false for an unknown name or a signpost without a challenge.
+pub(crate) fn preload_challenge_by_name(world: &mut World, name: &str) -> bool {
+    let Some(signpost) = world.signpost.helper.names.get(&hash_value32(name)).copied() else { return false };
+    let Some(challenge) = SignPost::challenge_key(&world.db, signpost) else { return false };
+    let Some(activity) = world.activities.find(challenge) else { return false };
+    super::assets::load_challenge_assets(world, activity, true, false, 0);
+    true
+}
+
 /// True when the challenge was won and processed: false for an unknown name, a signpost without
 /// a challenge, or during a replay (co-op fork: the bench's diagnostic reports it).
 pub(crate) fn complete_challenge_by_name(world: &mut World, name: &str) -> bool {

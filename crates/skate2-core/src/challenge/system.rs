@@ -1286,6 +1286,15 @@ impl ChallengeSystem {
             .collect()
     }
 
+    /// Co-op fork (M8): the main challenge's key and the name of its graph's current state, for
+    /// the bench's win that follows the mission's own `challenge_running`.
+    pub fn main_challenge_key_and_state(&self) -> Option<(u64, &str)> {
+        let main = self.world.activities.main?;
+        let graph = self.world.activities.graph(main);
+        let state = graph.states.get(graph.current?)?;
+        Some((self.world.activities.activities[main].key, state.name.as_str()))
+    }
+
     /// Co-op fork (M8), `SKATE2_DIAGNOSTIC_COOP_WIN`: every objective of the main challenge's
     /// groups not yet complete is completed as a win would (`force_complete`), in order,
     /// points objectives included; how many were.
@@ -1521,6 +1530,12 @@ impl ChallengeSystem {
     /// Co-op fork, for the bench: the named challenge activated and executed now.
     pub fn diagnostic_execute_challenge(&mut self, name: &str) -> bool {
         super::signpost::execute_challenge_by_name(&mut self.world, name)
+    }
+
+    /// Co-op fork, for the bench (`SKATE2_DIAGNOSTIC_COOP_PRELOAD`): the named challenge's
+    /// assets start loading ahead of its execute, as the loading screen loads them.
+    pub fn diagnostic_preload_challenge(&mut self, name: &str) -> bool {
+        super::signpost::preload_challenge_by_name(&mut self.world, name)
     }
 
     /// Co-op fork, for the bench: every sign-up box, with its activity's name and centre.

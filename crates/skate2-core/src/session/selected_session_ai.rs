@@ -617,7 +617,15 @@ impl<T, C> SelectedSession<T, C> {
                 }
                 let job = std::thread::Builder::new()
                     .name("sk8 AI load".to_owned())
-                    .spawn(move || MountedPlayerRecipeLoad::try_prepare_marquee_scene(&mounts, &actual).ok())
+                    .spawn(move || match MountedPlayerRecipeLoad::try_prepare_marquee_scene(&mounts, &actual) {
+                        Ok(scene) => Some(scene),
+                        Err(error) => {
+                            if std::env::var_os("SKATE2_TRACE_AI").is_some() {
+                                eprintln!("ai: scene load {recipe:#018x} failed: {error:?}");
+                            }
+                            None
+                        }
+                    })
                     .ok()?;
                 Some(AiSceneLoad { schema_name, scene: AiSceneState::Loading(job) })
             });

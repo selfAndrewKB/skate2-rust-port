@@ -106,6 +106,17 @@ fn diagnostic_execute() -> &'static [(u32, String)] {
     SPEC.get_or_init(|| tick_names("SKATE2_DIAGNOSTIC_COOP_EXECUTE"))
 }
 
+/// `SKATE2_DIAGNOSTIC_COOP_PRELOAD=<round tick>:<name>[;...]`: at each round tick the named
+/// challenge's assets (its hulls with their locators, its AI characters and paths) start loading,
+/// as `StateLoading::StartChallengeState` loads them behind the loading screen before a mission
+/// starts; the crawl preloads 300 round ticks before its execute, so a script that spawns its AI
+/// as it starts finds the hull's locators registered and the asset load's completion still ahead
+/// of it (open items 45, 47).
+fn diagnostic_preload() -> &'static [(u32, String)] {
+    static SPEC: std::sync::OnceLock<Vec<(u32, String)>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| tick_names("SKATE2_DIAGNOSTIC_COOP_PRELOAD"))
+}
+
 /// `SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE=<round tick>:<name>[;...]`: at each round tick the
 /// named challenge is completed as the progression's own `CompleteChallenge(name)` does it (a
 /// go-to's arrival, a location challenge's trigger): the crawl's way through a mission that has
@@ -140,16 +151,39 @@ fn tick_names_of(spec: &str) -> Vec<(u32, String)> {
         .collect()
 }
 
-/// `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>[;...]`: at each round tick every objective of the
-/// main challenge's groups that is not complete is completed as a win would complete it
+/// `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>|running+<ticks>[;...]`: at each round tick named,
+/// or the given number of round ticks after the main challenge's graph enters
+/// `challenge_running` (its own state, past any intro scene: open item 51), every objective of
+/// the main challenge's groups that is not complete is completed as a win would complete it
 /// (`force_complete`, points objectives included), so the real win, outro and
 /// `challenge_cleanup` play on every console: the crawl's way through a mission whose
 /// objectives need tricks, gates or a camera (M8).
-fn diagnostic_wins() -> &'static [u32] {
-    static SPEC: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
-    SPEC.get_or_init(|| {
-        std::env::var("SKATE2_DIAGNOSTIC_COOP_WIN").ok().map_or_else(Vec::new, |spec| spec.split(';').filter_map(|tick| tick.trim().parse().ok()).collect())
-    })
+fn diagnostic_wins() -> &'static [WinAt] {
+    static SPEC: std::sync::OnceLock<Vec<WinAt>> = std::sync::OnceLock::new();
+    SPEC.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_WIN").ok().map_or_else(Vec::new, |spec| win_ats_of(&spec)))
+}
+
+/// One entry of `SKATE2_DIAGNOSTIC_COOP_WIN`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WinAt {
+    Tick(u32),
+    /// So many round ticks after the main challenge entered `challenge_running`.
+    AfterRunning(u32),
+}
+
+/// The state the win waits for under `running+<ticks>`.
+const RUNNING_STATE: &str = "challenge_running";
+
+fn win_ats_of(spec: &str) -> Vec<WinAt> {
+    spec.split(';')
+        .filter_map(|entry| {
+            let entry = entry.trim();
+            match entry.strip_prefix("running+") {
+                Some(delay) => delay.trim().parse().ok().map(WinAt::AfterRunning),
+                None => entry.parse().ok().map(WinAt::Tick),
+            }
+        })
+        .collect()
 }
 
 /// The progression savables as one byte string, for the server's store and the hash every
@@ -265,6 +299,14 @@ impl<T, C> SelectedLiveSession<T, C> {
                 _ => {}
             }
         }
+        for (at, name) in diagnostic_preload() {
+            if *at == tick
+                && let Some(career) = self.career.as_mut()
+            {
+                let loading = career.system.diagnostic_preload_challenge(name);
+                trace(format_args!("diagnostic: preload {name} at round tick {tick}: {loading}"));
+            }
+        }
         for (at, name) in diagnostic_execute() {
             if *at == tick
                 && let Some(career) = self.career.as_mut()
@@ -281,9 +323,23 @@ impl<T, C> SelectedLiveSession<T, C> {
                 trace(format_args!("diagnostic: complete challenge {name} at round tick {tick}: {completed}"));
             }
         }
-        if diagnostic_wins().contains(&tick)
-            && let Some(career) = self.career.as_mut()
+        if !diagnostic_wins().is_empty()
+            && let Some(career) = self.career.as_ref()
         {
+            // The main challenge's entry into `challenge_running`, once per main challenge.
+            match career.system.main_challenge_key_and_state() {
+                Some((key, state)) if state == RUNNING_STATE && self.online.coop_running_since.is_none_or(|(seen, _)| seen != key) => {
+                    self.online.coop_running_since = Some((key, tick));
+                    trace(format_args!("diagnostic: the main challenge {key:#018x} is running from round tick {tick}"));
+                }
+                _ => {}
+            }
+        }
+        let win_now = diagnostic_wins().iter().any(|win| match *win {
+            WinAt::Tick(at) => at == tick,
+            WinAt::AfterRunning(delay) => self.online.coop_running_since.is_some_and(|(_, since)| since.saturating_add(delay) == tick),
+        });
+        if win_now && let Some(career) = self.career.as_mut() {
             let won = career.system.diagnostic_win_main_challenge();
             trace(format_args!("diagnostic: won the main challenge at round tick {tick}: {won} objectives completed"));
         }
@@ -367,6 +423,17 @@ mod tests {
         assert_eq!(progression_blob(&with_position), progression_blob(&shared));
         assert_eq!(fnv1a(&progression_blob(&with_position)), fnv1a(&progression_blob(&other_position)));
         assert_ne!(fnv1a(&progression_blob(&shared)), fnv1a(&progression_blob(&shared[..1])));
+    }
+}
+
+#[cfg(test)]
+mod win_ats_tests {
+    use super::{WinAt, win_ats_of};
+
+    #[test]
+    fn ticks_and_running_delays_parse_and_the_rest_drops() {
+        assert_eq!(win_ats_of("1800; running+300 ;x;running+"), vec![WinAt::Tick(1800), WinAt::AfterRunning(300)]);
+        assert!(win_ats_of("").is_empty());
     }
 }
 

@@ -7,7 +7,8 @@ Notes at the end are hand-kept and merged in. Front page: [README](../README.md)
 [missions-detail](missions-detail.md).
 
 **Pass criteria, fixed before the runs:** a mission passes when both seats' scripts reach
-`challenge_cleanup` after the diagnostic win at round tick 1800, and the autosaves that follow carry
+`challenge_cleanup` after the diagnostic win (since 2026-11-11, 300 round ticks after the mission's
+own `challenge_running`, its assets preloaded at 600; the runs before: at round tick 1800), and the autosaves that follow carry
 one hash (or none, for a tutorial that saves nothing). It stops when either seat's script is still
 running at the bench's deadline (170 s), is not executed by name, crashes, or loses the server.
 A stop is classified from the log by pattern; "unknown" is a finding. Every row names its evidence

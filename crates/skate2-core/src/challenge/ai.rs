@@ -33,6 +33,15 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 type R = LuaResult<Vec<Value>>;
 
+/// The `SKATE2_TRACE_AI` line of the manager's decisions: the characters a challenge picks,
+/// the draw behind a random pick, the recipes it asks for.
+pub(crate) fn trace(message: std::fmt::Arguments<'_>) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("SKATE2_TRACE_AI").is_some()) {
+        eprintln!("ai: {message}");
+    }
+}
+
 /// `ai_characters`.
 const AI_CHARACTERS: u64 = 0xe574_78f7_96eb_c28c;
 /// `ai_character_groups`.
@@ -246,6 +255,32 @@ fn index_of(player: i32) -> Option<usize> {
     usize::try_from(player).ok().filter(|&index| index < 8)
 }
 
+/// Co-op fork (open item 48): a script's AI player as the single-player career numbers it. The
+/// career's scripts count their AI skaters from the local player up (`m_5a_01` on the bench:
+/// seat 1, player 0, spawned "player 1"; seat 2, player 1, spawned "player 2"), so in a campaign
+/// round an index past the local player is the AI's ordinal, 1 on, as the original's local
+/// player 0 would have named it; an index at or below the local player is a human's and stays.
+pub(crate) fn script_ai_player(world: &World, player: i32) -> i32 {
+    match world.coop.as_ref() {
+        Some(_) if player > world.local_player => player - world.local_player,
+        _ => player,
+    }
+}
+
+/// Co-op fork (open item 48): the slot a script's AI player skates at. In a campaign round the
+/// humans hold slots 0 to N-1, so the AI's ordinal `k` ([`script_ai_player`]) takes slot
+/// `N - 1 + k`, the same on every console whatever its local player; the selected characters,
+/// their names and spawn points go by the ordinal. Outside a campaign the index is the slot, as
+/// the original's.
+pub(crate) fn ai_slot(world: &World, player: i32) -> i32 {
+    match world.coop.as_ref() {
+        Some(campaign) if player > world.local_player => {
+            i32::try_from(campaign.players.len()).unwrap_or(1) - 1 + script_ai_player(world, player)
+        }
+        _ => player,
+    }
+}
+
 /// `cChallengeCompetitorsManager::GetNumCompetitors` (`0x825af3d0`): with a dynamic flag the
 /// dynamically chosen competitors with a profile, else `Num_Competitors` (`0x825ad2a0`), the
 /// `Competitors` array's length.
@@ -383,9 +418,15 @@ fn random_character_id(world: &mut World, activity: usize, groups: &[u64], name:
     }
     let random = world.random.as_mut().ok_or("GetRandomCharacterID: the Simulation RNG is not lent")?;
     let draw = random.random_value() % count;
-    let Some(index) = draw.checked_sub(1) else { return Ok(0) };
-    let character = characters[index as usize];
-    Ok(if world.db.has_collection(AI_CHARACTERS, character) { character } else { 0 })
+    let pick = match draw.checked_sub(1) {
+        Some(index) if world.db.has_collection(AI_CHARACTERS, characters[index as usize]) => characters[index as usize],
+        _ => 0,
+    };
+    trace(format_args!(
+        "random character for group {name:?}: {count} candidates {characters:x?}, draw {draw} of the Simulation RNG, pick {pick:#x}{}",
+        if pick == 0 { " (none: the draw was a multiple of the count)" } else { "" }
+    ));
+    Ok(pick)
 }
 
 /// `CharacterRecipeFromCharacterKey` (`0x825b27e0`): the character's `characters_marquee`
@@ -456,6 +497,7 @@ pub(crate) fn select_characters(world: &mut World, activity: usize, no_asset_loa
     let mut picks: Vec<u64> = Vec::new();
     for index in 0..num_competitors(world, activity) as usize {
         let info = competitor_info(world, activity, index).ok_or("SelectCharacters: dynamically chosen competitor")?;
+        trace(format_args!("SelectCharacters competitor {index}: profile {:?}, category {}", info.profile_name, info.root_category));
         let pick = match info.root_category {
             0 => character_id(world, &all_characters, info.profile_name.as_deref()),
             1 => random_character_id(world, activity, &groups, info.profile_name.as_deref(), &picks)?,
@@ -470,6 +512,12 @@ pub(crate) fn select_characters(world: &mut World, activity: usize, no_asset_loa
         *slot = pick;
     }
     let recipes = challenge_recipe_vector(world);
+    trace(format_args!(
+        "SelectCharacters for activity {:#018x}: {} competitors, characters {picks:x?} as players 1 on, recipes {recipes:x?}{}",
+        world.activities.activities[activity].key,
+        num_competitors(world, activity),
+        if no_asset_load { ", no asset load" } else { "" }
+    ));
     let party = party_play(world);
     let mut manager = link.manager();
     let commands = manager.enter_ai_based_challenge(party);
@@ -503,6 +551,7 @@ pub(crate) fn select_demo_characters(world: &mut World, no_asset_load: bool) -> 
         *slot = pick;
     }
     let recipes = challenge_recipe_vector(world);
+    trace(format_args!("SelectDemoCharacters: {count} competitors, characters {picks:x?} as players 1 on, recipes {recipes:x?}"));
     let party = party_play(world);
     let mut manager = link.manager();
     let commands = manager.enter_ai_based_challenge(party);
@@ -517,7 +566,14 @@ pub(crate) fn select_demo_characters(world: &mut World, no_asset_load: bool) -> 
 /// with competitors.
 pub(crate) fn is_activity_an_ai_challenge(world: &World, activity: usize) -> bool {
     let online = world.ai_link.as_ref().is_some_and(|link| link.manager().is_in_an_online_game());
-    !online && !party_play(world) && num_competitors(world, activity) != 0
+    let competitors = num_competitors(world, activity);
+    let is_ai = !online && !party_play(world) && competitors != 0;
+    trace(format_args!(
+        "IsActivityAnAiChallenge {:#018x}: {is_ai} (manager online {online}, party play {}, {competitors} competitors)",
+        world.activities.activities[activity].key,
+        party_play(world)
+    ));
+    is_ai
 }
 
 /// `ChallengeAIManager::AreAllAssetsLoaded` (`0x825b2c00`).
@@ -684,17 +740,23 @@ fn spawn_ai_at_location(_: &mut Lua<World>, world: &mut World, call: &NativeCall
         script_error(world, "AI.SpawnAIAtLocation", "no location");
         return Ok(Vec::new());
     };
+    let script_player = player;
+    let player = script_ai_player(world, script_player);
     let Some(transform) = link.locations.spawn_location(&name, player) else {
         script_error(world, "AI.SpawnAIAtLocation", format!("unknown location {name}"));
         return Ok(Vec::new());
     };
-    let Some(slot) = usize::try_from(player).ok().filter(|&slot| slot <= 8) else {
-        script_error(world, "AI.SpawnAIAtLocation", format!("player {player}"));
+    let skater_slot = ai_slot(world, script_player);
+    let Some(slot) = usize::try_from(skater_slot).ok().filter(|&slot| slot <= 8) else {
+        script_error(world, "AI.SpawnAIAtLocation", format!("player {player} (slot {skater_slot})"));
         return Ok(Vec::new());
     };
     let rows: [V4; 4] = std::array::from_fn(|row| std::array::from_fn(|column| transform[row * 4 + column]));
     let profile = character_profile(world, player).unwrap_or_default();
     let recipe = character_recipe(world, player);
+    trace(format_args!(
+        "SpawnAIAtLocation: the script's player {script_player} (AI player {player}) at slot {skater_slot}, location {name:?}, recipe {recipe:x?}, profile {profile:?}"
+    ));
     let result = {
         let mut manager = link.manager();
         manager
@@ -705,7 +767,7 @@ fn spawn_ai_at_location(_: &mut Lua<World>, world: &mut World, call: &NativeCall
     match result {
         Ok(true) => {
             let (short, long) = ai_player_names(world, player);
-            if let Ok(index) = u32::try_from(player)
+            if let Ok(index) = u32::try_from(skater_slot)
                 && let Err(error) = link.settings.try_set_ai_names(index, short.as_bytes(), long.as_deref().map(str::as_bytes))
             {
                 script_error(world, "AI.SpawnAIAtLocation", format!("{error:?}"));
@@ -715,7 +777,7 @@ fn spawn_ai_at_location(_: &mut Lua<World>, world: &mut World, call: &NativeCall
         Err(error) => script_error(world, "AI.SpawnAIAtLocation", error),
     }
     if let Some(players) = world.players.as_deref() {
-        players.set_manuals_are_connectors(player, world.sequence_connector.setting);
+        players.set_manuals_are_connectors(skater_slot, world.sequence_connector.setting);
     }
     Ok(Vec::new())
 }
@@ -743,7 +805,7 @@ fn ai_player_names(world: &World, player: i32) -> (String, Option<String>) {
 
 /// `AI.UnspawnAI(player)` (`0x8288d0d0`): `AISkaterManager::UnspawnAISkater`.
 fn unspawn_ai(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = ai_slot(world, get_int(call, 0));
     let Some(link) = link_or_error(world, "AI.UnspawnAI") else { return Ok(Vec::new()) };
     if let Ok(slot) = usize::try_from(player)
         && slot <= 8
@@ -820,7 +882,7 @@ fn filter_reset(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
 
 /// `AI.StartPath(player, branch = true)` (`0x8288ce68`).
 fn start_path(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = ai_slot(world, get_int(call, 0));
     let branch = get_bool_or(call, 1, true);
     let manager = &world.ai_manager;
     let request = AiRequest::StartPath {
@@ -869,7 +931,7 @@ impl crate::ai::trick_pattern::TrickRecords for DbTricks<'_> {
 /// one it follows the manager's path. Whether one matched. Without the skater nothing is pushed,
 /// and the call answers the top of its stack, the last argument.
 fn follow_trick_pattern(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = ai_slot(world, get_int(call, 0));
     let spin_count = get_int(call, 1);
     if skater(world, player).is_none() {
         return Ok(vec![call.args.last().cloned().unwrap_or(Value::Nil)]);
@@ -890,14 +952,15 @@ fn follow_trick_pattern(lua: &mut Lua<World>, world: &mut World, call: &NativeCa
 
 /// `AI.StartLapPaths(player, round)` (`0x8288d010`).
 fn start_lap_paths(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let request = AiRequest::SetChallengeRound { player: get_int(call, 0), round: get_int(call, 1) };
+    let request = AiRequest::SetChallengeRound { player: ai_slot(world, get_int(call, 0)), round: get_int(call, 1) };
     world.output(Output::Ai(request));
     Ok(Vec::new())
 }
 
 /// `AI.ClearBehavior(player)` (`0x8288d458`).
 fn clear_behavior(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    world.output(Output::Ai(AiRequest::ClearBehavior { player: get_int(call, 0) }));
+    let player = ai_slot(world, get_int(call, 0));
+    world.output(Output::Ai(AiRequest::ClearBehavior { player }));
     Ok(Vec::new())
 }
 
@@ -918,7 +981,7 @@ fn selected_character(world: &World, index: i32) -> u64 {
 /// `AI.GetCharacterName(player)` (`0x8288d800`): `GetCharacterName(player - 1)`, the
 /// character's layout name text.
 fn get_character_name(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let character = selected_character(world, get_int(call, 0) - 1);
+    let character = selected_character(world, script_ai_player(world, get_int(call, 0)) - 1);
     let name = world.db.layout_text(AI_CHARACTERS, character, LAYOUT_CHARACTER_NAME);
     Ok(vec![name.map_or(Value::Nil, Value::from)])
 }
@@ -926,7 +989,7 @@ fn get_character_name(_: &mut Lua<World>, world: &mut World, call: &NativeCall) 
 /// `AI.GetCharacterModel(player)` (`0x8288d8b8`): `GetCharacterModel(player - 1)`, the recipe's
 /// layout name; empty without a character.
 fn get_character_model(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let character = selected_character(world, get_int(call, 0) - 1);
+    let character = selected_character(world, script_ai_player(world, get_int(call, 0)) - 1);
     if character == 0 {
         return Ok(vec![Value::from("")]);
     }
@@ -937,7 +1000,7 @@ fn get_character_model(_: &mut Lua<World>, world: &mut World, call: &NativeCall)
 
 /// `AI.GetCharacterPercentageWillDoABDTrick(player)` (`0x8288dc20`).
 fn get_character_percentage_will_do_abd_trick(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let character = selected_character(world, get_int(call, 0));
+    let character = selected_character(world, script_ai_player(world, get_int(call, 0)));
     let percentage = world.db.attribute(AI_CHARACTERS, character, key::PERCENTAGE_WILL_DO_ABD_TRICK).and_then(|a| a.i16(0)).unwrap_or(0);
     Ok(vec![int(i32::from(percentage))])
 }
@@ -958,7 +1021,7 @@ fn enter_ai_based_challenge(_: &mut Lua<World>, world: &mut World, _: &NativeCal
 /// `AI.GetIfSkaterIsRegularStance(player)` (`0x8288dd88`): `Actor::GetNaturalStance` is
 /// regular, true without the skater.
 fn get_if_skater_is_regular_stance(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let regular = skater(world, get_int(call, 0)).is_none_or(|frame| frame.is_regular_stance);
+    let regular = skater(world, ai_slot(world, get_int(call, 0))).is_none_or(|frame| frame.is_regular_stance);
     Ok(vec![Value::Boolean(regular)])
 }
 
@@ -978,19 +1041,21 @@ fn set_ai_respawn_behaviour(_: &mut Lua<World>, world: &mut World, call: &Native
 
 /// `AI.TriggerPositiveGesture(player)` (`0x8288d9c8`).
 fn trigger_positive_gesture(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    world.output(Output::Ai(AiRequest::Gesture { player: get_int(call, 0), positive: true }));
+    let player = ai_slot(world, get_int(call, 0));
+    world.output(Output::Ai(AiRequest::Gesture { player, positive: true }));
     Ok(Vec::new())
 }
 
 /// `AI.TriggerNegativeGesture(player)` (`0x8288da70`).
 fn trigger_negative_gesture(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    world.output(Output::Ai(AiRequest::Gesture { player: get_int(call, 0), positive: false }));
+    let player = ai_slot(world, get_int(call, 0));
+    world.output(Output::Ai(AiRequest::Gesture { player, positive: false }));
     Ok(Vec::new())
 }
 
 /// `AI.SwitchOffFollowMeRubberBanding(player)` (`0x8288d398`): a `PT_AI_Challenge` player's.
 fn switch_off_follow_me_rubber_banding(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    let player = get_int(call, 0);
+    let player = ai_slot(world, get_int(call, 0));
     if world.players.as_deref().is_some_and(|players| players.player_type(player) == PT_AI_CHALLENGE) {
         world.output(Output::Ai(AiRequest::SwitchOffFollowMeRubberBanding { player }));
     }

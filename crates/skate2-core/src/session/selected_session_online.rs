@@ -178,6 +178,9 @@ pub(super) struct Online {
     pub(super) campaign_hold: bool,
     /// Co-op fork: the round tick the bench's dialog answer saw the dialog open.
     coop_dialog_opened: Option<u32>,
+    /// Co-op fork (M8): the main challenge (by key) whose graph the bench saw enter
+    /// `challenge_running`, and the round tick it did, for a win placed after it.
+    pub(super) coop_running_since: Option<(u64, u32)>,
     /// Co-op fork (M8): the campaign's newest save as the server sent it, decoded, held for
     /// the career's next load, which takes it in place of the local file's progression.
     pub(super) campaign_adopt: Option<AdoptedSave>,
@@ -1217,8 +1220,11 @@ impl<T, C> SelectedLiveSession<T, C> {
         let Some(start) = self.online.start.take() else { return Ok(()) };
         trace(format_args!("leaving the game in play for the online game"));
         self.unload_game()?;
+        // Co-op fork (open item 45): a campaign keeps the career, so its AI manager runs as
+        // the career's, challenge AI skaters and all; only a network game's manager is online.
+        let online_game = !self.online_campaign();
         if let Some(ai) = self.inner.ai.as_ref() {
-            ai.manager().load_game(true);
+            ai.manager().load_game(online_game);
         }
         self.start_online_game(start)
     }
@@ -1286,6 +1292,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.online.coop = coop_world::CoopWorld::default();
         self.online.campaign_hold = false;
         self.online.coop_dialog_opened = None;
+        self.online.coop_running_since = None;
         if let Some(game) = self.online.game.as_mut() {
             game.entered = false;
         }

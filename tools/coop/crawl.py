@@ -28,7 +28,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCH = Path(os.environ.get('BENCH', ROOT.parent / 'bench'))
-EXECUTE_AT, WIN_AT = 900, int(os.environ.get('CRAWL_WIN_AT', 1800))  # CRAWL_WIN_AT: a later win for a mission whose intro scene outlasts tick 1800
+PRELOAD_AT, EXECUTE_AT, COMPLETE_AT = 600, 900, 1800
+# The main challenge's win: by default 300 round ticks after its graph enters `challenge_running`,
+# so an intro scene of any length plays out first (open item 51); CRAWL_WIN_AT names a round tick
+# instead (`4500`) or another delay (`running+600`).
+WIN_AT = os.environ.get('CRAWL_WIN_AT', 'running+300')
 WAIT_S, SETTLE_S, LOOP_S = int(os.environ.get('CRAWL_WAIT_S', 170)), 10, 30  # CRAWL_WAIT_S: a longer deadline for a mission with a long intro scene
 GLOBAL_FIELD = '122db7b0f026dbec'  # challenge_global_data.Global
 
@@ -75,13 +79,14 @@ def run_one(name, kind, keep):
     extra = ['SKATE2_DIAGNOSTIC_COOP_ANSWER=no', 'SKATE2_TRACE_COOP_CENSUS=1']  # the census dump feeds the offline audit per mission
     extra += os.environ.get('CRAWL_EXTRA', '').split()  # a probe's extra seat variables, e.g. SKATE2_TRACE_CAREER_NATIVES=1
     if kind == 'main':
-        extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}']
+        # the assets load ahead of the execute, as the loading screen loads them in play (open item 47)
+        extra += [f'SKATE2_DIAGNOSTIC_COOP_PRELOAD={PRELOAD_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}']
         done = rf'career graph {re.escape(name)} @\d+: enter (?:challenge_cleanup|complete\b)|panicked|kicked|disconnected'  # `complete`: a challenge that completes on execute (film team)
     elif kind == 'location':
-        extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={WIN_AT}:{name}']
+        extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={COMPLETE_AT}:{name}']
         done = 'diagnostic: complete challenge .*: true|panicked|kicked|disconnected'
     else:
-        extra += [f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={WIN_AT}:{name}']
+        extra += [f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={COMPLETE_AT}:{name}']
         done = 'diagnostic: complete challenge .*: true|panicked|kicked|disconnected'
     env = {'SEAT_ONLINE_1': 'create:9', 'SEAT_ONLINE_2': 'join:9', 'CAPTURE_COUNT': '0', 'SEAT_EXTRA': ' '.join(extra)}
     if keep:
@@ -97,7 +102,7 @@ def run_one(name, kind, keep):
             break
         # the known stall: both scripts cycling between two states after the win
         tails = [states(log, name)[-8:] for log in logs]
-        if all(len(t) == 8 and len(set(t)) <= 2 for t in tails) and all(grep(log, rf'round tick {WIN_AT}\b') for log in logs):
+        if all(len(t) == 8 and len(set(t)) <= 2 for t in tails) and all(grep(log, 'diagnostic: won the main challenge|diagnostic: complete challenge') for log in logs):
             seen = sum(len(states(log, name)) for log in logs)
             if loop_since is None:
                 loop_since, loop_seen = time.time(), seen

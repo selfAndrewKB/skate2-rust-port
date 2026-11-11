@@ -1880,6 +1880,41 @@ impl CareerSession {
         self.map_challenge_load.is_some()
     }
 
+    /// `cTeleportManager::TeleportPlayer` 0x828a90f8: the location's spawn point for the
+    /// player's position (`GetSpawnLocation`); online, a position past the sixth without a spawn
+    /// point of its own takes the sixth's. A location the registered arenas do not hold (open
+    /// item 46: a mission's `*_challengelocator01` far from the streamed world) falls back to
+    /// the simulation location table (`BAM_Sim.loc`, the world's own list, as the challenge
+    /// system's `World::location` does), moved 5 m along -z per position as `GetSpawnLocation`
+    /// moves a location without spawn points. An unknown location is traced and moves nobody.
+    fn teleport_transform(&self, location: &str, pos_id: i32, online: bool) -> Result<Option<[f32; 16]>, SelectedLiveError> {
+        let hash = hash_value32(location);
+        let locations = self.locations.lock().map_err(|_| error("location manager lock poisoned"))?;
+        let registered = if online { locations.online_spawn_location(hash, pos_id) } else { locations.spawn_location(hash, pos_id) };
+        if registered.is_some() {
+            return Ok(registered);
+        }
+        let table = self.system.world().locations.get(&hash).copied().map(|mut transform| {
+            #[expect(clippy::cast_precision_loss, reason = "the native (float) conversion")]
+            let offset = pos_id as f32 * -5.0;
+            transform[14] += offset;
+            transform
+        });
+        if std::env::var_os("SKATE2_TRACE_CAREER").is_some() {
+            match table {
+                Some(transform) => eprintln!(
+                    "career: teleport to {location} ({pos_id}) from the location table at {:?}, not registered (held {:?})",
+                    [transform[12], transform[13], transform[14]],
+                    locations.counts()
+                ),
+                None => eprintln!("career: teleport to unknown location {location} ({pos_id}), held {:?}", locations.counts()),
+            }
+        } else if table.is_none() {
+            eprintln!("career: teleport to unknown location {location} ({pos_id}), held {:?}", locations.counts());
+        }
+        Ok(table)
+    }
+
     fn start_loaded_map_challenge(&mut self) -> Result<(), SelectedLiveError> {
         if let Some(MapChallengeLoad::StartChallenge { key, ready_updates }) = self.map_challenge_load.as_mut()
             && self.system.update_map_challenge_load(*key, ready_updates).map_err(error)?
@@ -2542,24 +2577,42 @@ impl<T, C> SelectedLiveSession<T, C> {
             .collect();
         let mut frames = Vec::with_capacity(actors.len());
         for actor in actors {
-            let index = {
-                let prefix = actor.prefix().map_err(error)?;
-                let fields = prefix.fields().ok_or_else(|| error("career Actor fields absent"))?;
-                i32::try_from(fields.player_index).map_err(error)?
-            };
-            let physical = actor.cached_physical_allocation().map_err(error)?;
-            let output = physical.owner().phys_out().lock().map_err(|_| error("PhysOut lock poisoned"))?;
-            let mut frame = output.try_mission_frame(index, index == local, true).map_err(|e| error(format!("{e:?}")))?;
-            if index == local {
-                // Co-op fork (M5): the chase of this console's skater rides its facts.
-                let (being_chased, jacked) = self.local_chase_state();
-                frame.being_chased = being_chased;
-                frame.jacked = jacked;
-            }
-            frames.push(frame);
+            frames.push(self.mission_frame_of(&actor, local)?);
         }
         frames.sort_by_key(|frame| frame.player);
         Ok(frames)
+    }
+
+    /// Co-op fork (open item 45): this console's own challenge AI skaters' completed outputs,
+    /// which join the humans' facts frames in a campaign round. Each console simulates its own
+    /// AI skaters (the original's challenge AI is offline-only); what the scripts read of them
+    /// is this console's, not shared.
+    pub(super) fn career_ai_skater_frames(&self) -> Result<Vec<MissionFrame>, SelectedLiveError> {
+        let mut frames = Vec::with_capacity(self.inner.ai_skaters.len());
+        for skater in &self.inner.ai_skaters {
+            frames.push(self.mission_frame_of(&skater.actor, -1)?);
+        }
+        Ok(frames)
+    }
+
+    /// One skater's completed output as the challenge system reads it, local when its index is
+    /// `local`.
+    fn mission_frame_of(&self, actor: &Arc<crate::actor_construction::ActorConstruction>, local: i32) -> Result<MissionFrame, SelectedLiveError> {
+        let index = {
+            let prefix = actor.prefix().map_err(error)?;
+            let fields = prefix.fields().ok_or_else(|| error("career Actor fields absent"))?;
+            i32::try_from(fields.player_index).map_err(error)?
+        };
+        let physical = actor.cached_physical_allocation().map_err(error)?;
+        let output = physical.owner().phys_out().lock().map_err(|_| error("PhysOut lock poisoned"))?;
+        let mut frame = output.try_mission_frame(index, index == local, true).map_err(|e| error(format!("{e:?}")))?;
+        if index == local {
+            // Co-op fork (M5): the chase of this console's skater rides its facts.
+            let (being_chased, jacked) = self.local_chase_state();
+            frame.being_chased = being_chased;
+            frame.jacked = jacked;
+        }
+        Ok(frame)
     }
 
     /// This console's `ChaseMan`: whether its skater is chased, and whether it is being jacked.
@@ -3004,10 +3057,32 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.deliver_career_waypoint_groups()?;
         let challenge_messages = self.inner.try_take_challenge_messages().map_err(error)?;
         let Some(career) = self.career.as_mut() else { return self.try_update_free_skate_dynamic_hulls() };
-        if online.is_none() {
-            for message in challenge_messages {
-                career.system.post(challenge_queue_event(message));
+        // Co-op fork (open item 45): in a campaign this console's own challenge AI skaters'
+        // creation and destruction still reach the scripts (the follow family's
+        // `wait_for_assetload` waits for `cMsgSkaterCreated`), with the AI's ordinal as the
+        // scripts number it (`challenge::ai::ai_slot`); the humans' messages stay with their
+        // consoles, as online.
+        let humans = career.system.world().coop.as_ref().map(|campaign| campaign.players.len());
+        match (online.is_none(), humans) {
+            (true, _) => {
+                for message in challenge_messages {
+                    career.system.post(challenge_queue_event(message));
+                }
             }
+            (false, Some(humans)) => {
+                for mut message in challenge_messages {
+                    if let crate::hermes_challenge_queue::ChallengePayload::Skater { notification, player_id } = &mut message.payload
+                        && let Ok(slot) = usize::try_from(*player_id)
+                        && slot >= humans
+                    {
+                        let ordinal = i32::try_from(slot - humans + 1).unwrap_or(1);
+                        crate::coop::trace(format_args!("AI skater at slot {slot} (the scripts' AI player {ordinal}): {notification:?}"));
+                        *player_id = ordinal;
+                        career.system.post(challenge_queue_event(message));
+                    }
+                }
+            }
+            (false, None) => {}
         }
         // Flow::StateLoading updates before the challenge system. AI selection uses the same
         // Simulation RNG as the rest of this frame, including its queued Lua callbacks.
@@ -3309,12 +3384,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 Output::PinPlayer { pin } => requests.push(SkaterRequest::Pin(pin)),
                 Output::PinActor { player, pin } => requests.push(SkaterRequest::PinActor(player, pin)),
                 Output::TeleportPlayer { location, pos_id, .. } if party => {
-                    let locations = career.locations.lock().map_err(|_| error("location manager lock poisoned"))?;
-                    let transform = locations.spawn_location(hash_value32(&location), pos_id);
-                    if transform.is_none() {
-                        eprintln!("career: teleport to unknown location {location} ({pos_id}), held {:?}", locations.counts());
-                    }
-                    drop(locations);
+                    let transform = career.teleport_transform(&location, pos_id, false)?;
                     requests.extend(transform.map(SkaterRequest::Teleport));
                 }
                 Output::ModifiedCentralMessage(change) => career.hud.modified_central.push(change),
@@ -3383,13 +3453,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 // player's position (GetSpawnLocation); online, a position past the sixth without
                 // a spawn point of its own takes the sixth's.
                 Output::TeleportPlayer { player, location, pos_id, set_session_marker } => {
-                    let locations = career.locations.lock().map_err(|_| error("location manager lock poisoned"))?;
-                    let hash = hash_value32(&location);
-                    let transform = if online_local.is_some() { locations.online_spawn_location(hash, pos_id) } else { locations.spawn_location(hash, pos_id) };
-                    if transform.is_none() {
-                        eprintln!("career: teleport to unknown location {location} ({pos_id}), held {:?}", locations.counts());
-                    }
-                    drop(locations);
+                    let transform = career.teleport_transform(&location, pos_id, online_local.is_some())?;
                     requests.extend(transform.map(|transform| SkaterRequest::TeleportPlayer(player, transform)));
                     if set_session_marker && let Some(transform) = transform {
                         markers.push(MarkerMessage::Set(Some(transform)));
@@ -3661,14 +3725,20 @@ impl<T, C> SelectedLiveSession<T, C> {
 
     /// An online challenge's skater requests: each console carries out those of its own
     /// player, whose skater is the local skater here, and leaves every other player's to that
-    /// player's console.
+    /// player's console. Co-op fork (open item 45): a campaign's challenge AI skaters are each
+    /// console's own, seated after the humans, so their requests are carried out here as well.
     fn online_skater_requests(&self, requests: Vec<SkaterRequest>, local: i32) -> Vec<SkaterRequest> {
         let actor = self.inner.bound_input.as_ref().and_then(|input| i32::try_from(input.player_index()).ok()).unwrap_or(0);
+        let humans = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.players.len());
+        let ai_here = |player: i32| humans.is_some_and(|humans| usize::try_from(player).is_ok_and(|player| player >= humans));
         requests
             .into_iter()
             .filter_map(|request| match request {
+                SkaterRequest::SetLocalIndex(player) if ai_here(player) => Some(SkaterRequest::SetLocalIndex(player)),
                 SkaterRequest::SetLocalIndex(player) => (player == local).then_some(SkaterRequest::SetLocalIndex(actor)),
+                SkaterRequest::TeleportPlayer(player, transform) if ai_here(player) => Some(SkaterRequest::TeleportPlayer(player, transform)),
                 SkaterRequest::TeleportPlayer(player, transform) => (player == local).then_some(SkaterRequest::TeleportPlayer(actor, transform)),
+                SkaterRequest::PinActor(player, pin) if ai_here(player) => Some(SkaterRequest::PinActor(player, pin)),
                 SkaterRequest::PinActor(player, pin) => (player == local).then_some(SkaterRequest::PinActor(actor, pin)),
                 SkaterRequest::SetPlayer(_) => None,
                 request @ (SkaterRequest::Pin(_) | SkaterRequest::Teleport(_)) => Some(request),

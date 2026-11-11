@@ -53,10 +53,17 @@ said otherwise, round ticks are the campaign round's, the same on every console)
 the waterfront spawn, a street with pedestrians; the career's continue point has none);
 `SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=<round tick>:<x>,<y>,<z>[;...]` the same at round ticks;
 `SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>` knocks down the nearest puppet pedestrian as a hit would
-and sends the contact to its owner; `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<round tick>:<name>[;...]` runs
-named challenges; `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>[;...]` completes every objective of
-the main challenge as a win would (points objectives included), so the real win, outro and
-`challenge_cleanup` play: the crawl's way through a mission whose objectives need tricks; `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[@<player>][;...]` completes the main
+and sends the contact to its owner; `SKATE2_DIAGNOSTIC_COOP_PRELOAD=<round tick>:<name>[;...]`
+starts a named challenge's asset load (its hulls with their locators, its AI characters and
+paths) ahead of its execute, as the loading screen does in play (2026-11-11: the crawl preloads
+at round tick 600, 300 ticks before the execute, so a script that spawns its AI as it starts
+finds the hull's locators registered, open item 47); `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<round
+tick>:<name>[;...]` runs named challenges; `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>|running+<ticks>[;...]` completes every
+objective of the main challenge as a win would (points objectives included), so the real win,
+outro and `challenge_cleanup` play: the crawl's way through a mission whose objectives need
+tricks; `running+300` places the win 300 round ticks after the main challenge's graph enters
+`challenge_running`, past an intro scene of any length (the crawl's default since 2026-11-11,
+open item 51; `CRAWL_WIN_AT` overrides it); `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<round tick>[@<player>][;...]` completes the main
 challenge's active objective of every group (or of that player's group alone, M7) as its script
 would; `SKATE2_DIAGNOSTIC_COOP_ANSWER=
 yes|no[:<round ticks>]` answers the progression's Yes/No dialog; `SKATE2_DIAGNOSTIC_COOP_TRIGGERS=
@@ -187,7 +194,8 @@ CAPTURE_FROM=100 CAPTURE_EVERY=20 CAPTURE_COUNT=6 ./tools/coop/bench.sh start 2
 database (`SKATE2_CAREER_DB`) with their `ChallengeType` and `Global`; `--run [--from NAME]
 [--count N] [--missions a,b]` runs them on the bench one start at a time with the saves carried
 forward (`BENCH_KEEP`), each driven as its kind needs: a main challenge (`Global` 3 or 4, 96
-missions) executed by name at round tick 900 and won by diagnostic at 1800; a location
+missions) preloaded at round tick 600, executed by name at 900 and won by diagnostic 300 round
+ticks after its graph enters `challenge_running` (until 2026-11-11: at round tick 1800); a location
 challenge (`Global` 2: the 12 go-tos and the two Training Facility teleports) executed at 900
 (the teleport to its start location) and completed by name at 1800
 (`SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE`, the progression's own `CompleteChallenge`); the
@@ -205,10 +213,19 @@ One to three minutes a mission.
 (`: true`, or `: false` for a name that is no signpost, a signpost without a challenge, or a
 replay); the crawl and the ledger count a completion only on `true`.
 
-`CRAWL_WAIT_S=480 CRAWL_WIN_AT=3600` lengthens a mission's deadline and delays the diagnostic
-win, for a mission whose intro scene outlasts tick 1800 (`m_2a_01`, `m_4g_01_spotfilm_johnson`).
+The crawl's win follows the mission: `SKATE2_DIAGNOSTIC_COOP_WIN=running+300`, 300 round ticks
+after the main challenge's graph enters `challenge_running`, so an intro scene of any length
+plays out first (2026-11-11; before, a fixed tick 1800 cut `m_2a_01` and
+`m_4g_01_spotfilm_johnson`, open item 51). `CRAWL_WIN_AT=3600` or `CRAWL_WIN_AT=running+600`
+overrides it, `CRAWL_WAIT_S=480` lengthens a mission's deadline. A go-to or location mission is
+still completed by name at round tick 1800.
 `SKATE2_TRACE_COOP_PUPPET=1` on a seat traces a puppet's colliding state every three seconds
-(the collision state, its intent packet, the motion graph's state).
+(the collision state, its intent packet, the motion graph's state). `SKATE2_TRACE_AI=1` traces
+the AI manager's decisions (2026-11-11): whether an activity counts as an AI challenge, the
+characters a challenge selects and the draw behind a random one, each spawn with its slot, every
+skater asset's status change and the challenge asset loads' states; `SKATE2_TRACE_CAREER=1` adds
+the location arenas registered and the locators they hold, and a teleport resolved from the
+location table instead of a registered arena.
 
 **Probes.** `CRAWL_EXTRA='SKATE2_TRACE_CAREER_NATIVES=1 SKATE2_TRACE_AI=1'` adds seat variables
 to a crawl (`--missions <one> --keep --out <scratch>.md` reruns one mission without touching the

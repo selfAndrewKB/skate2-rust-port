@@ -146,9 +146,11 @@ fn set_reset_scoring(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -
 
 // ---- Entity ---------------------------------------------------------------
 
-/// `Entity.DoesSkaterExist(player)` (`0x82887068`): `SkaterManager::FindByIndex`.
+/// `Entity.DoesSkaterExist(player)` (`0x82887068`): `SkaterManager::FindByIndex`. Co-op fork
+/// (open item 48): the career's scripts ask about their AI players, 1 on, which a campaign
+/// round seats after the humans (`ai::ai_slot`); the skater asked about is the one at that slot.
 fn does_skater_exist(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    Ok(vec![Value::Boolean(skater(world, get_int(call, 0)).is_some())])
+    Ok(vec![Value::Boolean(skater(world, super::ai::ai_slot(world, get_int(call, 0))).is_some())])
 }
 
 /// `Entity.IsPlayerStanceRegular(player)` (`0x8287f2c0`).
@@ -207,12 +209,14 @@ fn pin(world: &mut World, player: i32, pin: bool) {
 }
 
 fn pin_ai(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    pin(world, get_int(call, 0), true);
+    let player = super::ai::ai_slot(world, get_int(call, 0));
+    pin(world, player, true);
     none()
 }
 
 fn unpin_ai(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    pin(world, get_int(call, 0), false);
+    let player = super::ai::ai_slot(world, get_int(call, 0));
+    pin(world, player, false);
     none()
 }
 

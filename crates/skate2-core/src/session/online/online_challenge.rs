@@ -766,47 +766,69 @@ impl OnlinePlayers {
     fn count(&self) -> i32 {
         i32::try_from(self.names.len()).unwrap_or(0)
     }
+
+    /// Co-op fork (open item 45): a player past the humans is one of this console's own
+    /// challenge AI skaters, whose row the AI manager creates in the profile's back end at the
+    /// skater's slot (`AISkaterManager::post`); the row answers for it.
+    fn ai_row(&self, player: i32) -> Option<i32> {
+        (player >= self.count()).then_some(player)
+    }
+
+    /// The profile's row a player's settings live in: the local skater's or an AI skater's.
+    fn settings_row(&self, player: i32) -> Option<i32> {
+        self.local_row(player).or_else(|| self.ai_row(player))
+    }
 }
 
 impl PlayersBackEnd for OnlinePlayers {
     fn player_type(&self, player: i32) -> i32 {
-        if (0..self.count()).contains(&player) { PT_HUMAN } else { 0 }
+        if (0..self.count()).contains(&player) {
+            PT_HUMAN
+        } else {
+            self.ai_row(player).map_or(0, |row| self.settings.player_type(row))
+        }
     }
     fn player_name(&self, player: i32) -> String {
-        usize::try_from(player).ok().and_then(|player| self.names.get(player)).cloned().unwrap_or_default()
+        match self.ai_row(player) {
+            Some(row) => self.settings.player_name(row),
+            None => usize::try_from(player).ok().and_then(|player| self.names.get(player)).cloned().unwrap_or_default(),
+        }
     }
     fn is_stance_regular(&self, player: i32) -> bool {
-        match self.local_row(player) {
+        match self.settings_row(player) {
             Some(row) => self.settings.is_stance_regular(row),
             None => usize::try_from(player).ok().and_then(|player| self.stance.lock().ok().map(|stance| stance.get(player).copied().unwrap_or(true))).unwrap_or(true),
         }
     }
     fn peer_id(&self, player: i32) -> i64 {
-        usize::try_from(player).ok().and_then(|player| self.peers.get(player)).map_or(-1, |&peer| peer.cast_signed())
+        match self.ai_row(player) {
+            Some(row) => self.settings.peer_id(row),
+            None => usize::try_from(player).ok().and_then(|player| self.peers.get(player)).map_or(-1, |&peer| peer.cast_signed()),
+        }
     }
     fn set_manuals_are_connectors(&self, player: i32, value: bool) {
-        if let Some(row) = self.local_row(player) {
+        if let Some(row) = self.settings_row(player) {
             self.settings.set_manuals_are_connectors(row, value);
         }
     }
     fn set_reset_sequence(&self, player: i32, value: bool) {
-        if let Some(row) = self.local_row(player) {
+        if let Some(row) = self.settings_row(player) {
             self.settings.set_reset_sequence(row, value);
         }
     }
     fn set_reset_scoring(&self, player: i32, value: bool) {
-        if let Some(row) = self.local_row(player) {
+        if let Some(row) = self.settings_row(player) {
             self.settings.set_reset_scoring(row, value);
         }
     }
     fn character(&self, player: i32) -> u64 {
-        self.local_row(player).map_or(u64::MAX, |row| self.settings.character(row))
+        self.settings_row(player).map_or(u64::MAX, |row| self.settings.character(row))
     }
     fn num_players(&self) -> i32 {
         self.count()
     }
     fn set_player_rank(&self, player: i32, rank: i32) {
-        if let Some(row) = self.local_row(player) {
+        if let Some(row) = self.settings_row(player) {
             self.settings.set_player_rank(row, rank);
         }
     }
@@ -1763,6 +1785,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                                 None => crate::coop::trace(format_args!("prompt kind {} from player {player} unknown at tick {tick}", prompt.kind)),
                             }
                         }
+                    }
+                    // Co-op fork (open item 45): this console's own challenge AI skaters join the
+                    // humans' facts frames, so the scripts find them at their slots.
+                    let mut frames = frames;
+                    if self.career.as_ref().is_some_and(|career| career.system.world().coop.is_some()) {
+                        frames.extend(self.career_ai_skater_frames()?);
+                        frames.sort_by_key(|frame| frame.player);
                     }
                     self.career_step(Some((frames, local, own)))?;
                     self.take_held_presentation();
