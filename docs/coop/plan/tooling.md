@@ -228,7 +228,11 @@ the AI manager's decisions (2026-11-11): whether an activity counts as an AI cha
 characters a challenge selects and the draw behind a random one, each spawn with its slot, every
 skater asset's status change and the challenge asset loads' states; `SKATE2_TRACE_CAREER=1` adds
 the location arenas registered and the locators they hold, and a teleport resolved from the
-location table instead of a registered arena.
+location table instead of a registered arena. `SKATE2_TRACE_COOP=1` (every bench seat's) names
+the owner of a campaign's AI skaters at the round start, each owned skater's look going out, a
+puppet made at its first frames, each AI slot's creation and destruction as the round's
+frames say it (the same tick on both seats), and a challenge spawn taken without an actor on a
+non-owner (M10).
 
 **Probes.** `CRAWL_EXTRA='SKATE2_TRACE_CAREER_NATIVES=1 SKATE2_TRACE_AI=1'` adds seat variables
 to a crawl (`--missions <one> --keep --out <scratch>.md` reruns one mission without touching the

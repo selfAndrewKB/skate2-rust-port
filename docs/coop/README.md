@@ -6,10 +6,13 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.11.0-outcome-notes`**
-(2026-11-11): M9, the competing kinds: a script's decision about its own player travels as a
-note on its facts and the rules settle the mission (a win on one seat completes it on both under
-`Anyone`; [design](plan/design.md) §7). Before it, `coop-v0.10.0-ai-skaters`
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.12.0-owned-ai`**
+(2026-11-11): M10, the AI skaters are one console's: the first player's facts carry its
+challenge AI skaters' outputs, every console's scripts read one AI run, the other consoles show
+puppets of its replay frames ([ai-skaters](plan/topics/ai-skaters.md), [design](plan/design.md)
+§7). Before it, `coop-v0.11.0-outcome-notes` (2026-11-11): M9, the competing kinds: a script's
+decision about its own player travels as a note on its facts and the rules settle the mission
+(a win on one seat completes it on both under `Anyone`), and `coop-v0.10.0-ai-skaters`
 (2026-11-11): the AI families run in a campaign. The AI skaters were never the port's blocker:
 a campaign told the AI manager it was in a network game, the scripts count their AI three ways
 and a two-seat round made one index mean two skaters, the AI's creation message was dropped, and
@@ -33,18 +36,19 @@ the ledger in [versions](plan/versions.md).
 ## Current focus (2026-11-11)
 
 Play: the build in the player's hands (every milestone so far was proven on the bench, M5's
-build alone was played): a follow, a photo and a demo mission with two people, watching the pro
-and each console's copy of it (45, 53); the puppets' knockdowns (39, 50). The competing kinds in
-a campaign (S.K.A.T.E., jams, contests: each console's own AI leaders, [kinds](plan/topics/kinds.md));
-the demo's start spots (50); a save with the sponsor team and the dynamic competitors chosen, or a
-diagnostic that sets them (59). Training Facility travel ([session](plan/topics/session.md)); the
-open items a person's play decides (New Career in a lobby, 41; a rejoin notice, 44).
+build alone was played): a follow, a photo, a S.K.A.T.E. and a demo with two people, watching
+the owner's pro and its puppet on the other seat (the puppet is silent, 66; the owner leaving
+ends the AI, 65); the puppets' knockdowns (39, 50). The demo's start spots (50); a save with the
+sponsor team and the dynamic competitors chosen, or a diagnostic that sets them (59). Training
+Facility travel ([session](plan/topics/session.md)); the open items a person's play decides (New
+Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.11.0` lobby build: the AI missions with two people, and a S.K.A.T.E. or
-contest, where the first human to win now ends it for both. The AI day's report
-says what changed and what it measured:
+Play on the `coop-v0.12.0` lobby build: the AI missions with two people, the one pro now on
+both screens, and a S.K.A.T.E. or contest, where both consoles read the same leader and the
+first human to win ends it for both. The AI day's report says what changed and what it
+measured, its evening section the owned AI:
 [reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md); the night before it:
 [reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md).
 Play, and what it finds. Milestones and their done-when: [design](plan/design.md) §5; M0 to M8 are

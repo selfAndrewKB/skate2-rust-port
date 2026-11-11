@@ -49,7 +49,10 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
   alike every time. M9's answer: a script's decision about its own player travels as an outcome
   note and the rules settle the mission ([design](../design.md) §7, "outcomes as notes");
   proven first with the bench's win on one seat completing the mission on both
-  [see the M9 row in the ledger of versions].
+  [see the M9 row in the ledger of versions]. M10 (2026-11-11) then made the AI skaters one
+  console's: the first player's facts carry their outputs and the others show puppets of its
+  frames, so every console's script reads one AI run ([ai-skaters](ai-skaters.md)); the
+  notes stay for what a script decides about its own player.
 - **The families in the data.** The campaign's `challenge_global_data` uses `ChallengeType`
   0 (tutorial, 9 missions), 2, 4, 6 (photo, 5), 15 (jam, 3), 23 (follow, 7), 30 (go-to, 13),
   38 (30 photo missions), 39 (11 film), 40 (20 spot film), 41 (4 pro film), 43 (7 film/demo

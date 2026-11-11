@@ -130,7 +130,7 @@ impl crate::challenge::host::Host for CareerHost {
 /// `cMsgSkaterDestroyed` and `cMsgLocalSkaterChanged` with their `PlayerID`, the radius pair
 /// with their `Distance` and `PlayerID`, the local chase pair, `cMsgSecurityKnockedDown` with
 /// its `ID`, and `cMsgSetMarker` and `cMsgUseMarker` with their `PlayerID`.
-fn challenge_queue_event(message: crate::hermes_challenge_queue::ChallengeMessage) -> Event {
+pub(super) fn challenge_queue_event(message: crate::hermes_challenge_queue::ChallengeMessage) -> Event {
     use crate::challenge::system::Field;
     use crate::hermes_challenge_queue::{ChallengePayload, SkaterNotification};
     #[expect(clippy::cast_precision_loss, reason = "the messages' (float) fields")]
@@ -2589,14 +2589,18 @@ impl<T, C> SelectedLiveSession<T, C> {
         Ok(frames)
     }
 
-    /// Co-op fork (open item 45): this console's own challenge AI skaters' completed outputs,
-    /// which join the humans' facts frames in a campaign round. Each console simulates its own
-    /// AI skaters (the original's challenge AI is offline-only); what the scripts read of them
-    /// is this console's, not shared.
-    pub(super) fn career_ai_skater_frames(&self, humans: usize) -> Result<Vec<MissionFrame>, SelectedLiveError> {
+    /// Co-op fork (open item 45, M10): this console's AI skaters' completed outputs at the slots
+    /// after a campaign round's humans: with `challenge` the challenge AI skaters it owns, whose
+    /// frames ride its facts to every console; without it the ambient skaters, each console's
+    /// own, which join its frames alone.
+    pub(super) fn career_ai_skater_frames(&self, humans: usize, challenge: bool) -> Result<Vec<MissionFrame>, SelectedLiveError> {
         let mut frames = Vec::with_capacity(self.inner.ai_skaters.len());
         for skater in self.inner.ai_skaters.iter().filter(|skater| usize::try_from(skater.player_index()).is_ok_and(|slot| slot >= humans)) {
-            frames.push(self.mission_frame_of(&skater.actor, -1)?);
+            let slot = i32::try_from(skater.player_index()).map_err(error)?;
+            let is_challenge = self.inner.ai.as_ref().and_then(|ai| ai.client_type(slot)) == Some(crate::ai::actor::AiClientType::Challenge);
+            if is_challenge == challenge {
+                frames.push(self.mission_frame_of(&skater.actor, -1)?);
+            }
         }
         Ok(frames)
     }
@@ -3063,32 +3067,23 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.deliver_career_waypoint_groups()?;
         let challenge_messages = self.inner.try_take_challenge_messages().map_err(error)?;
         let Some(career) = self.career.as_mut() else { return self.try_update_free_skate_dynamic_hulls() };
-        // Co-op fork (open item 45): in a campaign this console's own challenge AI skaters'
-        // creation and destruction still reach the scripts (the follow family's
-        // `wait_for_assetload` waits for `cMsgSkaterCreated`), with the AI's ordinal as the
-        // scripts number it (`challenge::ai::ai_slot`); the humans' messages stay with their
-        // consoles, as online.
-        let humans = career.system.world().coop.as_ref().map(|campaign| campaign.players.len());
-        match (online.is_none(), humans) {
-            (true, _) => {
-                for message in challenge_messages {
-                    career.system.post(challenge_queue_event(message));
+        // Co-op fork (open item 45, M10): in a campaign an AI skater's creation and destruction
+        // reach the scripts (the follow family's `wait_for_assetload` waits for
+        // `cMsgSkaterCreated`) from the round's frames, the tick its frame first and last comes
+        // (`online_round_ai_messages`), the same tick on every console; the local queue's
+        // messages of AI slots are dropped here, and the humans' stay with their consoles, as
+        // online.
+        let campaign = career.system.world().coop.is_some();
+        if online.is_none() {
+            for message in challenge_messages {
+                career.system.post(challenge_queue_event(message));
+            }
+        } else if campaign {
+            for message in challenge_messages {
+                if let crate::hermes_challenge_queue::ChallengePayload::Skater { notification, player_id } = &message.payload {
+                    crate::coop::trace(format_args!("skater at slot {player_id}: local {notification:?} dropped (the round's frames say)"));
                 }
             }
-            (false, Some(humans)) => {
-                for mut message in challenge_messages {
-                    if let crate::hermes_challenge_queue::ChallengePayload::Skater { notification, player_id } = &mut message.payload
-                        && usize::try_from(*player_id).is_ok_and(|slot| slot >= humans)
-                    {
-                        let slot = *player_id;
-                        let ordinal = crate::challenge::players::script_index(career.system.world(), slot);
-                        crate::coop::trace(format_args!("AI skater at slot {slot} (the scripts' AI player {ordinal}): {notification:?}"));
-                        *player_id = ordinal;
-                        career.system.post(challenge_queue_event(message));
-                    }
-                }
-            }
-            (false, None) => {}
         }
         // Flow::StateLoading updates before the challenge system. AI selection uses the same
         // Simulation RNG as the rest of this frame, including its queued Lua callbacks.
@@ -4403,6 +4398,11 @@ impl<T, C> SelectedLiveSession<T, C> {
     fn apply_skater_requests(&mut self, requests: Vec<SkaterRequest>) -> Result<(), SelectedLiveError> {
         for request in requests {
             match request {
+                // Co-op fork (M10): a streamed AI skater has no actor here; the console follows
+                // its puppet instead (`online_switch_camera`, from the same request).
+                SkaterRequest::SetLocalIndex(player) if self.career.as_ref().is_some_and(|career| crate::challenge::players::streamed_ai_slot(career.system.world(), player)) => {
+                    crate::coop::trace(format_args!("local index {player} is a streamed AI skater's: the view follows its puppet"));
+                }
                 SkaterRequest::SetLocalIndex(player) => self.set_skater_local_index(player)?,
                 SkaterRequest::TeleportPlayer(player, transform) => {
                     // TeleportPlayer828a9888 tests Actor::mAIController, not

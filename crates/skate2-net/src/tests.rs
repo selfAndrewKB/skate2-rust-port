@@ -229,7 +229,7 @@ fn players_find_each_other_and_play_a_challenge() {
 
     // Facts go to the other participant, in order.
     for tick in 0..30 {
-        net.send(host, &ClientMessage::Facts { tick, stint: 0, notes: FactsNotes::default(), data: tick.to_le_bytes().to_vec() });
+        net.send(host, &ClientMessage::Facts { tick, stint: 0, notes: FactsNotes::default(), data: tick.to_le_bytes().to_vec(), owned: vec![] });
     }
     net.run(200);
     let facts: Vec<u32> = net
@@ -878,7 +878,7 @@ fn every_other_skate_player_waiting_on_one_takes_that_player_out_of_the_challeng
     }
     assert!(left(&net.messages(modded)), "the player hears it too");
     // Its facts no longer reach the challenge.
-    net.send(modded, &ClientMessage::Facts { tick: 500, stint: 1, notes: FactsNotes::default(), data: vec![1] });
+    net.send(modded, &ClientMessage::Facts { tick: 500, stint: 1, notes: FactsNotes::default(), data: vec![1], owned: vec![] });
     net.run(100);
     assert!(!net.messages(players[0].0).iter().any(|message| matches!(message, ServerMessage::Facts { .. })));
 }

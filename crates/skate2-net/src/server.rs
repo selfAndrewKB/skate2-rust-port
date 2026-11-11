@@ -11,7 +11,7 @@ use crate::moderation::{self, BanList, PanelKey};
 use crate::panel;
 use crate::protocol::{
     ClientMessage, GameAttributes, GameResult, LobbyInfo, MAX_LOBBIES, MAX_PLAYERS, Phase, PlayNow, PlayNowMode, PlayerInfo, PlayerStats,
-    ServerMessage, challenge, leave, play_now, proposal, refuse, request, reset, timer, valid_chat, valid_nickname,
+    ServerMessage, challenge, leave, owned, play_now, proposal, refuse, request, reset, timer, valid_chat, valid_nickname,
 };
 use crate::stats;
 use crate::transport::{self, Endpoint, PROTOCOL_VERSION, kind, read_header};
@@ -76,6 +76,9 @@ const FRAME_RATE: Rate = Rate { per_second: 90.0, burst: 60.0 };
 /// Co-op fork: the world runs a campaign member may send, one every two or three ticks as its
 /// replay frames; beyond that they are dropped unrelayed.
 const WORLD_RATE: Rate = Rate { per_second: 90.0, burst: 60.0 };
+/// Co-op fork (M10): the owned skaters' runs a campaign member may send: up to `owned::MOST`
+/// streams at the replay frames' rate.
+const OWNED_RATE: Rate = Rate { per_second: 90.0 * owned::MOST as f32, burst: 60.0 * owned::MOST as f32 };
 /// The reliable messages a connection may send: the game's facts every tick and a few others. A
 /// connection sending more is not running the game and is dropped (`leave::KICKED_FOR_FLOOD`).
 const MESSAGE_RATE: Rate = Rate { per_second: 240.0, burst: 600.0 };
@@ -185,6 +188,8 @@ struct Connection {
     frames: Bucket,
     /// Co-op fork: the world runs ([`WORLD_RATE`]).
     world: Bucket,
+    /// Co-op fork (M10): the owned skaters' runs ([`OWNED_RATE`]).
+    owned: Bucket,
     messages: Bucket,
     play_now: Bucket,
     lobby_list: Bucket,
@@ -214,6 +219,11 @@ struct Member {
     bad_frames_logged: bool,
     /// Co-op fork: a world run outside a campaign was logged once.
     world_refused_logged: bool,
+    /// Co-op fork (M10): the owned challenge AI skaters this member streams in a campaign, by
+    /// their slot in the round: the receiving side of each one's frames, and its look for the
+    /// members and for joiners.
+    owned_frames: HashMap<u8, FrameReceiver>,
+    owned_recipes: HashMap<u8, Arc<Vec<u8>>>,
 }
 
 #[derive(Debug)]
@@ -537,6 +547,7 @@ impl ServerCore {
                 user: None,
                 frames: Bucket::full(FRAME_RATE, now),
                 world: Bucket::full(WORLD_RATE, now),
+                owned: Bucket::full(OWNED_RATE, now),
                 messages: Bucket::full(MESSAGE_RATE, now),
                 play_now: Bucket::full(PLAY_NOW_RATE, now),
                 lobby_list: Bucket::full(LOBBY_LIST_RATE, now),
@@ -683,6 +694,12 @@ impl ServerCore {
                 self.mark_alive(id, user_id, now);
                 if self.connections.get_mut(&id).is_some_and(|connection| connection.world.take(WORLD_RATE, now)) {
                     self.relay_world(id, user_id, tick, data);
+                }
+            }
+            ClientMessage::OwnedFrames { slot, run } => {
+                self.mark_alive(id, user_id, now);
+                if self.connections.get_mut(&id).is_some_and(|connection| connection.owned.take(OWNED_RATE, now)) {
+                    self.relay_owned_frames(id, user_id, slot, &run, now);
                 }
             }
             ClientMessage::FrameAcks(acks) if !reliable => self.frame_acks(id, user_id, &acks),
@@ -941,6 +958,8 @@ impl ServerCore {
             chat_sent: VecDeque::new(),
             bad_frames_logged: false,
             world_refused_logged: false,
+            owned_frames: HashMap::new(),
+            owned_recipes: HashMap::new(),
         });
         let joined = ServerMessage::GameJoined {
             game: game_id,
@@ -950,8 +969,12 @@ impl ServerCore {
             phase: game.phase_code(),
             participants: game.participants().to_vec(),
         };
-        let recipes: Vec<(u64, Arc<Vec<u8>>)> =
-            game.members.iter().filter_map(|member| Some((member.user_id, Arc::clone(member.recipe.as_ref()?)))).collect();
+        let recipes: Vec<(u64, Arc<Vec<u8>>)> = game
+            .members
+            .iter()
+            .filter_map(|member| Some((member.user_id, Arc::clone(member.recipe.as_ref()?))))
+            .chain(game.members.iter().flat_map(|member| member.owned_recipes.iter().map(|(&slot, data)| (owned::skater_id(slot), Arc::clone(data)))))
+            .collect();
         // A freeskate activity being proposed is shown to the joiner too, whom it takes if its
         // skater is in the game's world by the start.
         let pending = game.proposal.as_ref().map(|pending| ServerMessage::GameProposal {
@@ -1089,9 +1112,13 @@ impl ServerCore {
         }
         let Some(game) = self.games.get_mut(&game_id) else { return };
         let name = game.member(user_id).map(|member| member.name.clone()).unwrap_or_default();
+        let owned_keys: Vec<u64> = game.member(user_id).map(|member| member.owned_frames.keys().map(|&slot| owned::skater_id(slot)).collect()).unwrap_or_default();
         game.members.retain(|member| member.user_id != user_id);
         for member in &mut game.members {
             member.holds.remove(&user_id);
+            for key in &owned_keys {
+                member.holds.remove(key);
+            }
         }
         if game.members.is_empty() {
             self.games.remove(&game_id);
@@ -1127,6 +1154,21 @@ impl ServerCore {
             // pre-game Edit Skater (PC port addition): the new one replaces it for every member
             // and for later joiners. One closer than RECIPE_SPACING to the last is dropped, so no
             // member can keep the others building skaters.
+            // Co-op fork (M10): an owned challenge AI skater's look, kept for joiners and relayed
+            // to every other member as the recipe of the skater's marked id; a campaign's only.
+            ClientMessage::OwnedRecipe { slot, data } => {
+                let Some(game) = self.games.get_mut(&game_id) else { return };
+                if game.attributes.challenge_type != challenge::CAMPAIGN {
+                    return;
+                }
+                let Some(member) = game.member_mut(user_id) else { return };
+                if member.owned_recipes.len() >= owned::MOST && !member.owned_recipes.contains_key(&slot) {
+                    return;
+                }
+                let data = Arc::new(data);
+                member.owned_recipes.insert(slot, Arc::clone(&data));
+                self.broadcast(game_id, &ServerMessage::Recipe { user_id: owned::skater_id(slot), data: data.to_vec() }, Some(user_id));
+            }
             ClientMessage::Recipe(data) => {
                 let data = Arc::new(data);
                 let Some(member) = self.games.get_mut(&game_id).and_then(|game| game.member_mut(user_id)) else { return };
@@ -1199,9 +1241,9 @@ impl ServerCore {
                 }
                 self.advance(game_id, now);
             }
-            ClientMessage::Facts { tick, stint, notes, data } => {
+            ClientMessage::Facts { tick, stint, notes, data, owned } => {
                 let Some(slot) = self.games.get(&game_id).and_then(|game| game.members.iter().find(|member| member.user_id == user_id)).map(|member| member.slot) else { return };
-                self.relay_to_participants(game_id, user_id, &ServerMessage::Facts { slot, tick, stint, notes, data });
+                self.relay_to_participants(game_id, user_id, &ServerMessage::Facts { slot, tick, stint, notes, data, owned });
             }
             ClientMessage::Vote { score } => self.relay_to_participants(game_id, user_id, &ServerMessage::Vote { user_id, score }),
             // Leave Challenge (PC port addition): the challenge goes on without the participant,
@@ -1702,6 +1744,56 @@ impl ServerCore {
         self.mark_in_world(game_id, user_id);
     }
 
+    /// Co-op fork (M10): a run of an owned challenge AI skater's frames, from the campaign member
+    /// that owns it: kept as that stream's baselines and coded for each other member against the
+    /// frames it holds of the stream, as the member's own frames are ([`Self::relay_frames`]);
+    /// acknowledged to the owner under the skater's slot. A campaign's only, at most
+    /// `owned::MOST` streams a member.
+    fn relay_owned_frames(&mut self, id: u32, user_id: u64, slot: u8, run: &crate::frames::EncodedRun, now: Instant) {
+        let Some(game_id) = self.game_of(id) else { return };
+        let Some(game) = self.games.get_mut(&game_id) else { return };
+        if game.attributes.challenge_type != challenge::CAMPAIGN {
+            return;
+        }
+        let Some(source) = game.members.iter().position(|member| member.user_id == user_id && member.recipe.is_some()) else { return };
+        if game.members[source].owned_frames.len() >= owned::MOST && !game.members[source].owned_frames.contains_key(&slot) {
+            return;
+        }
+        let decoded = match game.members[source].owned_frames.entry(slot).or_default().decode(run) {
+            Ok(Some(decoded)) => decoded,
+            Ok(None) => return,
+            Err(error) => {
+                let member = &mut game.members[source];
+                if !std::mem::replace(&mut member.bad_frames_logged, true) {
+                    (self.log)(&format!("{}: bad owned frames: {error}", member.name));
+                }
+                return;
+            }
+        };
+        let stream = &game.members[source].owned_frames[&slot];
+        let ack = stream.ack().map(|(latest, mask)| ServerMessage::OwnedFrameAck { slot, latest, mask });
+        let key = owned::skater_id(slot);
+        let relay_slot = owned::frames_slot(slot);
+        let mut sends = Vec::new();
+        for member in &game.members {
+            if member.user_id == user_id || game.hidden_from(user_id, member.user_id) {
+                continue;
+            }
+            let acks = member.holds.get(&key).copied().unwrap_or_default();
+            if let Some(run) = encode_for(&decoded, stream.ring(), &acks) {
+                sends.push((member.connection, ServerMessage::RemoteFrames { slot: relay_slot, run }));
+            }
+        }
+        for (target, message) in sends {
+            self.send_unreliable(target, &message);
+        }
+        if let Some(ack) = ack
+            && let Some(connection) = self.connections.get_mut(&id)
+        {
+            connection.endpoint.send_deferred(ack.encode(), now);
+        }
+    }
+
     /// Co-op fork: a campaign member's world run goes to every other member as it is; the server
     /// reads nothing of it. Outside a campaign a world run is dropped, logged once a member.
     fn relay_world(&mut self, id: u32, user_id: u64, tick: u32, data: Vec<u8>) {
@@ -1737,6 +1829,12 @@ impl ServerCore {
         let sources: Vec<(u64, u32, u32)> = acks
             .iter()
             .filter_map(|&(slot, latest, mask)| {
+                // Co-op fork (M10): an owned skater's ack names its marked slot; the stream is
+                // the one member's that owns that slot.
+                if let Some(owned_slot) = owned::slot_of_frames(slot) {
+                    let stream = game.members.iter().find_map(|member| member.owned_frames.get(&owned_slot))?;
+                    return stream.ring().get(latest).map(|_| (owned::skater_id(owned_slot), latest, mask));
+                }
                 let source = game.members.iter().find(|member| member.slot == slot)?;
                 source.frames.ring().get(latest).map(|_| (source.user_id, latest, mask))
             })

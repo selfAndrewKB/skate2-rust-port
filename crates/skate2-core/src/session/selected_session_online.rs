@@ -36,7 +36,7 @@ use remote_skater::RemoteSkater;
 use skate2_net::client::{Client, ClientEvent, Disconnect};
 use skate2_net::frames::{HEADER_WORDS, INTERVAL, MAX_RUN, NetFrame, PLAYING_INTERVAL};
 use skate2_net::protocol::{
-    ClientMessage, GameAttributes, Phase, PlayNow, PlayNowMode, PlayerInfo, ServerMessage, challenge, play_now, refuse, request, timer, valid_chat,
+    ClientMessage, GameAttributes, Phase, PlayNow, PlayNowMode, PlayerInfo, ServerMessage, challenge, owned, play_now, refuse, request, timer, valid_chat,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -136,6 +136,9 @@ pub(super) struct OnlineGame {
     last_teleport: bool,
     /// The camera rotation last sent, whose side of the quaternion the next one keeps.
     last_camera_rotation: Option<[f32; 4]>,
+    /// Co-op fork (M10): the owned challenge AI skaters whose look went out, by slot, with the
+    /// recipe it was taken from; a slot created again (the round's frames say) sends it again.
+    owned_sent: BTreeMap<u8, u64>,
 }
 
 impl OnlineGame {
@@ -237,6 +240,11 @@ pub(super) struct Online {
     outbox: Vec<ClientMessage>,
     /// The local skater's replay frames since the last run went out.
     run: Vec<NetFrame>,
+    /// Co-op fork (M10): the owned challenge AI skaters' replay frames since their last runs
+    /// went out, by slot, and the slots whose last frame carried the teleport bit (the next
+    /// tick ends a run too, as the local skater's does).
+    owned_runs: BTreeMap<u8, Vec<NetFrame>>,
+    owned_teleported: BTreeMap<u8, bool>,
     /// The trick HUD's view of the local skater that its replay frames carry, and whether the
     /// last tick could not take it (traced once a time it starts failing).
     hud: crate::online::hud_record::HudRecorder,
@@ -307,6 +315,71 @@ const GM_ONLINE_FREE_SKATE: u32 = 4;
 /// Co-op fork: a campaign lobby's "start", which `start_online_campaign` never reads: the career
 /// places its own skater.
 const CAMPAIGN_START: [f32; 16] = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+
+/// Whether a run of replay frames ends at `tick` for runs of `interval` ticks.
+const fn ends_at(tick: u32, interval: u32) -> bool {
+    tick % interval == 0
+}
+
+/// Co-op fork (M10): the replay frames of the challenge AI skaters this console owns (the
+/// slots after the campaign's `humans` with a challenge controller), each as its own skater's
+/// go out: the header, the pose on a sample tick, the twist ratios; no camera, no audio record
+/// and no trick HUD (a puppet has none to show); a teleporting tick is a sample, as the local
+/// skater's is. With each the skater's recipe and, when the look of that recipe has not gone
+/// for the slot yet (`sent`), the look to send first.
+fn owned_ai_net_frames<T, C>(
+    inner: &mut super::SelectedSession<T, C>,
+    humans: usize,
+    tick: u32,
+    sample: bool,
+    vault: &Arc<crate::attribute_runtime::AttributeRuntimeVault>,
+    sent: &BTreeMap<u8, u64>,
+) -> Result<Vec<(u8, u64, Option<Vec<u8>>, NetFrame)>, SelectedLiveError> {
+    let challenge_slots: Vec<u32> = inner
+        .ai_skaters
+        .iter()
+        .map(|skater| skater.player_index())
+        .filter(|&slot| usize::try_from(slot).is_ok_and(|slot| slot >= humans))
+        .filter(|&slot| inner.ai.as_ref().and_then(|ai| ai.client_type(i32::try_from(slot).unwrap_or(-1))) == Some(crate::ai::actor::AiClientType::Challenge))
+        .collect();
+    let mut frames = Vec::with_capacity(challenge_slots.len());
+    for skater in inner.ai_skaters.iter_mut().filter(|skater| challenge_slots.contains(&skater.player_index())) {
+        let Ok(slot) = u8::try_from(skater.player_index()) else { continue };
+        if skater.presentation_runtime.borrowed() {
+            continue;
+        }
+        let Some(frame) = skater.presentation_runtime.submitted_frame(&skater.presentation, vault).map_err(error)? else { continue };
+        let recipe_id = skater.recipe_load.asset_id().unwrap_or(0);
+        let recipe = if sent.get(&slot) == Some(&recipe_id) {
+            None
+        } else {
+            match remote_skater::encode_character(&frame) {
+                Ok(data) => Some(data),
+                Err(e) => {
+                    crate::coop::trace(format_args!("owned AI skater at slot {slot}: its look cannot be sent: {e}"));
+                    continue;
+                }
+            }
+        };
+        let header = net_header(&frame.header);
+        let teleport = header[48] & 0x1000 != 0;
+        let pose = (sample || teleport).then(|| {
+            frame
+                .pose
+                .iter()
+                .map(|sqt| {
+                    let mut lanes = [0.0; 12];
+                    lanes[0..4].copy_from_slice(&sqt.scale);
+                    lanes[4..8].copy_from_slice(&sqt.rotation);
+                    lanes[8..12].copy_from_slice(&sqt.translation);
+                    lanes
+                })
+                .collect()
+        });
+        frames.push((slot, recipe_id, recipe, NetFrame { tick, header, pose, twist: frame.twist_ratios, camera: Vec::new(), audio_floats: Vec::new(), audio_words: Vec::new(), hud: Vec::new() }));
+    }
+    Ok(frames)
+}
 
 /// A presentation frame's header as replay frames carry it, without `peerId` (words 40 and 41):
 /// each console writes the sender's id there on receipt.
@@ -466,11 +539,24 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let tick = self.completed_frames;
                     // Net::PauseGame holds this console's ticks: an arrival then is not paced.
                     let paced = self.online.network_resumed;
-                    if let Some(remote) = self.online.game.as_mut().and_then(|game| game.remotes.get_mut(&user_id)) {
-                        remote.receive(tick, *frame, paced, run_end);
+                    if let Some(game) = self.online.game.as_mut() {
+                        // Co-op fork (M10): an owned challenge AI skater's frames drive a puppet
+                        // of it, made at their first arrival in a campaign.
+                        let campaign = game.attributes.challenge_type == challenge::CAMPAIGN;
+                        let remote = match owned::slot_of_id(user_id) {
+                            Some(slot) if campaign => Some(game.remotes.entry(user_id).or_insert_with(|| {
+                                crate::coop::trace(format_args!("owned AI skater at slot {slot}: its frames arrive; a puppet here"));
+                                RemoteSkater::new(user_id, owned::frames_slot(slot))
+                            })),
+                            Some(_) => None,
+                            None => game.remotes.get_mut(&user_id),
+                        };
+                        if let Some(remote) = remote {
+                            remote.receive(tick, *frame, paced, run_end);
+                        }
                     }
                 }
-                ClientEvent::Facts { user_id, tick, stint, notes, data } => self.online_facts(user_id, tick, stint, notes, &data),
+                ClientEvent::Facts { user_id, tick, stint, notes, data, owned } => self.online_facts(user_id, tick, stint, notes, &data, &owned),
                 ClientEvent::World { user_id, tick, data } => self.online_world_event(user_id, tick, &data),
                 ClientEvent::Message(message) => {
                     if let Err(e) = self.online_message(message) {
@@ -973,6 +1059,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             character_sent_at: None,
             own_rig: None,
             chat_enabled: false,
+            owned_sent: BTreeMap::new(),
             last_teleport: false,
             last_camera_rotation: None,
         });
@@ -1284,6 +1371,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// career's own stand. `start_career` then enters the game (`online_campaign_entered`).
     pub(super) fn start_online_campaign(&mut self) -> Result<(), SelectedLiveError> {
         // A reload (M8) or a rejoin starts over: no round, no shared world, the scripts held.
+        self.end_campaign_ai_streams();
         if self.online.round.take().is_some()
             && let Some(input) = self.inner.bound_input.as_ref()
         {
@@ -1332,6 +1420,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// rejoins the campaign lobby, whose join brings the server's save and a reload for all.
     fn online_campaign_dropped(&mut self) -> Result<(), SelectedLiveError> {
         crate::coop::trace(format_args!("campaign: the connection was lost; the career waits, signing in again to rejoin"));
+        self.end_campaign_ai_streams();
         if self.online.round.take().is_some()
             && let Some(input) = self.inner.bound_input.as_ref()
         {
@@ -1442,7 +1531,16 @@ impl<T, C> SelectedLiveSession<T, C> {
             game.recipes.insert(user_id, data);
             return Ok(());
         }
-        let Some(remote) = game.remotes.get_mut(&user_id) else { return Ok(()) };
+        // Co-op fork (M10): an owned challenge AI skater's look makes its puppet if its frames
+        // have not yet.
+        let remote = match owned::slot_of_id(user_id) {
+            Some(slot) if game.attributes.challenge_type == challenge::CAMPAIGN => game.remotes.entry(user_id).or_insert_with(|| RemoteSkater::new(user_id, owned::frames_slot(slot))),
+            Some(_) => return Ok(()),
+            None => match game.remotes.get_mut(&user_id) {
+                Some(remote) => remote,
+                None => return Ok(()),
+            },
+        };
         let assets = self.inner.assets.as_ref().ok_or_else(|| error("assets absent"))?;
         trace(format_args!("{user_id:016x}'s character building ({} bytes)", data.len()));
         remote.received_recipe();
@@ -1469,6 +1567,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         if let Err(e) = self.online_end_spectate() {
             trace(format_args!("spectating not ended: {e:?}"));
         }
+        self.end_campaign_ai_streams();
         if self.online.round.take().is_some()
             && let Some(input) = self.inner.bound_input.as_ref()
         {
@@ -1488,6 +1587,7 @@ impl<T, C> SelectedLiveSession<T, C> {
 
     /// `IE_LeaveGame` as the game unloads.
     pub(super) fn online_leave_game(&mut self) {
+        self.end_campaign_ai_streams();
         if self.online.round.take().is_some()
             && let Some(input) = self.inner.bound_input.as_ref()
         {
@@ -1653,6 +1753,39 @@ impl<T, C> SelectedLiveSession<T, C> {
                 self.online.alive_sent = Some(std::time::Instant::now());
             }
         }
+        // Co-op fork (M10): the challenge AI skaters this console owns in a campaign go out as
+        // its own skater does: their look once per actor, their frames in runs of the same
+        // cadence, each under the AI's slot in the round.
+        let owned_ai = match self.career.as_ref().map(|career| career.system.world()).and_then(|world| world.coop.as_ref().map(|campaign| (campaign.players.len(), crate::challenge::players::owns_challenge_ai(world)))) {
+            Some((humans, true)) => owned_ai_net_frames(&mut self.inner, humans, tick, watched || ends_at(tick, interval), &vault, &game.owned_sent)?,
+            _ => Vec::new(),
+        };
+        // The owner's game camera rides the frames of the AI skater it follows (a S.K.A.T.E.
+        // leader's turn), as its own frames carry it for a followed turn.
+        let followed_ai = self.online.round.as_ref().and_then(online_challenge::Round::followed);
+        for (slot, recipe_id, recipe, mut net) in owned_ai {
+            if followed_ai == Some(i32::from(slot)) {
+                net.camera = camera.map(|values| values.to_vec()).unwrap_or_default();
+            }
+            if let Some(data) = recipe {
+                crate::coop::trace(format_args!("owned AI skater at slot {slot}: sending its look ({} bytes)", data.len()));
+                if let Some(client) = &self.online.client {
+                    client.send(ClientMessage::OwnedRecipe { slot, data });
+                }
+                game.owned_sent.insert(slot, recipe_id);
+            }
+            let teleport = net.header[48] & 0x1000 != 0;
+            let after_teleport = std::mem::replace(self.online.owned_teleported.entry(slot).or_default(), teleport);
+            let run = self.online.owned_runs.entry(slot).or_default();
+            let ends = ends_at(tick, interval) || teleport || after_teleport;
+            run.push(net);
+            if ends || run.len() == MAX_RUN {
+                let run = std::mem::take(run);
+                if let Some(client) = &self.online.client {
+                    client.send_owned_frames(slot, run);
+                }
+            }
+        }
         let camera_position = camera.map_or([0.0; 3], |values| [values[0], values[1], values[2]]);
         // Every skater's hierarchy is the presentation's own: its head and feet are the local
         // skater's bones.
@@ -1711,7 +1844,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             if remote.visible() != shown {
                 trace(format_args!("{:016x} {}", remote.user_id, if shown { "no longer shows" } else { "shows" }));
             }
-            if remote.visible() && !game.announced.contains(&remote.user_id) {
+            if remote.visible() && !game.announced.contains(&remote.user_id) && owned::slot_of_id(remote.user_id).is_none() {
                 game.announced.push(remote.user_id);
                 let name = game.players.iter().find(|player| player.user_id == remote.user_id).map(|player| player.name.clone()).unwrap_or_default();
                 self.online.event_log.add(EventText::named("ID_ONLINE_EVENT_JOIN_SKATER", &name));
@@ -1723,7 +1856,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         let scoring: Vec<_> = game
             .remotes
             .values()
-            .filter(|remote| in_round == game.participants.contains(&remote.user_id))
+            .filter(|remote| in_round == (game.participants.contains(&remote.user_id) || owned::slot_of_id(remote.user_id).is_some()))
             .filter_map(RemoteSkater::scoring)
             .collect();
         self.set_remote_scoring_skaters(scoring)?;
@@ -1799,11 +1932,48 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// shows nothing either (PC port additions).
     fn online_remote_hidden(&self, user_id: u64) -> bool {
         let Some(game) = self.online.game.as_ref() else { return false };
+        // Co-op fork (M10): an owned challenge AI skater's puppet shows while the campaign's
+        // round runs, as the mission's own AI would.
+        if owned::slot_of_id(user_id).is_some() {
+            return self.online.round.is_none();
+        }
         let playing = game.participants.contains(&user_id);
         if self.online.round.is_some() {
             !playing || self.online_spot_hidden(user_id)
         } else {
             playing && !self.options_menu.show_ghost_players()
+        }
+    }
+
+    /// Co-op fork (M10): an owned challenge AI skater's puppet shows no more: its owner
+    /// destroyed the skater (the round's frames stopped naming its slot).
+    pub(super) fn online_hide_owned_puppet(&mut self, slot: i32) {
+        if let Some(remote) = u8::try_from(slot).ok().and_then(|slot| self.online.game.as_mut()?.remotes.get_mut(&owned::skater_id(slot))) {
+            crate::coop::trace(format_args!("owned AI skater at slot {slot}: its puppet hides"));
+            remote.hide();
+        }
+    }
+
+    /// Co-op fork (M10): an owned skater's slot was created or destroyed, the round's frames
+    /// say: its unsent frames go (a destroyed skater's run never completes), and its look goes
+    /// again at its next frame (a skater built again at the slot, whatever its recipe).
+    pub(super) fn online_owned_slot_changed(&mut self, slot: i32) {
+        let Ok(slot) = u8::try_from(slot) else { return };
+        self.online.owned_runs.remove(&slot);
+        self.online.owned_teleported.remove(&slot);
+        if let Some(game) = self.online.game.as_mut() {
+            game.owned_sent.remove(&slot);
+        }
+    }
+
+    /// Co-op fork (M10): the owned skaters' puppets and the record of the looks sent go with
+    /// the campaign's round.
+    pub(super) fn online_drop_owned_puppets(&mut self) {
+        self.online.owned_runs.clear();
+        self.online.owned_teleported.clear();
+        if let Some(game) = self.online.game.as_mut() {
+            game.remotes.retain(|&user_id, _| owned::slot_of_id(user_id).is_none());
+            game.owned_sent.clear();
         }
     }
 

@@ -84,6 +84,22 @@ pub(crate) fn script_slot(world: &World, player: i32) -> i32 {
 /// Another human's slot as the scripts see it: no index at all.
 pub(crate) const NO_SCRIPT_INDEX: i32 = -1;
 
+/// Co-op fork (M10): whether this console owns the campaign's challenge AI skaters
+/// (`CampaignWorld::ai_owner`); outside a campaign every AI skater is this console's.
+pub(crate) fn owns_challenge_ai(world: &World) -> bool {
+    world.coop.as_ref().is_none_or(|campaign| campaign.ai_owner() == network_local_player(world))
+}
+
+/// Co-op fork (M10): whether a slot is a challenge AI skater another console owns, whose
+/// frames reach this console's scripts through its owner's facts and whose body is a puppet
+/// here: a campaign's AI slot (after the humans) on a console that is not the owner.
+pub(crate) fn streamed_ai_slot(world: &World, slot: i32) -> bool {
+    match world.coop.as_ref() {
+        Some(campaign) => !owns_challenge_ai(world) && slot >= i32::try_from(campaign.players.len()).unwrap_or(1),
+        None => false,
+    }
+}
+
 /// Co-op fork: a slot as the scripts of a campaign number it ([`script_slot`] backwards): this
 /// console's skater 0, an AI skater its ordinal, another human [`NO_SCRIPT_INDEX`].
 pub(crate) fn script_index(world: &World, slot: i32) -> i32 {

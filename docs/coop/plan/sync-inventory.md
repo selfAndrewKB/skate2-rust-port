@@ -93,10 +93,14 @@ everywhere (none streamed yet); contacts sent in 14 missions (up to 555 in the d
 the owner, 0 to 2 confirmed knockdowns; handoffs, promotions, demotions 0 throughout; stalled
 round ticks 0 in all but four missions (12 at most, `m_1b_01_goto_school`), starved 0 in all but
 three (10 at most). The ambient AI skaters are not in these counts: each console spawns its own
-(open item 53). Nor are the challenge AI skaters (2026-11-11): a mission's pro, judges or
-leaders are each console's own copies, selected from the same data at the same tick and
-spawned at the same slot on every console, driven by each console's own AI on the same paths;
-their state is not streamed and not audited ([kinds](topics/kinds.md), open item 45).
+(open item 53). The challenge AI skaters were each console's own copies until M10
+(2026-11-11, the AI day): selected from the same data at the same tick and spawned at the same
+slot on every console, driven by each console's own AI on the same paths, not streamed and
+not audited ([kinds](topics/kinds.md), open item 45). From M10 they are one console's, the
+first player's: its facts carry their outputs (every console's scripts read one run) and the
+others show puppets of its replay frames, as they show the remote players
+([ai-skaters](topics/ai-skaters.md)); the puppets are not in the census audit (they are
+skaters, not pedestrians), and their playout is traced as a remote player's.
 
 The census audit over the same logs (`tools/coop/sync_audit.py`, folded into the ledger's "census
 audit" table): 103 missions with dumps, 7,543 dumps, 109,590 pedestrian pairs at the same round

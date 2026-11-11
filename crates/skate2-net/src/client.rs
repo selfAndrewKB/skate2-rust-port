@@ -4,7 +4,7 @@
 
 use crate::crypto::{Build, Handshake, PROOF_BYTES, Session};
 use crate::frames::{FrameReceiver, FrameSender, NetFrame};
-use crate::protocol::{ClientMessage, FactsNotes, ServerMessage};
+use crate::protocol::{self, ClientMessage, FactsNotes, ServerMessage};
 use crate::transport::{self, Endpoint, kind, read_header};
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
@@ -45,7 +45,7 @@ pub enum ClientEvent {
     /// A remote player's replay frame, decoded, and whether it is the last of its run.
     Frame { user_id: u64, frame: Box<NetFrame>, run_end: bool },
     /// A remote player's facts of one tick.
-    Facts { user_id: u64, tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8> },
+    Facts { user_id: u64, tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8>, owned: Vec<(u8, Vec<u8>)> },
     /// Co-op fork: another member's world run (`ClientMessage::World`).
     World { user_id: u64, tick: u32, data: Vec<u8> },
 }
@@ -66,6 +66,9 @@ pub struct ClientCore {
     events: Vec<ClientEvent>,
     outgoing: Vec<Vec<u8>>,
     own_frames: FrameSender,
+    /// Co-op fork (M10): the sending side of each owned challenge AI skater's frames, by its
+    /// slot in the round.
+    owned_frames: HashMap<u8, FrameSender>,
     remote_frames: HashMap<u64, FrameReceiver>,
     slots: HashMap<u64, u8>,
     acks_sent: HashMap<u64, (u32, u32)>,
@@ -90,6 +93,7 @@ impl ClientCore {
             events,
             outgoing: Vec::new(),
             own_frames: FrameSender::default(),
+            owned_frames: HashMap::new(),
             remote_frames: HashMap::new(),
             slots: HashMap::new(),
             acks_sent: HashMap::new(),
@@ -158,6 +162,22 @@ impl ClientCore {
         }
     }
 
+    /// Co-op fork (M10): codes a run of an owned challenge AI skater's frames against what the
+    /// server acknowledged of that skater's and queues it, as [`Self::send_frames`] does the
+    /// player's own.
+    pub fn send_owned_frames(&mut self, slot: u8, frames: &[NetFrame]) {
+        if let State::Connected { endpoint } = &mut self.state
+            && let Some(run) = self.owned_frames.entry(slot).or_default().encode(frames)
+        {
+            let message = ClientMessage::OwnedFrames { slot, run }.encode();
+            if message.len() > transport::MAX_UNRELIABLE {
+                endpoint.send_reliable(&message);
+            } else {
+                endpoint.send_unreliable(message);
+            }
+        }
+    }
+
     /// Co-op fork: one tick of the living-world entities this console owns, unreliably; a run
     /// past [`protocol::MAX_WORLD`] is cut there by the encoding.
     pub fn send_world(&mut self, tick: u32, data: Vec<u8>) {
@@ -166,9 +186,15 @@ impl ClientCore {
         }
     }
 
+    /// The user id a relay slot's frames and facts are delivered under: a player's, or an owned
+    /// skater's (`protocol::owned`) under its marked id.
     fn user_of(&self, slot: u8) -> Option<u64> {
+        if let Some(owned) = protocol::owned::slot_of_frames(slot) {
+            return Some(protocol::owned::skater_id(owned));
+        }
         self.slots.iter().find(|&(_, &held)| held == slot).map(|(&user_id, _)| user_id)
     }
+
 
     /// A datagram from the server.
     pub fn receive(&mut self, datagram: &[u8], now: Instant) {
@@ -250,9 +276,9 @@ impl ClientCore {
                     }
                 }
             }
-            ServerMessage::Facts { slot, tick, stint, notes, data } => {
+            ServerMessage::Facts { slot, tick, stint, notes, data, owned } => {
                 if let Some(user_id) = self.user_of(slot) {
-                    self.events.push(ClientEvent::Facts { user_id, tick, stint, notes, data });
+                    self.events.push(ClientEvent::Facts { user_id, tick, stint, notes, data, owned });
                 }
             }
             ServerMessage::RemoteWorld { slot, tick, data } => {
@@ -261,6 +287,11 @@ impl ClientCore {
                 }
             }
             ServerMessage::FrameAck { latest, mask } => self.own_frames.acknowledge(latest, mask),
+            ServerMessage::OwnedFrameAck { slot, latest, mask } => {
+                if let Some(sender) = self.owned_frames.get_mut(&slot) {
+                    sender.acknowledge(latest, mask);
+                }
+            }
             ServerMessage::Pong { time } => {
                 let elapsed = u64::try_from(now.saturating_duration_since(self.epoch).as_micros()).unwrap_or(u64::MAX);
                 self.rtt = Some(Duration::from_micros(elapsed.saturating_sub(time)));
@@ -272,6 +303,7 @@ impl ClientCore {
                         self.remote_frames.clear();
                         self.acks_sent.clear();
                         self.own_frames.reset();
+                        self.owned_frames.clear();
                     }
                     ServerMessage::PlayerJoin(player) => {
                         self.slots.insert(player.user_id, player.slot);
@@ -281,6 +313,10 @@ impl ClientCore {
                         self.slots.remove(user_id);
                         self.remote_frames.remove(user_id);
                         self.acks_sent.remove(user_id);
+                        // Co-op fork (M10): the owned skaters' streams may be the leaver's; a
+                        // campaign round restarts after a leave, and their owner codes afresh.
+                        self.remote_frames.retain(|&user_id, _| protocol::owned::slot_of_id(user_id).is_none());
+                        self.acks_sent.retain(|&user_id, _| protocol::owned::slot_of_id(user_id).is_none());
                     }
                     _ => {}
                 }
@@ -307,8 +343,10 @@ impl ClientCore {
                     return;
                 }
                 let mut acks = Vec::new();
+                let slots = &self.slots;
+                let slot_of = |user_id: u64| protocol::owned::slot_of_id(user_id).map(protocol::owned::frames_slot).or_else(|| slots.get(&user_id).copied());
                 for (user_id, receiver) in &self.remote_frames {
-                    let (Some(ack), Some(&slot)) = (receiver.ack(), self.slots.get(user_id)) else { continue };
+                    let (Some(ack), Some(slot)) = (receiver.ack(), slot_of(*user_id)) else { continue };
                     if self.acks_sent.get(user_id) != Some(&ack) {
                         self.acks_sent.insert(*user_id, ack);
                         acks.push((slot, ack.0, ack.1));
@@ -335,6 +373,8 @@ enum Command {
     Tick(Vec<ClientMessage>, Vec<NetFrame>),
     /// Co-op fork: a world run.
     World(u32, Vec<u8>),
+    /// Co-op fork (M10): a run of an owned challenge AI skater's frames, by its slot.
+    OwnedFrames(u8, Vec<NetFrame>),
     /// The game is loading (a travel streaming its destination), when its own thread may stall
     /// past the server's inactivity limit.
     Loading(bool),
@@ -380,6 +420,11 @@ impl Client {
     /// Co-op fork: one tick of the living-world entities this console owns, unreliably.
     pub fn send_world(&self, tick: u32, data: Vec<u8>) {
         let _ = self.commands.send(Command::World(tick, data));
+    }
+
+    /// Co-op fork (M10): a run of an owned challenge AI skater's replay frames.
+    pub fn send_owned_frames(&self, slot: u8, frames: Vec<NetFrame>) {
+        let _ = self.commands.send(Command::OwnedFrames(slot, frames));
     }
 
     /// Whether the game is loading: meanwhile the connection's thread says `Busy` for it whenever
@@ -517,6 +562,10 @@ fn run_client(server: &str, nickname: &str, game_version: &str, player_id: u64, 
                     busy = true;
                     alive_sent = Instant::now();
                     core.send_world(tick, data);
+                }
+                Ok(Command::OwnedFrames(slot, frames)) => {
+                    busy = true;
+                    core.send_owned_frames(slot, &frames);
                 }
                 Ok(Command::Loading(on)) => {
                     loading = if on { Some(loading.unwrap_or_else(Instant::now)) } else { None };

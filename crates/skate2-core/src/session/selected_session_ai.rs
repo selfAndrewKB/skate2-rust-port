@@ -85,6 +85,14 @@ pub(crate) struct SessionAi {
     deferred: Vec<AmbientCommand>,
     /// The path packages being read, oldest first.
     pub(crate) path_packages: Vec<PathPackageLoad>,
+    /// Co-op fork (M10): a campaign round runs and another console owns its challenge AI
+    /// skaters: a challenge spawn takes its row and its slot here, and no actor (the owner's
+    /// frames drive a puppet and its facts reach the scripts).
+    pub(crate) streamed_challenge_ai: bool,
+    /// Co-op fork (M10): a campaign round runs: a challenge AI skater is one console's and
+    /// its end is an unspawn on every console (no conversion to an ambient skater, which is
+    /// each console's own and would leave the slot alive on the owner alone).
+    pub(crate) campaign: bool,
 }
 
 /// One `LoadBinaryPathPackage` (`0x824b8f28`) arena on the stream reader: as the native's
@@ -196,6 +204,8 @@ impl SessionAi {
             scenes: AiSceneLoads::default(),
             deferred: Vec::new(),
             path_packages: Vec::new(),
+            streamed_challenge_ai: false,
+            campaign: false,
         })
     }
 
@@ -255,6 +265,11 @@ impl SessionAi {
 
     fn take_pending(&mut self) -> Vec<AmbientCommand> {
         self.manager().take_pending()
+    }
+
+    /// Co-op fork (M10): the client type of the AI skater at a slot, while one is attached.
+    pub(crate) fn client_type(&self, slot: i32) -> Option<AiClientType> {
+        self.controllers.get(&slot).map(|controller| controller.client_type)
     }
 }
 
@@ -655,6 +670,18 @@ impl<T, C> SelectedSession<T, C> {
         for command in commands {
             match command {
                 AmbientCommand::Spawn { slot, client_type, recipe, transform, profile_name } => {
+                    // Co-op fork (M10): a challenge AI skater another console owns has its row
+                    // (posted with the command) and no actor here; an ambient skater in its
+                    // slot leaves as it would for the actor.
+                    if client_type == AiClientType::Challenge && self.ai.as_ref().is_some_and(|ai| ai.streamed_challenge_ai) {
+                        let player = u32::try_from(slot).map_err(|e| error("spawn slot", e))?;
+                        if let Some(at) = self.ai_skaters.iter().position(|skater| skater.player_index() == player) {
+                            let skater = self.ai_skaters.remove(at);
+                            self.try_destroy_later_skaters(vec![skater])?;
+                        }
+                        crate::coop::trace(format_args!("challenge AI at slot {slot} (recipe {recipe:#018x}) is its owner's: no actor here"));
+                        continue;
+                    }
                     if let Some(ai) = self.ai.as_mut()
                         && ai.scenes.loading(recipe)
                     {
@@ -754,8 +781,20 @@ impl<T, C> SelectedSession<T, C> {
         let Some(ai) = self.ai.as_ref() else { return Ok(()) };
         if ai.manager().in_an_ai_based_challenge() {
             let settings = Arc::clone(&self.player.as_ref().ok_or("AI: first player absent")?.selected.owners.services.settings);
+            let campaign = ai.campaign;
             for slot in 0..9_u32 {
                 if settings.try_player_type(slot).map_err(|e| error("player type", e))? == player_type::AI_CHALLENGE {
+                    if campaign {
+                        // Co-op fork (M10): the owned skater leaves alike everywhere, at the tick
+                        // its last frame says.
+                        crate::coop::trace(format_args!("challenge AI at slot {slot} unspawns at the mission's end (a campaign: no conversion to ambient)"));
+                        let commands = self.ai.as_ref().expect("checked session AI").manager().request_unspawn(slot as usize);
+                        let mut manager = self.ai.as_ref().expect("checked session AI").manager();
+                        for command in commands {
+                            manager.post(command, &settings)?;
+                        }
+                        continue;
+                    }
                     self.try_convert_to_ambient_skater(slot as usize, &settings)?;
                 }
             }

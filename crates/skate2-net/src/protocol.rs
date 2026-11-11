@@ -580,8 +580,10 @@ pub enum ClientMessage {
     /// `GameResults`.
     Results(GameResult),
     /// One tick of the facts the player's skater gave the challenge, in the run of ticks it sends
-    /// facts for (`stint`), with what it tells every console at the tick.
-    Facts { tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8> },
+    /// facts for (`stint`), with what it tells every console at the tick. Co-op fork (M10):
+    /// `owned` carries the same tick's facts of each challenge AI skater this console owns in
+    /// a campaign, by the AI's slot in the round, coded as the player's own.
+    Facts { tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8>, owned: Vec<(u8, Vec<u8>)> },
     /// A run of the player's replay frames.
     Frames(EncodedRun),
     /// The newest frames received of each other player: slot, latest tick, mask.
@@ -622,6 +624,47 @@ pub enum ClientMessage {
     /// campaign, with their hash and the campaign round's tick: the server keeps the newest and
     /// says whether every console's agree.
     CampaignSave { session: u32, tick: u32, hash: u64, data: Vec<u8> },
+    /// Co-op fork (M10): the look of a challenge AI skater this console owns in a campaign, by
+    /// the AI's slot in the round, as [`Self::Recipe`] carries the player's own; the server
+    /// relays it as the recipe of [`owned::skater_id`] and keeps it for joiners.
+    OwnedRecipe { slot: u8, data: Vec<u8> },
+    /// Co-op fork (M10): a run of an owned challenge AI skater's replay frames, relayed as
+    /// [`ServerMessage::RemoteFrames`] under [`owned::frames_slot`].
+    OwnedFrames { slot: u8, run: EncodedRun },
+}
+
+/// Co-op fork (M10): the names an owned challenge AI skater goes by on the wire. Its slot in the
+/// round (after the humans, `docs/coop/plan/design.md` §7) is the one number every console
+/// knows; the frame relay's slot space and the recipe's user id space each get a marked form of
+/// it, apart from every player's.
+pub mod owned {
+    /// The most owned skaters one console streams.
+    pub const MOST: usize = 8;
+    /// The slots an owned skater can hold: the skater manager's rows (a human's or an AI's).
+    pub const SLOTS: usize = 9;
+    const SLOT_FLAG: u8 = 0x80;
+    const ID_FLAG: u64 = 0xA1_0000_0000_0000;
+
+    /// The frame relay's slot of an owned skater at `slot`.
+    #[must_use]
+    pub const fn frames_slot(slot: u8) -> u8 {
+        slot | SLOT_FLAG
+    }
+    /// The owned skater's slot of a frame relay slot, if it is one.
+    #[must_use]
+    pub const fn slot_of_frames(slot: u8) -> Option<u8> {
+        if slot & SLOT_FLAG != 0 { Some(slot & !SLOT_FLAG) } else { None }
+    }
+    /// The user id an owned skater's recipe and frames reach a console under.
+    #[must_use]
+    pub const fn skater_id(slot: u8) -> u64 {
+        ID_FLAG | slot as u64
+    }
+    /// The owned skater's slot of such a user id, if it is one.
+    #[must_use]
+    pub const fn slot_of_id(id: u64) -> Option<u8> {
+        if id & !0xff == ID_FLAG { Some((id & 0xff) as u8) } else { None }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -654,7 +697,7 @@ pub enum ServerMessage {
     /// `GameRequest(KickPlayer)` sent to the target.
     Kicked { reason: u8 },
     /// A player's facts and replay frames, the player named by its slot in the game.
-    Facts { slot: u8, tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8> },
+    Facts { slot: u8, tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8>, owned: Vec<(u8, Vec<u8>)> },
     RemoteFrames { slot: u8, run: EncodedRun },
     /// The newest frames the server received of this player's own.
     FrameAck { latest: u32, mask: u32 },
@@ -685,6 +728,9 @@ pub enum ServerMessage {
     /// just before) and the round restarts with everyone once every member has loaded: a
     /// member joined a running campaign.
     CampaignReload { session: u32 },
+    /// Co-op fork (M10): the server's acknowledgement of an owned skater's frames
+    /// ([`ClientMessage::OwnedFrames`]), as [`Self::FrameAck`] is of the player's own.
+    OwnedFrameAck { slot: u8, latest: u32, mask: u32 },
 }
 
 /// A run: its first tick and length, the frames it is coded against as their distance back from
@@ -719,6 +765,42 @@ fn read_run(r: &mut Reader<'_>) -> DecodeResult<EncodedRun> {
 fn read_slot(r: &mut Reader<'_>) -> DecodeResult<u8> {
     let slot = r.u8()?;
     if usize::from(slot) < MAX_PLAYERS { Ok(slot) } else { Err(DecodeError("slot out of range")) }
+}
+
+/// A frame relay slot: a player's, or an owned skater's marked one (`owned::frames_slot`).
+fn read_frames_slot(r: &mut Reader<'_>) -> DecodeResult<u8> {
+    let slot = r.u8()?;
+    match owned::slot_of_frames(slot) {
+        Some(bare) if usize::from(bare) < owned::SLOTS => Ok(slot),
+        None if usize::from(slot) < MAX_PLAYERS => Ok(slot),
+        _ => Err(DecodeError("slot out of range")),
+    }
+}
+
+/// An owned skater's slot in the round: one of the skater manager's rows.
+fn read_owned_slot(r: &mut Reader<'_>) -> DecodeResult<u8> {
+    let slot = r.u8()?;
+    if usize::from(slot) < owned::SLOTS { Ok(slot) } else { Err(DecodeError("owned slot out of range")) }
+}
+
+/// The owned facts of a facts message: at most `owned::MOST` entries, each a round slot and
+/// its coded frame.
+fn write_owned(w: &mut Writer, owned: &[(u8, Vec<u8>)]) {
+    let owned = &owned[..owned.len().min(owned::MOST)];
+    w.varint(owned.len() as u64);
+    for (slot, data) in owned {
+        w.u8(*slot);
+        w.bytes(data);
+    }
+}
+fn read_owned(r: &mut Reader<'_>) -> DecodeResult<Vec<(u8, Vec<u8>)>> {
+    let count = r.len(owned::MOST)?;
+    let mut owned = Vec::with_capacity(count);
+    for _ in 0..count {
+        let slot = read_owned_slot(r)?;
+        owned.push((slot, r.bytes(MAX_FACTS)?.to_vec()));
+    }
+    Ok(owned)
 }
 
 impl ClientMessage {
@@ -779,12 +861,13 @@ impl ClientMessage {
                 w.u8(11);
                 result.write(&mut w);
             }
-            Self::Facts { tick, stint, notes, data } => {
+            Self::Facts { tick, stint, notes, data, owned } => {
                 w.u8(12);
                 w.varint(u64::from(*tick));
                 w.varint(u64::from(*stint));
                 notes.write(&mut w);
                 w.bytes(data);
+                write_owned(&mut w, owned);
             }
             Self::Frames(run) => {
                 w.u8(13);
@@ -847,6 +930,16 @@ impl ClientMessage {
                 w.u64(*user_id);
                 w.u32(*tick);
             }
+            Self::OwnedRecipe { slot, data } => {
+                w.u8(27);
+                w.u8(*slot);
+                w.bytes(&data[..data.len().min(MAX_RECIPE)]);
+            }
+            Self::OwnedFrames { slot, run } => {
+                w.u8(28);
+                w.u8(*slot);
+                write_run(&mut w, run);
+            }
         }
         w.into_vec()
     }
@@ -899,16 +992,13 @@ impl ClientMessage {
             9 => Self::SyncPoint { round: r.varint_u32()? },
             10 => Self::Complete,
             11 => Self::Results(GameResult::read(&mut r)?),
-            12 => Self::Facts { tick: r.varint_u32()?, stint: r.varint_u32()?, notes: FactsNotes::read(&mut r)?, data: r.bytes(MAX_FACTS)?.to_vec() },
+            12 => Self::Facts { tick: r.varint_u32()?, stint: r.varint_u32()?, notes: FactsNotes::read(&mut r)?, data: r.bytes(MAX_FACTS)?.to_vec(), owned: read_owned(&mut r)? },
             13 => return Ok(Self::Frames(read_run(&mut r)?)),
             14 => {
-                let count = r.len(MAX_PLAYERS)?;
+                let count = r.len(MAX_PLAYERS + owned::MOST)?;
                 let mut acks = Vec::with_capacity(count);
                 for _ in 0..count {
-                    let slot = r.u8()?;
-                    if usize::from(slot) >= MAX_PLAYERS {
-                        return Err(DecodeError("slot out of range"));
-                    }
+                    let slot = read_frames_slot(&mut r)?;
                     acks.push((slot, r.varint_u32()?, r.u32()?));
                 }
                 Self::FrameAcks(acks)
@@ -938,6 +1028,11 @@ impl ClientMessage {
             24 => Self::Stalled { user_id: r.u64()?, tick: r.u32()? },
             25 => Self::World { tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
             26 => Self::CampaignSave { session: r.varint_u32()?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
+            27 => Self::OwnedRecipe { slot: read_owned_slot(&mut r)?, data: r.bytes(MAX_RECIPE)?.to_vec() },
+            28 => {
+                let slot = read_owned_slot(&mut r)?;
+                return Ok(Self::OwnedFrames { slot, run: read_run(&mut r)? });
+            }
             _ => return Err(DecodeError("unknown client message")),
         };
         r.finish()?;
@@ -1042,13 +1137,14 @@ impl ServerMessage {
                 w.u8(16);
                 w.u8(*reason);
             }
-            Self::Facts { slot, tick, stint, notes, data } => {
+            Self::Facts { slot, tick, stint, notes, data, owned } => {
                 w.u8(17);
                 w.u8(*slot);
                 w.varint(u64::from(*tick));
                 w.varint(u64::from(*stint));
                 notes.write(&mut w);
                 w.bytes(data);
+                write_owned(&mut w, owned);
             }
             Self::RemoteFrames { slot, run } => {
                 w.u8(18);
@@ -1111,6 +1207,12 @@ impl ServerMessage {
             Self::CampaignReload { session } => {
                 w.u8(29);
                 w.varint(u64::from(*session));
+            }
+            Self::OwnedFrameAck { slot, latest, mask } => {
+                w.u8(30);
+                w.u8(*slot);
+                w.varint(u64::from(*latest));
+                w.u32(*mask);
             }
         }
         w.into_vec()
@@ -1178,9 +1280,9 @@ impl ServerMessage {
             14 => Self::ExitPostChallenge,
             15 => Self::GameChange { challenge_type: r.u8()?, challenge_key: r.u64()?, delay: r.u32()? },
             16 => Self::Kicked { reason: r.u8()? },
-            17 => Self::Facts { slot: read_slot(&mut r)?, tick: r.varint_u32()?, stint: r.varint_u32()?, notes: FactsNotes::read(&mut r)?, data: r.bytes(MAX_FACTS)?.to_vec() },
+            17 => Self::Facts { slot: read_slot(&mut r)?, tick: r.varint_u32()?, stint: r.varint_u32()?, notes: FactsNotes::read(&mut r)?, data: r.bytes(MAX_FACTS)?.to_vec(), owned: read_owned(&mut r)? },
             18 => {
-                let slot = read_slot(&mut r)?;
+                let slot = read_frames_slot(&mut r)?;
                 return Ok(Self::RemoteFrames { slot, run: read_run(&mut r)? });
             }
             19 => Self::FrameAck { latest: r.varint_u32()?, mask: r.u32()? },
@@ -1203,6 +1305,7 @@ impl ServerMessage {
             27 => Self::RemoteWorld { slot: read_slot(&mut r)?, tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
             28 => Self::CampaignSave { slot: read_slot(&mut r)?, session: r.varint_u32()?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
             29 => Self::CampaignReload { session: r.varint_u32()? },
+            30 => Self::OwnedFrameAck { slot: read_owned_slot(&mut r)?, latest: r.varint_u32()?, mask: r.u32()? },
             _ => return Err(DecodeError("unknown server message")),
         };
         r.finish()?;
@@ -1213,6 +1316,25 @@ impl ServerMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_owned_skaters_names_round_trip_and_stand_apart_from_the_players() {
+        for slot in 0..=8_u8 {
+            assert_eq!(owned::slot_of_frames(owned::frames_slot(slot)), Some(slot));
+            assert_eq!(owned::slot_of_id(owned::skater_id(slot)), Some(slot));
+            assert_eq!(owned::slot_of_frames(slot), None);
+            assert_eq!(owned::slot_of_id(u64::from(slot)), None);
+        }
+        assert_eq!(owned::slot_of_id(0x1234_5678_9abc_def0), None);
+        // Slot 8 (the ninth row) travels on every owned path; slot 9 on none.
+        let run = EncodedRun { tick: 1, count: 1, frame: None, frame_before: None, sample: None, sample_before: None, payload: vec![] };
+        assert!(ServerMessage::decode(&ServerMessage::RemoteFrames { slot: owned::frames_slot(8), run: run.clone() }.encode()).is_ok());
+        assert!(ServerMessage::decode(&ServerMessage::RemoteFrames { slot: owned::frames_slot(9), run: run.clone() }.encode()).is_err());
+        assert!(ClientMessage::decode(&ClientMessage::OwnedFrames { slot: 8, run: run.clone() }.encode()).is_ok());
+        assert!(ClientMessage::decode(&ClientMessage::OwnedFrames { slot: 9, run }.encode()).is_err());
+        assert!(ClientMessage::decode(&ClientMessage::Facts { tick: 1, stint: 0, notes: FactsNotes::default(), data: vec![], owned: vec![(8, vec![])] }.encode()).is_ok());
+        assert!(ClientMessage::decode(&ClientMessage::Facts { tick: 1, stint: 0, notes: FactsNotes::default(), data: vec![], owned: vec![(9, vec![])] }.encode()).is_err());
+    }
 
     fn attributes() -> GameAttributes {
         GameAttributes {
@@ -1249,8 +1371,10 @@ mod tests {
             ClientMessage::SyncPoint { round: 3 },
             ClientMessage::Complete,
             ClientMessage::Results(GameResult { event_time: 12.5, score: -3, finish_reason: 1, ranking: 2, players_choice: true }),
-            ClientMessage::Facts { tick: 600, stint: 2, notes: FactsNotes::default(), data: vec![9; 40] },
-            ClientMessage::Facts { tick: 601, stint: 3, notes: FactsNotes { votes: vec![(1, 3), (2, -1)], left: vec![4], syncing: false, presented: vec![Presented::Nis { seq: 7, notification: 1 }, Presented::Speech { character: 40, id: -4004, seq: 2 }, Presented::Fmv { seq: 1 }], prompts: vec![Prompt { seq: 1, kind: 1, value: 0 }, Prompt { seq: 2, kind: 8, value: -1 }], outcomes: vec![Outcome { seq: 1, kind: 3, activity: 0x1b0b_db3e_8c09_9e26, value: 0 }, Outcome { seq: 2, kind: 1, activity: 7, value: -3 }] }, data: vec![] },
+            ClientMessage::Facts { tick: 600, stint: 2, notes: FactsNotes::default(), data: vec![9; 40], owned: vec![(2, vec![3, 4]), (3, vec![])] },
+            ClientMessage::OwnedRecipe { slot: 2, data: vec![5; 300] },
+            ClientMessage::OwnedFrames { slot: 3, run: EncodedRun { tick: 70, count: 2, frame: Some(66), frame_before: None, sample: None, sample_before: None, payload: vec![1, 2] } },
+            ClientMessage::Facts { tick: 601, stint: 3, notes: FactsNotes { votes: vec![(1, 3), (2, -1)], left: vec![4], syncing: false, presented: vec![Presented::Nis { seq: 7, notification: 1 }, Presented::Speech { character: 40, id: -4004, seq: 2 }, Presented::Fmv { seq: 1 }], prompts: vec![Prompt { seq: 1, kind: 1, value: 0 }, Prompt { seq: 2, kind: 8, value: -1 }], outcomes: vec![Outcome { seq: 1, kind: 3, activity: 0x1b0b_db3e_8c09_9e26, value: 0 }, Outcome { seq: 2, kind: 1, activity: 7, value: -3 }] }, data: vec![], owned: vec![] },
             ClientMessage::Frames(EncodedRun { tick: 70, count: 3, frame: Some(66), frame_before: Some(65), sample: None, sample_before: Some(60), payload: vec![5, 6, 7] }),
             ClientMessage::FrameAcks(vec![(1, 500, 0xffff), (3, 2, 0)]),
             ClientMessage::Ping { time: 123_456 },
@@ -1297,7 +1421,9 @@ mod tests {
             ServerMessage::ExitPostChallenge,
             ServerMessage::GameChange { challenge_type: challenge::JAM, challenge_key: 5, delay: 5000 },
             ServerMessage::Kicked { reason: leave::KICKED_BY_HOST },
-            ServerMessage::Facts { slot: 2, tick: 10, stint: 1, notes: FactsNotes { votes: vec![(0, 1)], left: vec![], syncing: true, presented: vec![], prompts: vec![Prompt { seq: 9, kind: 3, value: 2 }], outcomes: vec![] }, data: vec![1] },
+            ServerMessage::Facts { slot: 2, tick: 10, stint: 1, notes: FactsNotes { votes: vec![(0, 1)], left: vec![], syncing: true, presented: vec![], prompts: vec![Prompt { seq: 9, kind: 3, value: 2 }], outcomes: vec![] }, data: vec![1], owned: vec![(2, vec![7])] },
+            ServerMessage::RemoteFrames { slot: owned::frames_slot(2), run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: None, sample_before: None, payload: vec![9] } },
+            ServerMessage::OwnedFrameAck { slot: 2, latest: 44, mask: 0xff },
             ServerMessage::RemoteFrames { slot: 5, run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: Some(8), sample_before: Some(6), payload: vec![] } },
             ServerMessage::FrameAck { latest: 44, mask: 3 },
             ServerMessage::Pong { time: 8 },

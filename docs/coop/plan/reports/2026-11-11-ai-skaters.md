@@ -90,8 +90,47 @@ threshold now. Two pre-existing gaps are recorded (63, 64). What is not shared i
 itself: a S.K.A.T.E. still plays its rounds once per console; the first human to win ends it
 for both.
 
+## The evening: one owner for the AI skaters (M10)
+
+The residue of the afternoon was two pros: each console drove its own copy, and a S.K.A.T.E.
+read its own leader. M10 makes the challenge AI skaters one console's, the first player's
+(`CampaignWorld::ai_owner`). The owner runs them as the career does. Its facts carry their
+completed outputs at their slots (`Facts.owned`, protocol 123), delivered with its own frame at
+the tick on every console, so every script reads one AI run. An AI slot's first frame in a
+tick's frames is `cMsgSkaterCreated` to the scripts and its last `cMsgSkaterDestroyed`, the same
+tick everywhere, the owner's included; the local challenge queue's skater messages are dropped
+in a campaign. The AI's body reaches the other consoles as the remote players' do: its look once
+per spawn (`OwnedRecipe`), its replay frames in runs (`OwnedFrames`, relayed under a marked slot,
+acknowledged by slot), a `RemoteSkater` puppet under a marked user id (`protocol::owned`). The
+non-owner takes each spawn's row and slot and builds no actor; a script's camera switch to the AI
+follows the puppet there, with the owner's camera riding the AI's frames while the owner follows
+it ([ai-skaters](../topics/ai-skaters.md)).
+
+**The first probe** (`../bench/evidence/probe/2026-11-11-crawl-m10-probe.md`, the S.K.A.T.E.,
+the follow `m_4b_01` and the photo `m_5a_01`): seat 2 built no actor ("is its owner's: no actor
+here"), built each AI's character from seat 1's look in 12 to 15 ms and showed it; both seats
+posted each AI's creation at the same round tick (2134, 2381, 1474); the puppet played seat 1's
+pro at pace 1.000, four to five ticks behind, never held at its newest sample. The follow and
+the photo ran in step as before. The S.K.A.T.E. stopped seat 2 at `round_setup`: the script's
+`SetLocalIndex` to the leader's slot found no actor there ("Missing local party skater"), the
+fix above.
+
+**The review** found twelve things, nine applied before the proof build: the streamed flag
+leaking past a kicked or quit campaign into the next offline career (every later mission would
+have spawned no pro); slot 8 accepted by the owned messages and refused by the frame relay's
+reader (one bound now, the manager's nine rows); the mission's end converting the pro to an
+ambient skater on the owner alone, so the two consoles' scripts parted on the AI's destruction
+(a campaign unspawns it everywhere); a teleporting tick sent without a pose sample; the look
+keyed by the actor's address (now the recipe, and sent again at the slot's creation); the
+client's receivers of a leaver's owned streams kept; a destroyed skater's unsent frames
+prepended to the next spawn's run; the owner's standing ticks dropping the AI (the AI stands
+with its owner now); a silent truncation past eight streams (traced, the coders unstepped).
+Recorded, not fixed: the server keeps a round's owned looks for joiners (a stale one builds a
+puppet that never shows), and the owner's scripts now read the AI's shared frame (position at
+the tester, no gesture), as the other consoles do.
+
 ## Next
 
-Play on this build: a follow mission, a photo mission and a demo with two people, watching the
-pro and the AI's copies. The competing kinds' design (S.K.A.T.E., jams, contests). The demo's
-start spots. The go-tos' arrival triggers in play (46).
+Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on
+both screens (silent on the second, 66). The owner leaving (65). The demo's start spots. The
+go-tos' arrival triggers in play (46).

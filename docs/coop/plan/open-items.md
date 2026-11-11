@@ -297,6 +297,10 @@ Front page: [README](../README.md).
     `challenge_cleanup` together (`../bench/evidence/probe/2026-11-11-m9-one-seat-win-*.log`).
     The AI's run itself stays each console's own; a S.K.A.T.E. still plays its rounds twice,
     once per console, and the first human to win (or every human, by the rule) ends it for all.
+    M10 (2026-11-11) takes the first way as well: the first player's console owns the challenge
+    AI skaters, its facts carry their outputs and the others show puppets of its frames
+    ([ai-skaters](topics/ai-skaters.md)); the notes stay, for the decisions a script makes
+    about its own player.
 63. A player who leaves a round and rejoins (a new stint, its note numbers starting again at 1)
     has its first prompts and outcomes dropped on the consoles that keep the old high-water
     marks (`prompts_applied`, `outcomes_applied` in `Round`, never reset for a slot). Seen in the
@@ -306,3 +310,13 @@ Front page: [README](../README.md).
     count of copies (`Everyone`'s completion, `Anyone`'s failure, the won and lost notes') is
     one more than the players left and can never be met. Pre-existing in the objective copies
     (`siblings.len()`), noted in the M9 review; the leave handling is where to shrink it.
+65. The challenge AI skaters' owner is the first player (`CampaignWorld::ai_owner`, M10) and
+    never changes: when that player leaves the round, its AI skaters' facts and frames stop,
+    the other consoles' scripts see the AI's slot destroyed (its last frame) and the mission
+    has no AI until the round restarts with the owner back (M8's reload). A handoff to the next
+    player (the owner's AI state is not streamed, so the new owner would spawn the AI afresh
+    at its last streamed position) is the design's next step if play reaches it.
+66. An owned AI skater's puppet is silent: no audio record travels with its frames (the
+    remote players' do), so the pro's wheels and landings sound only on the owner's console.
+    The owner's `controller_audio` record is the thing to carry, as the player's own
+    `AudioSkater` record is.

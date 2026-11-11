@@ -250,6 +250,16 @@ pub struct CampaignWorld {
     pub chase_on: bool,
 }
 
+impl CampaignWorld {
+    /// M10: the player whose console owns the round's challenge AI skaters (simulates them,
+    /// streams their frames and facts): the first player of the table. One rule, read here and
+    /// nowhere else; a handoff when that player leaves is owed (open item 65).
+    #[must_use]
+    pub fn ai_owner(&self) -> i32 {
+        self.players.iter().copied().min().unwrap_or(0)
+    }
+}
+
 /// A small JSON reader for the rules file: objects, strings, numbers, booleans and null.
 pub mod json {
     use std::collections::BTreeMap;

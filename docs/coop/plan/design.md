@@ -331,5 +331,17 @@ shared is the AI's run itself: two consoles' copies of one pro skate their own p
 streamed, owned AI skater remains the alternative if play finds the copies' difference
 matters.
 
+**The AI skaters: one owner (2026-11-11, M10).** A campaign round's challenge AI skaters are
+one console's, the first player's (`CampaignWorld::ai_owner`): it simulates them as the career
+does; its facts carry their completed outputs at their slots (`Facts.owned`, protocol 123),
+delivered with its own frame at the tick on every console, so every script reads one AI run;
+their creation and destruction are the frames' (an AI slot's first and last frame, the same
+tick everywhere); and their bodies reach the other consoles as the remote players' do (the look
+once, replay frames in runs, a `RemoteSkater` puppet), under marked names apart from the
+players' (`protocol::owned`). The other consoles take each spawn's row and slot and build no
+actor. Chosen over shared AI simulation (the determinism §2 set aside) and over keeping each
+console's copies (M9's residue: two pros skating, and the competing kinds settled only by
+notes). A handoff when the owner leaves is owed ([ai-skaters](topics/ai-skaters.md)).
+
 **Route (2026-11-10):** D, distributed ownership. A was the first choice the same day and was
 set aside for the reasons in §2; its checksum remains available as a test instrument.

@@ -36,7 +36,7 @@ pub(crate) enum ChallengePayload {
     Marker { set: bool, player_id: i32 },
 }
 impl ChallengeMessage {
-    fn new(payload: ChallengePayload) -> Self {
+    pub(crate) fn new(payload: ChallengePayload) -> Self {
         Self {
             kind: match payload {
                 ChallengePayload::Skater { notification: SkaterNotification::Created, .. } => (-340_057_085_i32) as u32,
