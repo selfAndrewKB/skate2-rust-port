@@ -33,6 +33,10 @@ in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
+Play on the `coop-v0.9.2` lobby build (the puppets' knockdowns and getups in the open world);
+the crawl's win as a state rather than a tick; the demo kind (open items 49, 50); the AI player
+index (48) when the port's AI skaters land. The overnight report of 2026-11-11 says where
+everything stands: [reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md).
 Play, and what it finds. Milestones and their done-when: [design](plan/design.md) §5; M0 to M8 are
 tagged ([versions](plan/versions.md)).
 
@@ -45,6 +49,8 @@ tagged ([versions](plan/versions.md)).
 - [plan/tooling.md](plan/tooling.md): the bench, the switches, building; per-machine notes in
   [setup-macos.md](plan/setup-macos.md) and [setup-windows.md](plan/setup-windows.md).
 - [plan/qa-matrix.md](plan/qa-matrix.md): seats × machines × situations, exercised or not.
+- [plan/reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md): the overnight
+  report, 2026-11-10 to 11: the crawl recorded, the puppets' stand-up fixed, what is next.
 - [plan/missions.md](plan/missions.md): the mission ledger, every campaign mission's standing in
   co-op from the crawl's logs, regenerated after every crawl; the details per mission in
   [plan/missions-detail.md](plan/missions-detail.md).
