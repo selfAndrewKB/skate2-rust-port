@@ -93,3 +93,14 @@ the owner, 0 to 2 confirmed knockdowns; handoffs, promotions, demotions 0 throug
 round ticks 0 in all but four missions (12 at most, `m_1b_01_goto_school`), starved 0 in all but
 three (10 at most). The ambient AI skaters are not in these counts: each console spawns its own
 (open item 53).
+
+The census audit over the same logs (`tools/coop/sync_audit.py`, folded into the ledger's "census
+audit" table): 103 missions with dumps, 7,543 dumps, 109,590 pedestrian pairs at the same round
+tick; ownership never clashed (0 pairs with both seats owning); model agreed in every pair.
+Compared at the same tick (so including the stream's delay, which the live audit does not),
+position agreed within 0.5 m in a median 99.2 % of pairs (89 % at worst, the Slappy's photo set,
+where the pedestrians walk), yaw within 5° in a median 91 % (69 % at worst), speed within
+0.5 m/s in a median 71 % (51 % at worst; open item 39); flags and `down` agreed in 100 % in all
+but six and two missions (the demo at 23 % and 33 %, open item 50). Entities one seat listed and
+the other had not yet spawned or had culled: 1,135 on seat 1, 618 on seat 2. The divergences
+still open at a mission's last dump were speed 1,515, position 460, yaw 308, flags 22, down 11.

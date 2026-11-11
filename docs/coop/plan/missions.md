@@ -115,7 +115,7 @@ Kind, from `challenge_global_data.Global`: main (3, 4: executed and won), locati
 | `m_6a_01_follow_spillway` | follow | main | Anyone | STOPPED | `wait_for_assetload` @901 | port: unknown locator | yes | 2026-11-10-rest2: STOPPED | as `m_1x_01_ftl_ccenter_dlc` (`m_6a_01_follow_spillway_startlocation01`). |
 | `m_6c_01_profilm_soho` | pro film † | main | Anyone | STOPPED | `spawn_player` @1590 | port: AI skater | yes | 2026-11-10-rest2: STOPPED | as `m_08_01_photo_team_shot_1`. |
 | `m_6d_01_profilm_classic` | pro film † | main | Anyone | STOPPED | `spawn_player` @1710 | port: AI skater | yes | 2026-11-10-rest2: STOPPED | as `m_08_01_photo_team_shot_1`. |
-| `m_6p_01_demo_first_job` | demo † | main | Anyone | STOPPED | `run_round` @1799 | co-op: out of step | no | 2026-11-10-rest2: STOPPED | the same path on both seats, out of step by 58 ticks (`run_round` entered at 1799 on seat 1, 1741 on seat 2); from tick 2400 on the audit sees 800 samples a window at equal positions with unequal flags (7 to 200 of 800 equal), the demo's own entities (ids `120000a8`–`120000ab`). Open items 49, 50. |
+| `m_6p_01_demo_first_job` | demo † | main | Anyone | STOPPED | `run_round` @1799 | co-op: out of step | no | 2026-11-10-rest2: STOPPED | the same path on both seats, out of step by 58 ticks (`run_round` entered at 1799 on seat 1, 1741 on seat 2); from tick 1543 the skaters stand inside the other seat's spectators, contacts fly every three ticks, the owners' pedestrians stay up and the puppets stay knocked down: `down` agrees in 33 % of census pairs, flags in 23 %. Open items 49, 50. |
 | `m_6p_01_team_1` | spot film | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_6p_01_thrasher_01` | photo (team) † | main | Anyone | PASS (no save) | — | — | yes | 2026-11-10-rest2: PASS (no save) |  |
 | `m_6p_02_film_pool_team_02` | pro film † | none | Anyone (table) | PASS | — | — | yes | 2026-11-10-rest2: PASS |  |
@@ -275,6 +275,128 @@ The live audit compares every streamed pedestrian's puppet with its owner's samp
 | `m_8a_03_film_team_ender_3` | 2064 | 100.0 % | 89.8 % | 79.8 % | 100.0 % | 0.19 m / 20° | 17 (12 / 5) | 6228 | 0 | 0/0/0 | 0 | 0 / 0 | 1921 |
 | `m_9a_09_photo_dlc` | 4351 | 100.0 % | 93.4 % | 76.6 % | 100.0 % | 0.73 m / 19° | 19 (12 / 9) | 6205 | 0 | 0/0/0 | 0 | 0 / 0 | 1800 |
 
+### The census audit, per mission (both seats' dumps paired)
+
+`tools/coop/sync_audit.py` over the two kept logs: every pedestrian both seats listed at the same round tick (one dump every 60 ticks), each shared field compared (position 0.5 m, yaw 5°, speed 0.5 m/s, flags, model and down exact); "one seat only" counts entities the other seat had not spawned or had culled; "open" counts the field divergences still standing at the last dump. The graph and the moods are local by design and not compared.
+
+| Mission | Dumps | Paired | One seat only (1 / 2) | Position | Yaw | Speed | Flags | Down | Model | Owner clash | Open at end |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `m_08_01_film_team_ender_1` | 89 | 1321 | 15 / 27 | 99.5 % (0.6 m) | 90.7 % (52.8°) | 70.5 % (11.1 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 20 |
+| `m_08_01_photo_team_shot_1` | 164 | 2854 | 11 / 3 | 99.2 % (4.0 m) | 91.8 % (56.4°) | 78.3 % (24.1 m/s) | 95.9 % | 98.1 % | 100.0 % | 0 | 29 |
+| `m_08_01_teleport_trainingfacility_in` | 43 | 608 | 10 / 5 | 100.0 % | 91.9 % (55.0°) | 72.5 % (2.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
+| `m_08_01_teleport_trainingfacility_out` | 43 | 581 | 7 / 2 | 100.0 % | 91.7 % (48.5°) | 78.7 % (2.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 5 |
+| `m_1a_01_goto_slappys` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_02_open_up` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_03_tutorial_fliptricks` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_04_tutorial_manuals` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_05_photo_rail` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_05_tutorial_scoring` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_06_photo_puzzle` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_06_tutorial_offboard` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_07_follow_slappy` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_07_tutorial_airtricks` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1a_08_tutorial_grinds` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1b_01_goto_school` | — | — | — | — | — | — | — | — | — | — | — |
+| `m_1b_05_goto_mikey` | 22 | 20 | 1 / 1 | 100.0 % | 95.0 % (37.5°) | 70.0 % (2.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 0 |
+| `m_1x_01_ftl_ccenter_dlc` | 162 | 364 | 2 / 1 | 100.0 % | 90.9 % (55.0°) | 75.8 % (3.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 4 |
+| `m_1x_01_photo_ccenter_dlc` | 26 | 26 | 0 / 0 | 100.0 % | 69.2 % (34.8°) | 73.1 % (3.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 1 |
+| `m_1x_01_spotfilm_ccenter_dlc` | 42 | 65 | 1 / 1 | 100.0 % | 84.6 % (34.6°) | 63.1 % (2.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 2 |
+| `m_2a_01` | 122 | 1602 | 3 / 3 | 98.9 % (9.0 m) | 91.9 % (56.6°) | 79.0 % (12.3 m/s) | 98.4 % | 100.0 % | 100.0 % | 0 | 17 |
+| `m_2a_01_goto` | 41 | 40 | 1 / 0 | 100.0 % | 90.0 % (11.0°) | 65.0 % (2.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 0 |
+| `m_2a_01_tutorial_slappy` | 47 | 165 | 3 / 0 | 100.0 % | 87.3 % (46.5°) | 74.5 % (2.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 2 |
+| `m_2a_02` | 34 | 223 | 3 / 1 | 96.4 % (0.8 m) | 91.0 % (34.0°) | 73.1 % (13.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 10 |
+| `m_2a_03_photo_sm_security_jerks` | 42 | 188 | 4 / 1 | 96.3 % (10.0 m) | 95.7 % (29.8°) | 71.8 % (15.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 5 |
+| `m_2a_04_spotfilm_sm_security_jerks` | 40 | 205 | 2 / 1 | 94.6 % (10.4 m) | 93.2 % (38.3°) | 70.2 % (14.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 12 |
+| `m_2b_01_goto_permission_pool` | 42 | 461 | 5 / 2 | 99.1 % (3.0 m) | 88.5 % (72.8°) | 54.0 % (3.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 24 |
+| `m_2c_01_goto_find_pool` | 42 | 622 | 16 / 1 | 99.2 % (1.5 m) | 88.1 % (51.2°) | 63.7 % (6.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 32 |
+| `m_2c_02_goto_find_pool` | 43 | 469 | 16 / 12 | 98.7 % (5.4 m) | 90.6 % (85.1°) | 71.4 % (9.1 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 29 |
+| `m_2c_03_goto_find_pool` | 41 | 477 | 9 / 1 | 98.7 % (11.3 m) | 89.7 % (59.6°) | 67.5 % (3.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 15 |
+| `m_2c_04_goto_find_pool` | 43 | 479 | 15 / 6 | 100.0 % | 88.3 % (35.6°) | 71.0 % (3.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 13 |
+| `m_2c_05_goto_find_pool` | 43 | 638 | 5 / 2 | 99.4 % (5.7 m) | 91.2 % (128.4°) | 76.3 % (15.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 19 |
+| `m_2c_06_goto_find_pool` | 42 | 627 | 15 / 7 | 98.7 % (5.4 m) | 83.3 % (115.3°) | 71.1 % (1448.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 34 |
+| `m_2d_01_goto_return` | 43 | 707 | 49 / 11 | 98.4 % (5.1 m) | 87.0 % (174.6°) | 71.7 % (7.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 36 |
+| `m_2d_01_photo_tm_burnette` | 43 | 769 | 12 / 2 | 100.0 % | 91.8 % (62.2°) | 68.1 % (3.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 18 |
+| `m_2e_01_photo_tm_burnette` | 42 | 653 | 14 / 14 | 100.0 % | 93.0 % (33.8°) | 73.8 % (3.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 14 |
+| `m_2e_02_photo_tm_burnett` | 41 | 403 | 14 / 1 | 90.8 % (13.1 m) | 96.3 % (25.3°) | 50.9 % (40.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 29 |
+| `m_2e_03_photo_tm_burnett` | 42 | 544 | 14 / 4 | 92.1 % (11.4 m) | 87.9 % (51.0°) | 64.5 % (12.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 36 |
+| `m_2e_04_photo_tm_burnett` | 42 | 443 | 16 / 9 | 89.8 % (13.4 m) | 93.5 % (34.0°) | 57.6 % (15.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 25 |
+| `m_2e_05_photo_tm_burnette` | 42 | 655 | 16 / 3 | 89.9 % (12.7 m) | 91.0 % (65.2°) | 53.9 % (259.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 53 |
+| `m_2e_06_photo_tm_burnette` | 42 | 385 | 13 / 5 | 89.6 % (11.2 m) | 93.2 % (50.3°) | 60.3 % (12.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 29 |
+| `m_3a_01_goto` | 42 | 693 | 13 / 1 | 100.0 % | 92.5 % (53.8°) | 66.1 % (96.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 25 |
+| `m_3a_01_pro_duffy` | 41 | 393 | 12 / 0 | 93.1 % (8.7 m) | 90.6 % (54.8°) | 56.2 % (13.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 27 |
+| `m_3a_02_pro_ladd` | 34 | 372 | 15 / 4 | 99.5 % (1.6 m) | 93.8 % (51.2°) | 69.6 % (10.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 16 |
+| `m_3a_03_besttrick_danny` | 15 | 203 | 14 / 1 | 100.0 % | 88.7 % (40.6°) | 67.0 % (3.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
+| `m_4a_01_skate_carroll_koston` | 61 | 454 | 15 / 3 | 92.1 % (11.4 m) | 92.5 % (32.9°) | 58.1 % (13.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 29 |
+| `m_4a_01_skate_carroll_koston_ol` | 42 | 679 | 15 / 3 | 100.0 % | 94.8 % (44.8°) | 62.6 % (4.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 14 |
+| `m_4b_01_pro_navarrette_1` | 158 | 2796 | 16 / 7 | 98.2 % (12.7 m) | 88.6 % (82.3°) | 69.2 % (28.7 m/s) | 98.8 % | 98.8 % | 100.0 % | 0 | 60 |
+| `m_4b_02_pro_navarrette_2` | 42 | 392 | 13 / 14 | 98.5 % (6.6 m) | 91.6 % (72.3°) | 76.3 % (10.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 23 |
+| `m_4c_01_pro_cardiel` | 42 | 525 | 16 / 0 | 97.3 % (5.6 m) | 89.7 % (34.0°) | 66.1 % (14.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 43 |
+| `m_4d_01_goto_dill_dyrdek` | 42 | 564 | 15 / 0 | 98.6 % (5.5 m) | 89.9 % (107.7°) | 68.8 % (82.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 31 |
+| `m_4d_01_spotfilm_dill_dyrdek` | 43 | 558 | 11 / 1 | 99.1 % (1.2 m) | 84.8 % (120.3°) | 72.8 % (4.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 26 |
+| `m_4d_02_spotfilm_dill_dyrdek` | 79 | 1212 | 13 / 19 | 100.0 % | 88.9 % (57.1°) | 74.6 % (3.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 16 |
+| `m_4e_01_braydon_tk_ftl_part1` | 144 | 2542 | 12 / 8 | 99.1 % (5.0 m) | 88.8 % (60.5°) | 68.6 % (37.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 46 |
+| `m_4e_01_spotfilm_braydon_kennedy_2` | 56 | 650 | 16 / 1 | 95.8 % (5.7 m) | 89.1 % (38.3°) | 64.9 % (37.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 30 |
+| `m_4f_01_pro_brown` | 43 | 477 | 11 / 0 | 99.0 % (3.3 m) | 89.9 % (42.1°) | 70.0 % (7.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 33 |
+| `m_4g_01_spotfilm_johnson` | 143 | 1871 | 13 / 4 | 98.2 % (4.6 m) | 93.6 % (81.3°) | 67.5 % (16.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 34 |
+| `m_4h_01_pro_appleyard` | 150 | 2529 | 13 / 6 | 98.7 % (5.0 m) | 90.9 % (72.4°) | 78.3 % (10.5 m/s) | 99.9 % | 100.0 % | 100.0 % | 0 | 33 |
+| `m_4i_01_spotfilm_barbee` | 138 | 2842 | 12 / 7 | 98.9 % (5.7 m) | 91.1 % (61.3°) | 74.8 % (12.8 m/s) | 94.5 % | 100.0 % | 100.0 % | 0 | 42 |
+| `m_4j_01_pro_busenitz` | 147 | 2457 | 13 / 3 | 97.6 % (7.2 m) | 90.1 % (73.1°) | 77.0 % (13.3 m/s) | 98.8 % | 99.5 % | 100.0 % | 0 | 60 |
+| `m_4k_01_spotfilm_haslam` | 143 | 2960 | 14 / 5 | 98.2 % (2.1 m) | 88.1 % (70.2°) | 74.7 % (37.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 48 |
+| `m_4l_01_pro_rattray_cole_1` | 118 | 2203 | 10 / 5 | 98.7 % (7.5 m) | 92.1 % (114.0°) | 76.8 % (14.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 38 |
+| `m_4m_01_pro_rattray_cole_2` | 114 | 1999 | 14 / 2 | 98.6 % (5.5 m) | 93.3 % (58.5°) | 70.6 % (37.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 40 |
+| `m_4n_01_lucas_puig` | 144 | 2911 | 17 / 8 | 99.0 % (6.8 m) | 92.3 % (68.9°) | 77.3 % (15.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 38 |
+| `m_5a_01_photo_thrasher` | 163 | 2305 | 14 / 9 | 98.4 % (5.1 m) | 90.4 % (67.9°) | 68.5 % (13.3 m/s) | 96.1 % | 98.0 % | 100.0 % | 0 | 59 |
+| `m_5a_02_photo_thrasher` | 15 | 135 | 9 / 2 | 100.0 % | 84.4 % (34.0°) | 68.9 % (2.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 5 |
+| `m_5a_03_photo_thrasher_cardiel` | 15 | 191 | 7 / 0 | 100.0 % | 90.1 % (24.5°) | 71.7 % (3.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 8 |
+| `m_5a_04_thrasher_cole` | 15 | 141 | 8 / 0 | 100.0 % | 84.4 % (38.2°) | 77.3 % (1.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 6 |
+| `m_5a_05_photo_koston` | 15 | 156 | 7 / 1 | 100.0 % | 89.1 % (34.0°) | 64.7 % (3.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
+| `m_5a_05_photo_thrasher_brown` | 162 | 1858 | 16 / 2 | 98.0 % (14.3 m) | 94.2 % (27.7°) | 78.2 % (13.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 33 |
+| `m_5b_01_photo_sbm_puig` | 162 | 3377 | 21 / 2 | 98.9 % (16.6 m) | 91.6 % (70.0°) | 76.7 % (49.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 46 |
+| `m_5b_02_photo_sbm_braydon` | 162 | 3124 | 18 / 7 | 98.7 % (15.6 m) | 92.1 % (54.1°) | 70.4 % (37.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 45 |
+| `m_5b_03_photo_sbm_johnson` | 15 | 180 | 10 / 0 | 100.0 % | 88.3 % (34.1°) | 81.7 % (2.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 9 |
+| `m_5b_04_photo_sbm_appleyard` | 163 | 2811 | 21 / 8 | 98.9 % (16.9 m) | 90.8 % (50.3°) | 58.4 % (16.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 49 |
+| `m_6a_01_filmfriend_70s` | 160 | 2534 | 10 / 4 | 98.6 % (5.6 m) | 89.9 % (54.6°) | 71.7 % (40.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 48 |
+| `m_6a_01_follow_spillway` | 164 | 2714 | 13 / 6 | 99.9 % (2.0 m) | 91.5 % (57.1°) | 73.7 % (17.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 25 |
+| `m_6c_01_profilm_soho` | 162 | 2553 | 9 / 5 | 98.9 % (5.2 m) | 91.5 % (59.5°) | 73.6 % (82.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 48 |
+| `m_6d_01_profilm_classic` | 156 | 2551 | 10 / 10 | 98.6 % (4.0 m) | 91.8 % (49.1°) | 77.0 % (46.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 33 |
+| `m_6p_01_demo_first_job` | 153 | 1262 | 9 / 8 | 100.0 % | 98.0 % (51.1°) | 95.8 % (2.4 m/s) | 22.8 % | 33.0 % | 100.0 % | 0 | 18 |
+| `m_6p_01_team_1` | 60 | 684 | 11 / 18 | 100.0 % | 92.0 % (72.1°) | 72.2 % (15.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 19 |
+| `m_6p_01_thrasher_01` | 42 | 513 | 14 / 5 | 93.4 % (5.5 m) | 89.7 % (35.2°) | 57.7 % (37.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 33 |
+| `m_6p_02_film_pool_team_02` | 43 | 608 | 9 / 0 | 100.0 % | 88.2 % (57.1°) | 75.7 % (5.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
+| `m_6p_02_photo_pool_thrasher_2` | 42 | 435 | 11 / 1 | 91.3 % (5.5 m) | 92.0 % (44.0°) | 60.9 % (11.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 28 |
+| `m_6p_03_demo_pool_team_03` | 163 | 2908 | 9 / 24 | 100.0 % | 92.6 % (54.1°) | 66.5 % (4.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 31 |
+| `m_6p_03_film_team_03` | 21 | 232 | 6 / 6 | 89.2 % (7.5 m) | 92.7 % (71.7°) | 61.2 % (15.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 22 |
+| `m_6p_03_photo_pool_thrasher_3` | 42 | 370 | 9 / 3 | 90.3 % (7.4 m) | 83.8 % (53.5°) | 56.8 % (15.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 26 |
+| `m_6p_04_photo_pool_thrasher_4` | 42 | 417 | 10 / 5 | 92.6 % (5.6 m) | 94.2 % (33.3°) | 70.3 % (10.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 25 |
+| `m_6p_05_film_team_05` | 163 | 2833 | 13 / 0 | 100.0 % | 90.9 % (64.5°) | 81.0 % (3.2 m/s) | 99.8 % | 99.8 % | 100.0 % | 0 | 14 |
+| `m_6p_06_film_pool_team_6` | 43 | 596 | 9 / 0 | 99.8 % (1.2 m) | 89.4 % (49.1°) | 77.5 % (3.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 3 |
+| `m_6p_06_photo_pool_sm_1` | 42 | 373 | 12 / 26 | 91.7 % (14.3 m) | 91.7 % (39.0°) | 66.5 % (12.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 43 |
+| `m_6p_07_film_pool_team_7` | 44 | 589 | 7 / 16 | 100.0 % | 94.9 % (33.7°) | 65.0 % (3.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 5 |
+| `m_6p_07_photo_pool_sm_2` | 43 | 504 | 10 / 7 | 94.8 % (7.5 m) | 93.8 % (46.1°) | 70.4 % (13.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 30 |
+| `m_6p_08_film_pool_team_8` | 43 | 687 | 9 / 2 | 99.9 % (2.0 m) | 91.3 % (30.2°) | 69.6 % (52.9 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 9 |
+| `m_6p_08_photo_pool_sm_3` | 42 | 408 | 11 / 2 | 95.8 % (3.7 m) | 90.4 % (51.2°) | 68.4 % (37.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 22 |
+| `m_6p_09_film_pool_team_9` | 44 | 728 | 11 / 18 | 99.9 % (1.6 m) | 90.0 % (58.4°) | 72.8 % (27.0 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
+| `m_6p_09_photo_sm_04` | 164 | 2973 | 9 / 3 | 100.0 % | 91.3 % (78.2°) | 80.3 % (2.5 m/s) | 97.2 % | 99.8 % | 100.0 % | 0 | 17 |
+| `m_6p_09_spotfilm_pool_sm_4` | 41 | 311 | 11 / 6 | 91.3 % (4.4 m) | 90.7 % (34.0°) | 60.5 % (13.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 20 |
+| `m_6p_10_film_pool_team_10` | 44 | 768 | 12 / 22 | 100.0 % | 91.0 % (55.8°) | 76.3 % (3.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 4 |
+| `m_6p_10_film_team_10` | 164 | 2665 | 10 / 4 | 99.9 % (2.2 m) | 90.1 % (73.6°) | 73.0 % (8.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 12 |
+| `m_6p_10_photo_sm_5` | 164 | 2566 | 11 / 6 | 100.0 % | 92.6 % (50.3°) | 82.0 % (2.7 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 12 |
+| `m_6p_11_film_pool_team_11` | 44 | 665 | 11 / 23 | 100.0 % | 89.0 % (52.7°) | 78.6 % (2.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
+| `m_6p_12_film_pool_team_12` | 44 | 646 | 8 / 18 | 99.2 % (2.7 m) | 91.6 % (48.5°) | 76.3 % (28.1 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
+| `m_6p_13_film_pool_team_13` | 44 | 619 | 8 / 19 | 100.0 % | 91.4 % (40.7°) | 76.1 % (3.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 8 |
+| `m_6p_14_film_pool_team_14` | 43 | 655 | 9 / 1 | 100.0 % | 94.8 % (41.5°) | 72.8 % (4.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 13 |
+| `m_7a_01_demo_dyrdek` | 15 | 168 | 12 / 0 | 100.0 % | 86.3 % (42.5°) | 58.3 % (3.6 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
+| `m_7a_02_jam_monster_public_park` | 15 | 157 | 9 / 0 | 100.0 % | 91.1 % (53.4°) | 77.7 % (2.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
+| `m_7a_02_jam_monster_public_park_ol` | 43 | 550 | 8 / 1 | 100.0 % | 88.9 % (51.2°) | 80.2 % (2.4 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
+| `m_7b_02_photo_cover_thrasher` | 44 | 630 | 7 / 19 | 100.0 % | 92.4 % (42.5°) | 77.3 % (2.3 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
+| `m_7b_03_photo_cover_thrasher_3` | 44 | 418 | 13 / 24 | 100.0 % | 93.3 % (47.4°) | 69.6 % (3.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 14 |
+| `m_7c_03_photo_cover_sm_3` | 41 | 458 | 9 / 39 | 90.2 % (13.3 m) | 89.5 % (74.4°) | 62.7 % (36.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 51 |
+| `m_8_01_04` | 164 | 3034 | 10 / 2 | 99.8 % (0.6 m) | 92.6 % (72.4°) | 81.9 % (3.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 19 |
+| `m_8_01_05` | 164 | 2742 | 9 / 2 | 100.0 % | 91.5 % (53.2°) | 81.6 % (5.9 m/s) | 97.3 % | 100.0 % | 100.0 % | 0 | 12 |
+| `m_8a_02_film_team_ender_2` | 43 | 659 | 10 / 3 | 100.0 % | 90.3 % (38.3°) | 77.2 % (2.5 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 8 |
+| `m_8a_03_film_team_ender_3` | 43 | 574 | 5 / 1 | 100.0 % | 88.2 % (38.3°) | 80.5 % (2.2 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 11 |
+| `m_9a_09_photo_dlc` | 43 | 679 | 6 / 0 | 100.0 % | 90.6 % (42.9°) | 66.1 % (3.8 m/s) | 100.0 % | 100.0 % | 100.0 % | 0 | 7 |
+
 ### The scripts' states seen
 
 Every career-graph state the crawl entered, in how many missions, and how often a stopped mission ended in it. A state that only ever ends missions is where the port or co-op owes work.
@@ -363,7 +485,7 @@ Hand-kept, one line a mission (`- \`mission\`: text`) or a run (`- run \`id\`: b
 - `m_5b_01_photo_sbm_puig`: as `m_5a_01_photo_thrasher`.
 - `m_5b_02_photo_sbm_braydon`: as `m_5a_01_photo_thrasher`.
 - `m_5b_04_photo_sbm_appleyard`: as `m_5a_01_photo_thrasher`.
-- `m_6p_01_demo_first_job`: the same path on both seats, out of step by 58 ticks (`run_round` entered at 1799 on seat 1, 1741 on seat 2); from tick 2400 on the audit sees 800 samples a window at equal positions with unequal flags (7 to 200 of 800 equal), the demo's own entities (ids `120000a8`–`120000ab`). Open items 49, 50.
+- `m_6p_01_demo_first_job`: the same path on both seats, out of step by 58 ticks (`run_round` entered at 1799 on seat 1, 1741 on seat 2); from tick 1543 the skaters stand inside the other seat's spectators, contacts fly every three ticks, the owners' pedestrians stay up and the puppets stay knocked down: `down` agrees in 33 % of census pairs, flags in 23 %. Open items 49, 50.
 - `m_6p_03_demo_pool_team_03`: the film-team graph goes `initial→challenge_running→complete` at tick 1082, 182 ticks after the execute, and autosaves (hashes agree); the win at 1800 found nothing left. The run report's STOPPED is the old pass test (`challenge_cleanup` only); the ledger counts `complete`. Open item 52.
 - `m_6p_05_film_team_05`: as `m_6p_03_demo_pool_team_03`.
 - `m_6p_09_photo_sm_04`: as `m_6p_03_demo_pool_team_03`.

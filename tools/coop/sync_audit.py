@@ -45,17 +45,15 @@ def gap(field, a, b):
     return 0.0 if a == b else 1.0
 
 
-def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    if len(args) != 2:
-        print(__doc__)
-        sys.exit(2)
-    a, b = read(args[0]), read(args[1])
+def audit(path_a, path_b):
+    """The audit as a dict (None without census lines): ticks, paired, only_a, only_b,
+    owner_disagree, per shared field {ok, worst, at}, per local field the differing pairs, and
+    the divergences still open at the last dump as (since tick, wid, field)."""
+    a, b = read(path_a), read(path_b)
     ticks = sorted({t for t, _ in a} | {t for t, _ in b})
     if not ticks:
-        print('no census lines: run the seats with SKATE2_TRACE_COOP_CENSUS=1')
-        sys.exit(1)
-    paired = both = only_a = only_b = 0
+        return None
+    paired = only_a = only_b = 0
     worst = {f: (0.0, None) for f in SHARED}
     bad = {f: 0 for f in SHARED}
     local_differs = {f: 0 for f in LOCAL}
@@ -83,15 +81,34 @@ def main():
             for f in LOCAL:
                 if ra[f] != rb[f]:
                     local_differs[f] += 1
-    print(f'census ticks {ticks[0]}..{ticks[-1]} ({len(ticks)} dumps); entities paired {paired}, on seat 1 only {only_a}, on seat 2 only {only_b}')
-    print(f'ownership: {owner_disagree} pairs where both seats claim the same role (should be 0)')
+    return {
+        'ticks': (ticks[0], ticks[-1]), 'dumps': len(ticks), 'paired': paired, 'only_a': only_a, 'only_b': only_b,
+        'owner_disagree': owner_disagree,
+        'shared': {f: {'ok': paired - bad[f], 'worst': worst[f][0], 'at': worst[f][1]} for f in SHARED},
+        'local': dict(local_differs),
+        'open': sorted(((t, w, f) for (w, f), t in since.items()), key=lambda x: x[0]),
+    }
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    if len(args) != 2:
+        print(__doc__)
+        sys.exit(2)
+    r = audit(args[0], args[1])
+    if r is None:
+        print('no census lines: run the seats with SKATE2_TRACE_COOP_CENSUS=1')
+        sys.exit(1)
+    paired, ticks = r['paired'], r['ticks']
+    print(f"census ticks {ticks[0]}..{ticks[1]} ({r['dumps']} dumps); entities paired {paired}, on seat 1 only {r['only_a']}, on seat 2 only {r['only_b']}")
+    print(f"ownership: {r['owner_disagree']} pairs where both seats claim the same role (should be 0)")
     for f, tol in SHARED.items():
-        w, at = worst[f]
+        w, at = r['shared'][f]['worst'], r['shared'][f]['at']
         where = f' worst {w:.2f} at tick {at[0]} entity {at[1]}' if at else ''
-        print(f'shared {f:9s}: {paired - bad[f]} of {paired} within {tol}{where}')
+        print(f"shared {f:9s}: {r['shared'][f]['ok']} of {paired} within {tol}{where}")
     for f in LOCAL:
-        print(f'local  {f:9s}: differs in {local_differs[f]} of {paired} pairs (by design: not shared)')
-    lasting = sorted(((t, w, f) for (w, f), t in since.items()), key=lambda x: x[0])
+        print(f"local  {f:9s}: differs in {r['local'][f]} of {paired} pairs (by design: not shared)")
+    lasting = r['open']
     if lasting and '--all' in sys.argv:
         print('still diverging at the last dump:')
         for t, w, f in lasting:

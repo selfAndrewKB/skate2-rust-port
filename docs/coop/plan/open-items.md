@@ -196,10 +196,17 @@ Front page: [README](../README.md).
 49. `m_6p_01_demo_first_job` runs the same path on both seats 58 ticks apart (`run_round` at
     1799 and 1741): the demo's `setup_round`/`countdown` take a local time. To fix with the demo
     kind; a lockstep campaign owes the same tick.
-50. In the demo (49), from tick 2400 on, the live audit sees 800 samples a window at equal
-    positions with unequal flags (7 to 200 of 800 equal; ids `120000a8`–`120000ab`): the
-    demo's own entities stand still with their flags apart. Which flag bits, and whose entities,
-    is to read from the census dump (`tools/coop/sync_audit.py`).
+50. In the demo (49) from tick 1543 each seat's skater stands inside the other seat's spectators:
+    every three ticks each console reports a contact on those puppets to their owner (force 0; the
+    owner sees it at 2.7 to 59 m/s and applies the knockdown), the owner's pedestrian never goes
+    down (flags 12, `up` in its census), while the puppet, which predicted the knockdown, stays
+    down (flags 13) to the end: `down` agrees in 33 % of the census pairs, flags in 23 %
+    (`tools/coop/sync_audit.py` on the kept logs; the live audit's 24.6 %). Two causes: the
+    demo's placement (the demo kind is not yet co-op's), and that a puppet never recovers a
+    knockdown its owner refused: the `!knocked` branch of the sample handler (`coop_world.rs`)
+    resets the bookkeeping, not the pedestrian. The second is general (`m_5a_01_photo_thrasher`
+    98.0 % and `m_4b_01_pro_navarrette_1` 98.8 % `down` agreement, 11 `down` divergences open
+    at the crawl's ends); the fix is to stand the puppet up when the owner's sample says up.
 51. `m_2a_01` and `m_4g_01_spotfilm_johnson` keep both scripts in `challenge_running` after every
     objective completed at the win; `m_2a_01`'s photo scene starts 1800 ticks after the win amid
     repeating Hall of Meat start lines. In step, so not co-op's divergence; what the graph waits

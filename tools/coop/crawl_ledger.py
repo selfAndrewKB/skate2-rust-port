@@ -112,6 +112,18 @@ def compress(states):
     return text, loop, times
 
 
+sys.path.insert(0, str(ROOT / 'tools/coop'))
+from sync_audit import audit as census_audit  # noqa: E402
+
+
+def census(name):
+    """The offline census audit of the two kept seat logs (`tools/coop/sync_audit.py`)."""
+    a, b = EVIDENCE / f'crawl-{name}-seat-1.log', EVIDENCE / f'crawl-{name}-seat-2.log'
+    if not (a.exists() and b.exists()):
+        return None
+    return census_audit(a, b)
+
+
 def seat(name, path):
     log = lines(path)
     r = {'log': str(path.relative_to(ROOT.parent)) if path.exists() else None, 'lines': len(log)}
@@ -316,6 +328,7 @@ def main():
              'family': fam.get(family_id, f'type {family_id}') if family_id is not None else '?',
              'seats': {s: seat(name, EVIDENCE / f'crawl-{name}-seat-{s}.log') for s in (1, 2)},
              'server': server(name, EVIDENCE / f'crawl-{name}-server.log'),
+             'census': census(name),
              'history': [(r['run'], r['rows'][name]) for r in all_runs if name in r['rows']]}
         m['table_rule'] = table_rule(name, family_id) if family_id is not None else '?'
         logged = next((s['rule']['rule'] for s in m['seats'].values() if s.get('rule')), None)
@@ -392,6 +405,22 @@ def main():
             if not m['passed'] and s.get('last_state'):
                 terminal[s['last_state'][1]] += 1
     L.append('')
+    L.append('### The census audit, per mission (both seats\' dumps paired)')
+    L.append('')
+    L.append('`tools/coop/sync_audit.py` over the two kept logs: every pedestrian both seats listed at the same round tick (one dump every 60 ticks), each shared field compared (position 0.5 m, yaw 5°, speed 0.5 m/s, flags, model and down exact); "one seat only" counts entities the other seat had not spawned or had culled; "open" counts the field divergences still standing at the last dump. The graph and the moods are local by design and not compared.')
+    L.append('')
+    L.append('| Mission | Dumps | Paired | One seat only (1 / 2) | Position | Yaw | Speed | Flags | Down | Model | Owner clash | Open at end |')
+    L.append('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+    for m in ran:
+        c = m.get('census')
+        if not c:
+            L.append(f"| `{m['mission']}` | — | — | — | — | — | — | — | — | — | — | — |")
+            continue
+        p = c['paired']
+        cpct = lambda f: f"{100.0 * c['shared'][f]['ok'] / p:.1f} %" if p else '—'  # noqa: E731
+        cworst = lambda f, u: f" ({c['shared'][f]['worst']:.1f}{u})" if c['shared'][f]['at'] else ''  # noqa: E731
+        L.append(f"| `{m['mission']}` | {c['dumps']} | {p} | {c['only_a']} / {c['only_b']} | {cpct('position')}{cworst('position', ' m')} | {cpct('yaw')}{cworst('yaw', '°')} | {cpct('speed')}{cworst('speed', ' m/s')} | {cpct('flags')} | {cpct('down')} | {cpct('model')} | {c['owner_disagree']} | {len(c['open'])} |")
+    L.append('')
     L.append('### The scripts\' states seen')
     L.append('')
     L.append('Every career-graph state the crawl entered, in how many missions, and how often a stopped mission ended in it. A state that only ever ends missions is where the port or co-op owes work.')
@@ -454,6 +483,13 @@ def main():
     for m in ran:
         D.append(f"## `{m['mission']}`")
         D.append('')
+        c = m.get('census')
+        if c and c['paired']:
+            fields = ', '.join(f"{f} {100.0 * c['shared'][f]['ok'] / c['paired']:.1f} %" for f in ('position', 'yaw', 'speed', 'flags', 'down', 'model'))
+            opened = '; '.join(f"{w} {f} since {t}" for t, w, f in c['open'][:8]) + ('…' if len(c['open']) > 8 else '')
+            census_line = f"Census audit: {c['dumps']} dumps, {c['paired']} pairs, one seat only {c['only_a']} / {c['only_b']}, owner clashes {c['owner_disagree']}; {fields}; open at the end: {len(c['open'])}{(' (' + opened + ')') if opened else ''}."
+        else:
+            census_line = 'Census audit: no dumps paired.'
         D.append(f"Family {m['family']} ({m['family_id']}), global {m['global']} ({m['kind']}), rule {m['rule']}. **{m['verdict']}**; cause: {m['cause']}; in step: {'yes' if m['in_step'] else 'no'}. "
                  + (f"Runs: {', '.join(f'{r}: {v}' for r, v in m['history'])}. " if m['history'] else '') + (f"Note: {m['note']}" if m['note'] else ''))
         D.append('')
@@ -461,6 +497,7 @@ def main():
             sv = m['server']
             D.append(f"Server (build {sv['build']}): {'; '.join(sv['round_started'][:2])}; saves: {'; '.join(sv['save_lines'][-2:]) or 'none'}.")
             D.append('')
+        D.append(census_line)
         for sn, s in m['seats'].items():
             if not s.get('lines'):
                 D.append(f'- Seat {sn}: no log kept.')
