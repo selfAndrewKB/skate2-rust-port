@@ -283,8 +283,9 @@ Front page: [README](../README.md).
     against the profile name) is the place to read.
 62. The competing families' scripts follow their AI's outcome, which is each console's own:
     `m_4a_01_skate_carroll_koston` ran 53 states alike on both seats once (`2026-11-11-crawl-ai2`)
-    and parted at its 29th state the next time (`-ai4`, `leader_failure` at 5791 on seat 1 and
-    later on seat 2), each console's leader failing its trick at its own tick. A follow or photo
+    and parted at its 29th state in one of three reruns (`leader_failure` at 5791 on seat 1 and
+    later on seat 2; the other two alike), each console's leader failing its trick at its own
+    tick. A follow or photo
     mission's flow does not read the AI's run; S.K.A.T.E., jams and contests do. The competing
     kinds need one AI outcome for both consoles (an owner's AI streamed, or its round results as
     facts) before they can be in step; until then they are each console's own game
