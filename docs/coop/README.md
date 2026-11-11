@@ -6,15 +6,15 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.9.1-mission-ledger`**
-(2026-11-10): M8, the whole campaign, and its ledger. The progression lives on the server and
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.9.2-puppet-standup`**
+(2026-11-11): M8, the whole campaign, its ledger, and the puppets standing up again. The progression lives on the server and
 survives its restart; a console joining a running campaign brings every other member onto the
 newest save and the round starts again with everyone; a console whose connection drops keeps
 its career and rejoins by its player id, trying every three seconds. The mission crawl ran every
-one of the campaign's 115 missions on the bench: 81 pass (every tutorial, go-to, teleport and
-film-pool mission among them), 34 stop, 19 of them at the port's AI skaters, 8 where the
-scripts' AI player is the second human (the co-op finding), 4 at unknown locators, 3 in the
-scripts' own flow; every mission's standing, cause, synchronization numbers and census audit are
+one of the campaign's 115 missions on the bench: 83 pass (every tutorial, go-to, teleport and
+film-pool mission among them), 32 stop, 19 of them at the port's AI skaters, 8 where the
+scripts' AI player is the second human (the co-op finding), 4 at unknown locators, 1 demo out
+of step; every mission's standing, cause, synchronization numbers and census audit are
 in [missions](plan/missions.md), regenerated from the kept logs. Reviewed (twelve findings, all applied: the complete-by-name
 diagnostic now reports whether it completed anything, the ledger refuses to run without the
 career database, and ten lesser ones). The milestone
