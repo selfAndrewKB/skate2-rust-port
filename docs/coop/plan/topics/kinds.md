@@ -43,7 +43,10 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
   photo missions pass; the follows run their heat, the demos their rounds to the end-options
   screen, S.K.A.T.E. its rounds, all past the diagnostic win: the bench does no tricks, so those
   families' own ends (the pro's path, the demo's score, a human's set trick) are not reached on
-  it [UNKNOWN in play].
+  it [UNKNOWN in play]. The competing kinds read their AI's outcome, and that is each console's
+  own: S.K.A.T.E. ran alike once and parted the next time where a leader failed its trick
+  (open item 62); the follows, photos and demos, whose flow does not read the AI's run, ran
+  alike every time.
 - **The families in the data.** The campaign's `challenge_global_data` uses `ChallengeType`
   0 (tutorial, 9 missions), 2, 4, 6 (photo, 5), 15 (jam, 3), 23 (follow, 7), 30 (go-to, 13),
   38 (30 photo missions), 39 (11 film), 40 (20 spot film), 41 (4 pro film), 43 (7 film/demo
@@ -51,12 +54,14 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
   (the enumeration past 34 is unread) and fall to the table's default, `Anyone`, which is what
   the design gives photo and film anyway ([missions](../missions.md) names them from the
   missions, marked †). A rule for those families by number works today; naming them is owed.
-- **The families in the crawl** (2026-11-10, [missions](../missions.md)): every tutorial (9),
-  go-to (13), property teleport (2), film pool team (11) and the film-team kind (7, which
-  completes on execute) passed; photo (team) 21 of 30, spot film 15 of 20, pro film 1 of 4,
-  S.K.A.T.E. 1 of 2, jam 1 of 3 passed; every follow (7), photo (5) and demo (2) stopped. Every
-  stop but the eight `check_ai` divergences and one out-of-step demo is the port's AI skater or
-  a locator ([open items](../open-items.md) 45, 47 to 52).
+- **The families in the crawl** (2026-11-11 after the AI day, [missions](../missions.md)): 94
+  of 115 pass; of the 21 that stop, 14 run the same states at the same ticks on both seats and
+  stop where only play ends them (the follows' heat, the demos' and photo rounds, S.K.A.T.E.'s
+  rounds, a results or end-options screen), 5 have no competitor on the crawl's save (the
+  sponsor team and the dynamic lists are play's choices, open item 59), one is the downloadable
+  content's (60), one a character the data does not name (61). On 2026-11-10 the same crawl
+  stood at 83 with 32 stops, 27 of them laid to the AI skaters ([open items](../open-items.md)
+  45, 55 to 58).
 - **Not done:** the lobby's settings page for the table (the file and the switch suffice on the
   bench; a page is play's to ask for).
 

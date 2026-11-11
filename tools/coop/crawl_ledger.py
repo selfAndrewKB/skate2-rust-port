@@ -142,6 +142,11 @@ def seat(name, path):
     r['executed'] = m[-1].group(2) == 'true' if m else None
     m = g(r'diagnostic: won the main challenge at round tick (\d+): (\d+) objectives completed')
     r['won'] = (int(m[-1].group(1)), int(m[-1].group(2))) if m else None
+    # the AI manager's decisions (SKATE2_TRACE_AI, since 2026-11-11): an empty sponsor team, a
+    # competitor whose character the data does not name
+    r['demo_team_empty'] = bool(g(r'ai: SelectDemoCharacters: 0 competitors'))
+    r['character_missing'] = bool(g(r'ai: SelectCharacters for activity .*characters \[[^\]]*\b0\b[^\]]*\]'))
+    r['no_competitors'] = bool(g(r'ai: SelectCharacters for activity .*: 0 competitors'))
     states = [(int(m.group(1)), m.group(2)) for m in g(rf'career graph {re.escape(name)} @(\d+): enter (\w+)')]
     r['states'] = states
     r['path'], r['loop'], r['loop_times'] = compress(states)
@@ -232,9 +237,12 @@ def _last(s):
     return (s.get('last_state') or (0, ''))[1]
 
 
-# the states a mission sits in while it runs or ends on its own terms (the follows' heat, the
-# demos' rounds and end screen, S.K.A.T.E.'s rounds)
-RUNNING_ON = {'run_heat', 'run_round', 'end_round', 'results_screen', 'end_options', 'wait_for_leader', 'wait_for_scoring', 'leader_failure', 'process_round', 'round_setup'}
+# the states a mission sits in while it runs on its own terms after the win (the follows' heat,
+# the demos' and photo rounds, S.K.A.T.E.'s rounds), and the end states it reaches on its own
+# (a round's end, the results or end-options screen, the photo to take), which count whatever
+# the diagnostic win completed
+RUNNING_ON = {'run_heat', 'run_round', 'wait_for_leader', 'wait_for_scoring', 'leader_failure', 'process_round', 'round_setup'}
+ENDED_ON_ITS_OWN = {'end_round', 'results_screen', 'end_options', 'photo'}
 
 CAUSES = [
     ('crash', lambda m: any('panicked' in f for s in m['seats'].values() for f in s.get('failed', []))),
@@ -248,8 +256,14 @@ CAUSES = [
     # both seats ran the same states at the same ticks through the win and the mission is still
     # on (a heat, a round, its end screen): what the bench cannot finish, play does
     ('in step: the mission runs on', lambda m: m.get('paths_agree') and m['in_step']
-        and all(s.get('won') and s['won'][1] > 0 and _last(s) in RUNNING_ON for s in m['seats'].values())),
+        and all(s.get('won') and _last(s) in RUNNING_ON for s in m['seats'].values())),
+    ('in step: the mission ended on its own terms', lambda m: m.get('paths_agree') and m['in_step']
+        and all(s.get('won') and _last(s) in ENDED_ON_ITS_OWN for s in m['seats'].values())),
+    ('content: DLC absent', lambda m: any('unknown location' in _errs(s) and '_DLC_' in _errs(s) for s in m['seats'].values())),
     ('port: unknown locator', lambda m: any('unknown location' in _errs(s) or (m['kind'] == 'location' and s.get('teleport_unknown')) for s in m['seats'].values())),
+    ('bench: no sponsor team', lambda m: any(s.get('demo_team_empty') for s in m['seats'].values())),
+    ('bench: no competitor chosen', lambda m: any(s.get('no_competitors') and 'AI skater manager' in _errs(s) for s in m['seats'].values())),
+    ('port: AI character lookup', lambda m: any(s.get('character_missing') and 'AI skater manager' in _errs(s) for s in m['seats'].values())),
     ('port: AI skater', lambda m: any((s.get('loop') and any(x.startswith('check_') for x in s['loop'])) or 'AI skater manager' in _errs(s) for s in m['seats'].values())),
     ('port: AI assets never load', lambda m: any(_last(s) == 'wait_for_assetload' and s.get('ai_players') for s in m['seats'].values())),
     ('script error', lambda m: any(s.get('script_errors') for s in m['seats'].values())),

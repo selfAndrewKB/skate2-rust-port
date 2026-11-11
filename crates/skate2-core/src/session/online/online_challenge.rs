@@ -1097,9 +1097,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         world.online = Some(OnlineChallenge { local_player: local_index, players: i32::try_from(count).unwrap_or(0), ..OnlineChallenge::default() });
         world.coop = Some(crate::coop::rules::CampaignWorld { rules, players: (0..i32::try_from(count).unwrap_or(0)).collect(), chase_on: false });
         // Co-op fork (open items 45, 53): this console's AI skaters, ambient and challenge, seat
-        // themselves after the campaign's humans.
-        if let Some(ai) = self.inner.ai.as_ref() {
-            ai.manager().human_slots = count;
+        // themselves after the campaign's humans; one already in a human's slot leaves.
+        if let (Some(ai), Some(player)) = (self.inner.ai.as_mut(), self.inner.player.as_ref()) {
+            ai.try_seat_ai_after_humans(count, &player.selected.owners.services.settings).map_err(error)?;
         }
         career.online_random = Some(random);
         career.nis.set_online_game(true);

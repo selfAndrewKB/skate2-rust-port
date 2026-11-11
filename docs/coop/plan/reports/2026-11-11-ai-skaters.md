@@ -53,8 +53,14 @@ ends them: the heat (the pro's path outlasts the deadline), the rounds (the AI l
 turn, the bench sets no trick), the end-options screen (a demo lost by a bench that does no
 tricks).
 
-`../bench/evidence/2026-11-11-crawl-ai3.md`: every mission the crawl had stopped at, rerun on
-the fixed build. Its numbers are in the ledger ([missions](../missions.md), "Standing").
+`../bench/evidence/2026-11-11-crawl-ai3.md`: the 26 other missions the crawl had stopped at,
+rerun on the fixed build: 11 pass, 15 stop, every stop at the same state at the same tick on
+both seats (one, the jam, left its asset wait a tick apart and ran the rest alike). The ledger
+stands at **94 of 115** (from 83): the 21 that stop are 14 in step at a state only play ends, 5
+with no competitor on the crawl's save (the sponsor team and the dynamic lists are chosen in
+play, 59), one downloadable-content mission (60), one character the data does not name (61).
+`../bench/evidence/2026-11-11-crawl-ai4.md`: the six probe missions again on the build with the
+review's fixes, the milestone's proof.
 
 ## Found, recorded, not fixed
 

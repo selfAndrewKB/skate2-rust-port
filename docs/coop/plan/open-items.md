@@ -247,7 +247,11 @@ Front page: [README](../README.md).
     follow family's `wait_for_assetload` waits for its AI's `cMsgSkaterCreated` and never heard it
     (`m_4b_01`, the pro spawned at slot 2 and the script sat for good). The messages of this
     console's own AI skaters now reach the scripts, their `PlayerID` the AI's ordinal. Their tick is
-    each console's own (the scene load's), a divergence the next crawl measures.
+    each console's own (the scene load's), a divergence the next crawl measured: of 32 AI
+    missions rerun, one (`m_7a_02_jam_monster_public_park`) left `wait_for_assetload` one round
+    tick apart (906 and 907) and ran the rest alike; the other 31 ran every state at the same
+    tick. A barrier (the load's completion as a fact both seats wait for) would close that tick
+    if play ever shows it.
 58. Fixed (2026-11-11): a mission hull's own locators (`m_1a_07_follow_slappy_startlocator01` and
     six more `*_startlocat*`, in the hull's `cSim_Global` arena) register with the location manager
     when the hull's simulation collection streams in, a few frames after the crawl's execute; a
@@ -258,15 +262,30 @@ Front page: [README](../README.md).
     missions' `*_challengelocator01` among them) are now a teleport's fallback when no registered
     arena holds the name (46); none of the crawl's unknown locators was among them, every one was a
     hull's.
-59. The seven team photo and film missions (`m_08_01_photo_team_shot_1`, `m_6a_01_filmfriend_70s`,
-    `m_6c_01_profilm_soho`, `m_6d_01_profilm_classic` and the `m_6p_*` team shoots) take their
-    competitors from the demo sponsor's team (`SelectDemoCharacters`), which is the team of the
-    pro the player beat in a throwdown (`pro_beaten_key`); on the crawl's save no pro was beaten
-    (the diagnostic win completes objectives, it beats no one), so the team is empty and the
-    spawn finds no recipe (`2026-11-11-crawl-ai3`, `SelectDemoCharacters: 0 competitors`). The
-    bench's limit, not co-op's: the sponsor team is a progression choice made in play. A bench
-    way through would be a save with a pro beaten, or a diagnostic that sets the beaten pro.
+59. Five team and pro-film missions and one follow have no competitor on the crawl's save
+    (`2026-11-11-crawl-ai3`): `m_08_01_photo_team_shot_1` takes its team from the demo sponsor's
+    (`SelectDemoCharacters`, the team of the pro beaten in a throwdown, `pro_beaten_key`), and
+    `m_6a_01_filmfriend_70s`, `m_6c_01_profilm_soho`, `m_6d_01_profilm_classic` and
+    `m_6a_01_follow_spillway` select from a dynamic competitor list that is empty
+    (`SelectCharacters ... 0 competitors`; the asset load rightly counted them no AI challenge).
+    Both lists are progression choices made in play (a pro beaten, a friend or team chosen); the
+    diagnostic win completes objectives and chooses no one. The bench's limit, not co-op's: a
+    save with those choices made, or a diagnostic that sets them, would run them; every one of
+    the six stops at the same state at the same tick on both seats.
 60. The three `m_1x_01_*_ccenter_dlc` missions are the downloadable content's: their hull loads
     from `missions.big` but their locator (`m_1x_01_ftl_ccenter_DLC_challengelocator_01`) is in no
     archive of this game folder, which has no DLC installed. They stop at the spawn's "unknown
     location" until the content is there.
+61. One AI character lookup fails in the port, not in co-op: `m_5b_03_photo_sbm_johnson` names
+    its competitor `johnson` and `GetCharacterID` finds no `ai_characters` entry with that
+    layout name (`characters [0]`, no recipe, the spawn fails on both seats alike at the same
+    tick, `2026-11-11-crawl-ai3`). The native's name match (word 8 of the `ai_characters` layout
+    against the profile name) is the place to read.
+62. The competing families' scripts follow their AI's outcome, which is each console's own:
+    `m_4a_01_skate_carroll_koston` ran 53 states alike on both seats once (`2026-11-11-crawl-ai2`)
+    and parted at its 29th state the next time (`-ai4`, `leader_failure` at 5791 on seat 1 and
+    later on seat 2), each console's leader failing its trick at its own tick. A follow or photo
+    mission's flow does not read the AI's run; S.K.A.T.E., jams and contests do. The competing
+    kinds need one AI outcome for both consoles (an owner's AI streamed, or its round results as
+    facts) before they can be in step; until then they are each console's own game
+    ([kinds](topics/kinds.md)).

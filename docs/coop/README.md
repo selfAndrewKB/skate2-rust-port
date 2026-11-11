@@ -6,37 +6,43 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.9.2-puppet-standup`**
-(2026-11-11): M8, the whole campaign, its ledger, and the puppets standing up again. The progression lives on the server and
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.10.0-ai-skaters`**
+(2026-11-11): the AI families run in a campaign. The AI skaters were never the port's blocker:
+a campaign told the AI manager it was in a network game, the scripts count their AI three ways
+and a two-seat round made one index mean two skaters, the AI's creation message was dropped, and
+a hull's locators registered after the crawl's spawn ([open items](plan/open-items.md) 55 to 58).
+Each console now runs its own AI skaters, the scripts see the career's own index space
+([design](plan/design.md) §7), and the crawl stands at 94 of 115: the 21 that stop run in
+step to a state only play ends (14), or lack a competitor on the crawl's save (5), the DLC (1),
+a character name (1). Before it, M8 (`coop-v0.9.2`): the whole campaign, its ledger, and the
+puppets standing up again. The progression lives on the server and
 survives its restart; a console joining a running campaign brings every other member onto the
 newest save and the round starts again with everyone; a console whose connection drops keeps
 its career and rejoins by its player id, trying every three seconds. The mission crawl ran every
-one of the campaign's 115 missions on the bench: 83 pass (every tutorial, go-to, teleport and
-film-pool mission among them), 32 stop, 19 of them at the port's AI skaters, 8 where the
-scripts' AI player is the second human (the co-op finding), 4 at unknown locators, 1 demo out
-of step; every mission's standing, cause, synchronization numbers and census audit are
+one of the campaign's 115 missions on the bench (2026-11-10: 83 pass, 32 stop); every
+mission's standing, cause, synchronization numbers and census audit are
 in [missions](plan/missions.md), regenerated from the kept logs. Reviewed (twelve findings, all applied: the complete-by-name
 diagnostic now reports whether it completed anything, the ledger refuses to run without the
 career database, and ten lesser ones). The milestone
 pages: [saves](plan/topics/saves.md), [kinds](plan/topics/kinds.md), [tooling](plan/tooling.md),
 the ledger in [versions](plan/versions.md).
 
-## Current focus (2026-11-10)
+## Current focus (2026-11-11)
 
 Play: the build in the player's hands (every milestone so far was proven on the bench, M5's
-build alone was played); what the audits say in play (the puppet's speed, open item 39; a puppet
-that stays knocked down after its owner refused the hit, 50). The 34 missions the crawl stops
-at, in order: the scripts' AI player in a campaign round (48) alongside the port's AI skaters
-(45); the demo kind (49, 50); the two scripts waiting after their win (51). Training Facility
-travel ([session](plan/topics/session.md)); the open items a person's play decides (New Career
-in a lobby, 41; a rejoin notice, 44).
+build alone was played): a follow, a photo and a demo mission with two people, watching the pro
+and each console's copy of it (45, 53); the puppets' knockdowns (39, 50). The competing kinds in
+a campaign (S.K.A.T.E., jams, contests: each console's own AI leaders, [kinds](plan/topics/kinds.md));
+the demo's start spots (50); a save with the sponsor team and the dynamic competitors chosen, or a
+diagnostic that sets them (59). Training Facility travel ([session](plan/topics/session.md)); the
+open items a person's play decides (New Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.9.2` lobby build (the puppets' knockdowns and getups in the open world);
-the crawl's win as a state rather than a tick; the demo kind (open items 49, 50); the AI player
-index (48) when the port's AI skaters land. The overnight report of 2026-11-11 says where
-everything stands: [reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md).
+Play on the `coop-v0.10.0` lobby build: the AI missions with two people. The AI day's report
+says what changed and what it measured:
+[reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md); the night before it:
+[reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md).
 Play, and what it finds. Milestones and their done-when: [design](plan/design.md) §5; M0 to M8 are
 tagged ([versions](plan/versions.md)).
 
@@ -51,6 +57,8 @@ tagged ([versions](plan/versions.md)).
 - [plan/qa-matrix.md](plan/qa-matrix.md): seats × machines × situations, exercised or not.
 - [plan/reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md): the overnight
   report, 2026-11-10 to 11: the crawl recorded, the puppets' stand-up fixed, what is next.
+- [plan/reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md): the AI day:
+  what the AI skaters turned out to be, the four fixes, the bench's measurements, what is open.
 - [plan/missions.md](plan/missions.md): the mission ledger, every campaign mission's standing in
   co-op from the crawl's logs, regenerated after every crawl; the details per mission in
   [plan/missions-detail.md](plan/missions-detail.md).
