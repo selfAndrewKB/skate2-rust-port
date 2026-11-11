@@ -38,7 +38,8 @@ the ledger in [versions](plan/versions.md).
 Play: the build in the player's hands (every milestone so far was proven on the bench, M5's
 build alone was played): a follow, a photo, a S.K.A.T.E. and a demo with two people, watching
 the owner's pro and its puppet on the other seat (the puppet is silent, 66; the owner leaving
-ends the AI, 65); the puppets' knockdowns (39, 50). The demo's start spots (50); a save with the
+ends the AI, 65); the props an AI knocks over, claimed for its owner's console (67, seen in
+play); the puppets' knockdowns (39, 50). The demo's start spots (50); a save with the
 sponsor team and the dynamic competitors chosen, or a diagnostic that sets them (59). Training
 Facility travel ([session](plan/topics/session.md)); the open items a person's play decides (New
 Career in a lobby, 41; a rejoin notice, 44).

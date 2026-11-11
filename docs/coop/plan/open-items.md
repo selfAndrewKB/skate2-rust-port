@@ -300,7 +300,9 @@ Front page: [README](../README.md).
     M10 (2026-11-11) takes the first way as well: the first player's console owns the challenge
     AI skaters, its facts carry their outputs and the others show puppets of its frames
     ([ai-skaters](topics/ai-skaters.md)); the notes stay, for the decisions a script makes
-    about its own player.
+    about its own player. Resolved on the bench: three reruns of the S.K.A.T.E. on the M10
+    build ran 57 states alike on both seats through `leader_failure`
+    (`../bench/evidence/probe/2026-11-11-crawl-m10-skate-{1,2,3}.md`).
 63. A player who leaves a round and rejoins (a new stint, its note numbers starting again at 1)
     has its first prompts and outcomes dropped on the consoles that keep the old high-water
     marks (`prompts_applied`, `outcomes_applied` in `Round`, never reset for a slot). Seen in the
@@ -319,4 +321,28 @@ Front page: [README](../README.md).
 66. An owned AI skater's puppet is silent: no audio record travels with its frames (the
     remote players' do), so the pro's wheels and landings sound only on the owner's console.
     The owner's `controller_audio` record is the thing to carry, as the player's own
-    `AudioSkater` record is.
+    `AudioSkater` record is. Also: an owned skater's look goes out twice per spawn (at its
+    first frame, and again when the slot's creation reaches the owner through the round's
+    frames, `online_owned_slot_changed`), 31 KB each; the second send is owed only to a spawn
+    at a slot whose puppet still wears another recipe, so clearing the record on the slot's
+    destruction alone would halve it.
+67. **Props an AI skater moves are not shared** (the player, 2026-11-11, in play): a railing an
+    AI skater knocks down on one instance stands on the other, and the AI there runs through it
+    as if it were not there. The prop rule is `LastToucher` with the touch being this console's
+    own skater's contact (the scoring pass marks the object `touched`, `coop_world.rs`;
+    [world](topics/world.md), M5): an AI skater's hit, an ambient skater's, a car's or a
+    pedestrian's claims nothing, so the object moves on the console that simulates the hitter
+    and nowhere else. With M10 the other console's AI is a puppet without a body, so it hits
+    nothing and runs through the standing copy. The fix is in the claim: on the owner's console
+    an owned AI skater's contact with a prop is a touch (the AI actors' contact pass marks the
+    object as the first player's does), so the prop is claimed for that console and streamed;
+    an ambient skater's hit likewise claims for its own console (each console's own ambient
+    skaters, 53). Props a car or a pedestrian moves are the same gap ([world](topics/world.md)).
+68. On the M10 regression run (`2026-11-11-crawl-m10`) seat 2 unloaded and reloaded the hub's
+    hull `ur_hotel_pool_drain` (its graph restarting at `initial`) once more than seat 1 after
+    the win of `m_1a_03_tutorial_fliptricks` (at round tick 2057) and `m_6p_03_demo_pool_team_03`
+    (1891), each time right after an `UnloadDynamicHull`; the missions' own state sequences and
+    the saves agree, and the M9 run of the same missions showed no extra reload. Cause unread:
+    the hull requests are the scripts' and the stream focus's, and seat 2 now follows a puppet
+    where a script switches the camera to the AI (M10), which neither of these missions does.
+    Where to read: seat 2's `career output: UnloadHull` after the win and what asked for it.

@@ -44,6 +44,9 @@ and the index space settled: [the AI day](../reports/2026-11-11-ai-skaters.md),
 - A handoff when the owner leaves the round: the AI stops with it (open item 65).
 - The puppet's scoring body (`RemoteScoringSkater`) is collected as a remote player's; whether
   a trick over the pro scores alike on both consoles is play's to say.
+- A prop the owner's AI knocks over is not claimed for the owner (the prop rule counts only
+  the console's own skater's touch), so it stands on the other console and the puppet, which
+  has no body, runs through it (open item 67, seen in play).
 
 ## History
 

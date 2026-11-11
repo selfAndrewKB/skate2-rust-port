@@ -129,6 +129,16 @@ Recorded, not fixed: the server keeps a round's owned looks for joiners (a stale
 puppet that never shows), and the owner's scripts now read the AI's shared frame (position at
 the tester, no gesture), as the other consoles do.
 
+**The proof** (`../bench/evidence/probe/2026-11-11-crawl-m10-skate-{1,2,3}.md`, the review
+build): the S.K.A.T.E. three times, 57 states each, every sequence identical on both seats
+through `leader_failure` at the same tick, the state where the AI day's runs had parted once
+in three (62); seat 2 followed each leader's puppet at the script's camera switch. The follow
+and the demo (`-follow-demo.md`, four owned skaters, their creation at tick 1891 on both seats)
+in step to the heat and the end-options screen as before. A look goes out twice per spawn (at
+the first frame, and again when the slot's creation reaches the owner: 31 KB each), which the
+next build can halve. The nine-mission regression on the tagged build:
+`../bench/evidence/2026-11-11-crawl-m10.md` [see the run note in missions].
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

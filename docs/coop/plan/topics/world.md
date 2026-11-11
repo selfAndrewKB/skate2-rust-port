@@ -73,7 +73,9 @@ samples it in the run's prop list (format 2: locator, claim, position, a unit qu
 velocity, resting; 38 B) while it moves, for 120 ticks after a touch and every 20th run at
 rest; the receiver's object becomes a puppet: its target transform is the owner's sample and its
 body is driven there as a hand prop's is, never read back. A touch (the scoring pass's skater
-contact, the bench's nudge) claims it. Proof (`../bench/evidence/2026-11-10-m5a-*.log`): the
+contact, the bench's nudge) claims it; the touch is the console's own skater's alone, so a prop
+an AI skater, a car or a pedestrian moves is not claimed and not streamed (seen in play: a
+railing knocked down by an AI on one instance standing on the other, open item 67). Proof (`../bench/evidence/2026-11-10-m5a-*.log`): the
 nudge on seat 1 at its frame 2700 claimed the tutorial's prop (locator `ccf33c75656ac459`, claim
 1); seat 2 took it as a puppet at its frame 2231; 44 samples in the next 600 frames while it
 moved, 10 per 600 at rest. The puppet's convergence (its distance behind the sample) is traced
