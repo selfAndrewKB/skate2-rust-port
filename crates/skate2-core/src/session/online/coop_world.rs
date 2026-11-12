@@ -558,15 +558,23 @@ impl<T, C> SelectedLiveSession<T, C> {
                             // prediction the owner never confirmed, past the grace, is a refusal.
                             let down_here = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
                             let awaited_long_enough = puppet.awaiting.is_none_or(|at| tick.saturating_sub(at) > CONFIRM_GRACE_TICKS);
-                            if down_here && awaited_long_enough && let Some(collision) = pedestrian.collision.as_mut().filter(|collision| collision.colliding) {
-                                collision.colliding = false;
-                                collision.required_to_begin_colliding = false;
+                            if down_here && awaited_long_enough {
+                                // M16: whatever the collision's own state (its behaviour may have
+                                // been cut short by a held update), the owner's word stands: the
+                                // puppet is up, its knocked-down flag cleared, its collision closed.
+                                if let Some(collision) = pedestrian.collision.as_mut() {
+                                    collision.colliding = false;
+                                    collision.required_to_begin_colliding = false;
+                                }
+                                if let Some(state) = pedestrian.state.as_mut() {
+                                    state.flags[1] &= !4;
+                                }
                                 // The collision's intent packet would park at the queue's front (a puppet
                                 // never advances its queue outside a collision) and reject the next hit.
                                 pedestrian.clear_all_intents()?;
                                 if puppet.awaiting.take().is_some() {
                                     coop.stats.refused += 1;
-                                    trace(format_args!("puppet {:08x}: its owner is up, the predicted knockdown unconfirmed for {CONFIRM_GRACE_TICKS} ticks: standing up at {tick}", sample.id));
+                                    trace(format_args!("puppet {:08x}: its owner is up, the reported knockdown unconfirmed for {CONFIRM_GRACE_TICKS} ticks: standing up at {tick}", sample.id));
                                 } else {
                                     trace(format_args!("puppet {:08x}: its owner is up while this copy lies knocked down: standing up at {tick}", sample.id));
                                 }

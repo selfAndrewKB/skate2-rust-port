@@ -127,7 +127,7 @@ impl PedestrianConstruction{
         result.map_err(|error|failure.unwrap_or_else(||error.to_string()))
     }
     /// Co-op fork (M16): the graph held at `state`, its owner's (`PedestrianGraph::update_delegate_held`).
-    pub(crate) fn update_ai_graph_as(&mut self,dt:f32,services:&mut impl AiWorldServices,state:u16)->Result<(),String>{
+    pub(crate) fn update_ai_graph_as(&mut self,dt:f32,services:&mut impl AiWorldServices,state:u16)->Result<bool,String>{
         let mut bindings=self.ai_bindings.take().ok_or("pedestrian AI graph not loaded")?;
         let delegate=bindings.delegate;
         let mut graph=std::mem::take(&mut self.graph);

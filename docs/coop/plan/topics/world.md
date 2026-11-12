@@ -227,7 +227,11 @@ position carried on at its velocity, `PuppetDrive::step`) would be off by more t
 its facing by more than 2°, or its flags, motion or graph state changed, or a descriptor is
 due, or 20 runs have passed (the keepalive, one second); the puppet coasts at its velocity
 for 72 ticks before it stands, past the keepalive. A sample the run's byte budget cut goes
-next run. The stream trace counts the samples withheld. Every channel's bytes are counted
+next run. The stream trace counts the samples withheld. The live audit's figures change
+meaning with it: it measures the samples that arrive, which are now the ones the receiver's
+extrapolation got wrong, so its yaw and speed shares fall by construction; the offline census
+audit at the same round tick (`sync_audit.py`) is the comparable measure from M17 on. Every
+channel's bytes are counted
 where the messages are encoded (`skate2_net::client::ChannelBytes`: the player's frames, the
 owned skaters' frames, the world runs, the facts, the looks, the rest) and traced every ten
 seconds as `net bytes at <tick>`, so the ledger names what each costs. Not built here: delta

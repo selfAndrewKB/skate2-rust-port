@@ -9,15 +9,17 @@ since when), or present on one seat only.
 A census line:
     coop census <round tick>: <wid> <own|puppet of N> e<epoch> <x> <y> <z> yaw <deg> v <m/s> f<flags> m<model> g<graph> moods<n> <down|up>
 The inventory (`docs/coop/plan/sync-inventory.md`) says which fields are meant to agree:
-position, yaw, speed, flags, model and down are streamed or derived; the graph behaviour and the
-moods are local by design and reported as "not shared" rather than as divergence."""
+position, yaw, speed, flags, model, down and (since M16) the graph state are streamed or derived;
+the moods are local by design and reported as "not shared" rather than as divergence."""
 import re
 import sys
 from collections import defaultdict
 
 LINE = re.compile(r'coop: census (\d+): ([0-9a-f]{8}) (own|puppet of \d+) e(\d+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) yaw (-?[\d.]+) v ([\d.]+) f(\d+) m([0-9a-f]+) g(\d+) moods(\d+) (down|up)')
-SHARED = {'position': 0.5, 'yaw': 5.0, 'speed': 0.5, 'flags': 0, 'model': 0, 'down': 0}
-LOCAL = ['graph', 'moods']
+# M16: the owner's graph state travels and the puppet's graph is held at it, so `graph` is shared
+# (exact); the colliding state is the puppet's own from the owner's flags, a tick or two apart.
+SHARED = {'position': 0.5, 'yaw': 5.0, 'speed': 0.5, 'flags': 0, 'model': 0, 'down': 0, 'graph': 0}
+LOCAL = ['moods']
 
 
 def read(path):

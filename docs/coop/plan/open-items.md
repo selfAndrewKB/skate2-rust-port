@@ -11,7 +11,10 @@ Front page: [README](../README.md).
    ([research](../research/RE-living-world-pedestrians.md)).
 2. A streamed pedestrian costs about 500 B/s at 20 runs a second (25 B a sample): twelve of them
    are 6 KB/s a direction. Runs are self-contained; delta coding against acknowledged runs is
-   M6's.
+   M6's. **M17 (2026-11-12):** a sample goes only when the receiver's extrapolation of the
+   last would be off (5 cm, 2°) or the flags, motion or graph state changed, else every
+   twentieth run: the world stream at 1.5 and 1.6 kB/s a seat in the M16 probe's soak, from
+   6.0 and 6.2 in the field test (`../bench/evidence/probe/2026-11-12-m16-puppets.md`).
 3. Puppets count against the census's own allowance (`max_pedestrians` 12), so a seat with ten
    puppets spawns only two of its own. Good for double spawns, to be decided on purpose in M6.
 4. Only pedestrians stream. Cars, props and guards: M5, M6.
@@ -59,8 +62,10 @@ Front page: [README](../README.md).
 39. The first audit: a puppet's speed differs from its owner's by more than 0.5 m/s in 28 %
     of pairs and its yaw by more than 5° in 5 %, while its position holds within 0.5 m in
     99.95 %. M16 turns a puppet to each sample's facing over the stream's cadence (three
-    ticks, `YAW_SLEW_TICKS`) instead of snapping and holding it [the probe's audit says by
-    how much]. The puppet's velocity is its drive's own (the coast, then the hold); carrying the
+    ticks, `YAW_SLEW_TICKS`) instead of snapping and holding it; the M16 probe's same-tick
+    census audit reads yaw within 5° in 93.9 % of pairs (the field test's 91 %), speed within
+    0.5 m/s in 74.8 % (71 %), position within 0.5 m in 100 %; the live audit's own figures
+    are no longer comparable since M17 (it sees only the samples the send-on-error rule sent). The puppet's velocity is its drive's own (the coast, then the hold); carrying the
     owner's velocity through to the puppet's `core.velocity` and yaw target is the next
     improvement the audit will measure.
 40. Retired: the live audit (the receiving end measures every sample against the puppet it
@@ -150,9 +155,16 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
 75. The field test's bandwidth, from the stream traces of 4.9 hours: the world stream 6.0 and
     6.2 kB/s a seat on average, 7.2 and 9.9 kB/s at the peak; 27 B a pedestrian sample at 20 Hz
     (about 570 B/s a streamed pedestrian); a skater's look 31 kB each, 318 sent (9.9 MB), one
-    at every ambient respawn; the skater frames and the facts uncounted. Items 2 and 33 stand;
-    M17 builds the delta coding, the send-on-error cadence, the looks by hash and a meter on
-    every channel.
+    at every ambient respawn; the skater frames and the facts uncounted. **M17 (2026-11-12),
+    measured on every channel** (`net bytes` trace, `skate2_net::client::ChannelBytes`) over
+    the M16 probe's five-and-a-half-minute soak: the world stream 1.5 and 1.6 kB/s a seat (the
+    send-on-error rule, item 2); the owned skaters' frames the largest channel, 7.8 and 4.1
+    kB/s (from 12.5 and 6.0 before the ambient skaters' poses went to half the cadence); the
+    player's own frames 2.7 kB/s; the facts 1.7 kB/s; the looks 31 kB each at every ambient
+    respawn. A look (32,566 bytes, `SKATE2_DIAGNOSTIC_DUMP_LOOK`) compresses to 27 % under
+    deflate and 22 % under lzma, 81 % under a zero-run RLE: a compressor or a dedup by content
+    hash (the ambient outfits repeat) is the next step, not built; neither is delta coding
+    against acknowledged runs (item 33), which the stream no longer needs for its budget.
 76. **A script's state and vars are one per activity, not per player** (M13's residue): the
     graph's state (`challenge_running`, a restart state) and its `vars` table (bail counts,
     timers) are shared by both humans' events, so two humans bailing within one restart

@@ -179,7 +179,7 @@ impl PedestrianGraph {
     /// its own perception, which a puppet has none of.
     pub(crate) fn update_delegate_held(&mut self, delegate: AiDelegate, dt: f32,
         instances: &mut PedestrianGraphBehaviours, backend: &mut impl PedestrianGraphBackend, state: u16,
-    ) -> Result<(), Error> {
+    ) -> Result<bool, Error> {
         use marquee_data::{marquee, photographer};
         match delegate {
             AiDelegate::Pedestrian => self.update_held::<9>(dt, instances, backend, &GeneratedDeclarations {
@@ -199,10 +199,17 @@ impl PedestrianGraph {
                     behaviours: &photographer::BEHAVIOURS, active_capacity: 6 }, state),
         }
     }
+    /// `PedestrianColliding`'s native update (`pedestrian_graph_updates.rs`): the colliding
+    /// state is the collision machinery's own, entered by the puppet's graph from the owner's
+    /// flags (M6), never held (held, its update found no collision in progress: the M16 probe).
+    const COLLIDING_UPDATE: u32 = 0x828f_5f18;
+    /// Whether the held update took the state: `false` for the colliding state, which is left
+    /// to the puppet's own selection from its collision flags.
     fn update_held<const DEPTH: usize>(&mut self, dt: f32, instances: &mut PedestrianGraphBehaviours,
         backend: &mut impl PedestrianGraphBackend, declarations: &GeneratedDeclarations, state: u16,
-    ) -> Result<(), Error> {
+    ) -> Result<bool, Error> {
         if usize::from(state) >= declarations.states.len() { return Err(Error::InvalidState(state)); }
+        if declarations.states[usize::from(state)].update_address == Self::COLLIDING_UPDATE { return Ok(false); }
         self.delta_time = dt;
         let graph = Graph::<DEPTH> { states: declarations.states, transitions: declarations.transitions,
             indices: declarations.indices, current: self.current };
@@ -214,7 +221,8 @@ impl PedestrianGraph {
         } else {
             graph.changes(&selected)?
         };
-        self.apply_selection::<DEPTH>(dt, instances, backend, declarations, &selected, exited, entered)
+        self.apply_selection::<DEPTH>(dt, instances, backend, declarations, &selected, exited, entered)?;
+        Ok(true)
     }
     pub(crate) fn update_declarations<const DEPTH:usize>(&mut self, dt:f32,
         instances:&mut PedestrianGraphBehaviours, backend:&mut impl PedestrianGraphBackend,

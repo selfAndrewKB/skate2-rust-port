@@ -1787,8 +1787,12 @@ impl<T, C> SelectedLiveSession<T, C> {
         let owned_ai = match self.career.as_ref().map(|career| career.system.world()).and_then(|world| world.coop.as_ref().map(|campaign| (campaign.seats, crate::challenge::players::owns_challenge_ai(world)))) {
             Some((humans, owns)) => {
                 let sample = watched || ends_at(tick, interval);
+                // M17: the ambient skaters' poses at half the cadence: their frames were the
+                // largest channel of the M16 probe's soak (about 6 kB/s a seat, twice the world
+                // stream after its send-on-error rule), and nobody's camera follows them.
+                let ambient_sample = watched || ends_at(tick, interval * 2);
                 let mut owned = if owns { owned_ai_net_frames(&mut self.inner, humans, tick, sample, &vault, &game.owned_sent, true)? } else { Vec::new() };
-                owned.extend(owned_ai_net_frames(&mut self.inner, humans, tick, sample, &vault, &game.owned_sent, false)?);
+                owned.extend(owned_ai_net_frames(&mut self.inner, humans, tick, ambient_sample, &vault, &game.owned_sent, false)?);
                 owned
             }
             None => Vec::new(),
