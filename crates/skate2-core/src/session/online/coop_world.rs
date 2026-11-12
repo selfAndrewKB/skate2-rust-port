@@ -610,6 +610,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         object.touched = false;
                         let players = std::mem::take(&mut object.touched_by);
+                        let world_push = players & crate::living_world_grind_services::dmo_objects::WORLD_TOUCH != 0;
+                        let players = players & !crate::living_world_grind_services::dmo_objects::WORLD_TOUCH;
                         let (old, claim) = coop.props.get(&locator).map_or((None, 1), |known| (Some(known.owner), known.claim + 1));
                         if old == Some(Owner::Local) {
                             coop.props.get_mut(&locator).expect("known").touched = tick;
@@ -623,7 +625,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             }
                             continue;
                         }
-                        ownership::decide(Kind::Prop, locator as u32, old, ownership::owner(Kind::Prop, Owner::Local), &format!("this console's skater touched it last (players {players:#b}, claim {claim})"));
+                        ownership::decide(Kind::Prop, locator as u32, old, ownership::owner(Kind::Prop, Owner::Local), &format!("this console's skater touched it last (players {players:#b}{}, claim {claim})", if world_push { ", a car's or a pedestrian's push" } else { "" }));
                         object.coop_puppet = false;
                         coop.props.insert(locator, PropOwner { owner: Owner::Local, claim, touched: tick, sent: None, runs: 0, sampled: 0, moving: false, waited: 0 });
                     }

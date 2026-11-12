@@ -378,10 +378,17 @@ Front page: [README](../README.md).
     the rest (two humans, or each console's own ambient skaters, 53): a touch does not take a
     prop whose owner's latest sample, within 30 ticks, still has it moving; the touch waits,
     the puppet stays driven, and the next touch after it rests claims it
-    ([world](topics/world.md)). What stays unclaimed is a living-world body's push: a car's or
-    a pedestrian's contact is not a touch, so a prop one of those moves is the mover's
-    console's alone and not streamed (`SimulationContactEntityOwner::LivingWorld` in the
-    scoring pass). Not yet played by the player.
+    ([world](topics/world.md)). **And the rest (2026-11-12, M11.2):** a car's or a
+    pedestrian's moving push is a touch too (the scoring pass's living-world contacts of a
+    vehicle's or a pedestrian's body with a relative velocity; a prop resting against another
+    claims nothing), so a prop one of those moves is claimed for the console that simulates the
+    pusher and streamed, the claim's trace naming the push. Proof
+    (`../bench/evidence/probe/2026-11-12-m11-2-soak-seat-{1,2}.log`, build d7185887): six
+    minutes at the waterfront with 15 to 17 pedestrians, seven pushes claimed props (three on
+    seat 1, four on seat 2), each a puppet on the other seat; one prop (`b33abfb8`) changed
+    hands between the seats' pedestrians four times under the contest rule. The nine-mission
+    regression `2026-11-12-crawl-m11-2` [see the run note in missions]. Not yet played by the
+    player.
 68. On the M10 regression run (`2026-11-11-crawl-m10`) seat 2 unloaded and reloaded the hub's
     hull `ur_hotel_pool_drain` (its graph restarting at `initial`) once more than seat 1 after
     the win of `m_1a_03_tutorial_fliptricks` (at round tick 2057) and `m_6p_03_demo_pool_team_03`

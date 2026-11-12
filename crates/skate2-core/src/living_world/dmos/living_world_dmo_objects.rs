@@ -590,6 +590,10 @@ pub(crate) struct DynamicObject {
     pub(crate) touched_by: u32,
 }
 
+/// Co-op fork (M11.2): the `touched_by` bit of a living-world body's push (a car's, a
+/// pedestrian's), beside the players' bits (open item 67).
+pub(crate) const WORLD_TOUCH: u32 = 1 << 31;
+
 impl DynamicObject {
     /// DynamicObject::IsUpright 0x82d2ac50, AngleBetweenVectors 0x829b0528.
     pub(crate) fn try_is_upright(&self, threshold: f32) -> Result<bool, crate::reckoning_numeric::ReckoningHostNumericError> {

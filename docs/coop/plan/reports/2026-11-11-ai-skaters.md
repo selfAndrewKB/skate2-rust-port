@@ -239,6 +239,19 @@ for two pros (four before) and seat 2 tracing each pro's frames carrying its sou
 demo with four looks for four pros. Still silent: the pro's call-outs (its AI audio words have
 no place in the wire frame).
 
+## And the props a car or a pedestrian moves (M11.2, 2026-11-12)
+
+The rest of open item 67: a car's or a pedestrian's push claimed nothing, so a prop one of
+those moved was the mover's console's alone. A moving push by a vehicle's or a pedestrian's
+body is a touch now (a prop resting against another claims nothing), claimed for the console
+that simulates the pusher and streamed, the claim's trace naming the push; a puppet
+pedestrian's push on the other console contests it under M10.1's rule. Proof
+(`../bench/evidence/probe/2026-11-12-m11-2-soak-seat-{1,2}.log`): six minutes at the
+waterfront with 15 to 17 pedestrians, seven pushes claimed props (three on seat 1, four on seat
+2), each a puppet on the other seat, one prop changing hands between the seats' pedestrians
+four times. The nine-mission regression on this build: `2026-11-12-crawl-m11-2` [see the run
+note in missions].
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

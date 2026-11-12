@@ -64,7 +64,7 @@ traces every decision (entity, old owner, new owner, reason). The table:
 | ambient pedestrian | `Spawner`: the census that spawned it, for life (M1) | yes |
 | story character (a pedestrian a challenge placed) | `EachConsole`: every console spawns and simulates its own copy where its own skater is (M5) | no |
 | security guard | `Chasee`: the console of the player it chases, which is its spawner until M6's migration (a guard chases only the skater of the console that simulates it) (M5) | yes, as a pedestrian |
-| prop (a dynamic object with a locator) | `LastToucher`: the console whose skater touched it last, by claim number, the highest claim winning everywhere and a tie the lower slot (M5); a touch waits while the owner's latest sample still moves it (M10.1) | yes, in the run's prop list |
+| prop (a dynamic object with a locator) | `LastToucher`: the console whose skater, or whose car or pedestrian (M11.2), touched it last, by claim number, the highest claim winning everywhere and a tie the lower slot (M5); a touch waits while the owner's latest sample still moves it (M10.1) | yes, in the run's prop list |
 
 Nearest-player ownership with hysteresis and migration: M6.
 
@@ -76,9 +76,12 @@ body is driven there as a hand prop's is, never read back. A touch (the scoring 
 contact, the bench's nudge) claims it. The touch is any skater body's on this console: the
 human's, and on the AI's owner the pro's (M10; the M10 S.K.A.T.E. logs show the pro's hits
 claiming two rails on seat 1, puppets on seat 2), each recorded by player bit (`touched_by`,
-in the claim's trace). A car's or a pedestrian's push is not a touch (the scoring pass's
-living-world contacts), so a prop one of those moves is not claimed and not streamed (open
-item 67). Proof (`../bench/evidence/2026-11-10-m5a-*.log`): the nudge on seat 1 at its frame
+in the claim's trace). A car's or a pedestrian's moving push is a touch too (M11.2: the
+scoring pass's living-world contacts of a vehicle's or a pedestrian's body with a relative
+velocity, flagged `WORLD_TOUCH` in the trace; a prop resting against another claims nothing),
+so a prop one of those moves is claimed for the console that simulates the pusher and
+streamed, and a puppet pedestrian's push on the other console contests it under the rule
+below (open item 67). Proof (`../bench/evidence/2026-11-10-m5a-*.log`): the nudge on seat 1 at its frame
 2700 claimed the tutorial's prop (locator `ccf33c75656ac459`, claim 1); seat 2 took it as a
 puppet at its frame 2231; 44 samples in the next 600 frames while it moved, 10 per 600 at
 rest. **Demoted (2026-11-11):** the 44 samples were the sender's count; the receiver passed a

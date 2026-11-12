@@ -92,7 +92,17 @@ impl LivingWorldGrindServices {
                         dmo.touched = true;
                         dmo.touched_by |= bit;
                     }
-                    SimulationContactEntityOwner::LivingWorld(_) => dmo.add_entity_contact(part, force),
+                    SimulationContactEntityOwner::LivingWorld(_) => {
+                        dmo.add_entity_contact(part, force);
+                        // Co-op fork (M11.2, open item 67): a car's or a pedestrian's moving
+                        // push is a touch too, so the prop it moves is claimed for the console
+                        // that simulates the pusher and streamed; a prop resting against
+                        // another (a DMO's contact, or one at rest) claims nothing.
+                        if matches!(other, SimulationIslandBodyHandle::Vehicle(_) | SimulationIslandBodyHandle::Pedestrian(_)) && force > 1e-3 {
+                            dmo.touched = true;
+                            dmo.touched_by |= crate::living_world_grind_services::dmo_objects::WORLD_TOUCH;
+                        }
+                    }
                 }
             }
         }
