@@ -145,6 +145,11 @@ struct Stats {
     stale: u32,
     /// M17: samples the send-on-error rule withheld.
     withheld: u64,
+    /// M19's baseline: this console's own pedestrians' jerk, measured as the puppets' is.
+    own_ticks: u64,
+    own_jerk: f64,
+    own_over: u64,
+    own_over_flat: u64,
     since: u32,
 }
 
@@ -209,6 +214,8 @@ pub(in super::super) struct CoopWorld {
     /// The others' story characters refused here (this console's own copy of the entry stands,
     /// the lower slot's): their world ids, until their despawn.
     refused: BTreeSet<u32>,
+    /// M19's baseline meter: this console's own pedestrians' last position and step.
+    own_steps: BTreeMap<u32, ([f32; 3], [f32; 3])>,
     bad_runs: u32,
     shoved: bool,
     stats: Stats,
@@ -940,6 +947,38 @@ impl<T, C> SelectedLiveSession<T, C> {
                     }
                 }
 
+                // M19's baseline: this console's own pedestrians' jerk, every tick, measured as
+                // the puppets' is (a step against the step before), so the puppets' figure has
+                // the original's own to stand against.
+                {
+                    let living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                    if let Some(roster) = living.pedestrian_entities.as_deref() {
+                        let mut seen = BTreeSet::new();
+                        for id in roster.ids() {
+                            let Some(pedestrian) = roster.get(id).filter(|pedestrian| pedestrian.puppet.is_none()) else { continue };
+                            let Some(core) = pedestrian.core.as_ref() else { continue };
+                            let at = [core.transform[3][0], core.transform[3][1], core.transform[3][2]];
+                            seen.insert(id);
+                            if let Some((last, last_step)) = coop.own_steps.get(&id).copied() {
+                                let step = [at[0] - last[0], at[1] - last[1], at[2] - last[2]];
+                                let jerk = (0..3).map(|lane| (step[lane] - last_step[lane]).powi(2)).sum::<f32>().sqrt();
+                                let flat = ((step[0] - last_step[0]).powi(2) + (step[2] - last_step[2]).powi(2)).sqrt();
+                                // A step past 1 m is a respawn or a teleport, not a walk.
+                                if step.iter().map(|value| value * value).sum::<f32>() < 1. {
+                                    coop.stats.own_ticks += 1;
+                                    coop.stats.own_jerk += f64::from(jerk);
+                                    coop.stats.own_over += u64::from(jerk > 0.005);
+                                    coop.stats.own_over_flat += u64::from(flat > 0.005);
+                                }
+                                coop.own_steps.insert(id, (at, step));
+                            } else {
+                                coop.own_steps.insert(id, (at, [0.; 3]));
+                            }
+                        }
+                        coop.own_steps.retain(|id, _| seen.contains(id));
+                    }
+                }
+
                 // 6. This console's own run, at the stream's cadence.
                 if tick % INTERVAL != 0 {
                     return Ok(None);
@@ -1184,6 +1223,11 @@ impl<T, C> SelectedLiveSession<T, C> {
                         if ticks > 0 {
                             trace(format_args!("puppet jerk at {tick}: {ticks} ticks, mean {:.2} mm, {over} past 5 mm ({:.2} %), {over_flat} along the ground (M19)", 1000. * stray / ticks as f64, 100. * over as f64 / ticks as f64));
                         }
+                    }
+                    let own = &*stats;
+                    if own.own_ticks > 0 {
+                        trace(format_args!("own pedestrians' jerk at {tick}: {} ticks, mean {:.2} mm, {} past 5 mm ({:.2} %), {} along the ground (M19's baseline)",
+                            own.own_ticks, 1000. * own.own_jerk / own.own_ticks as f64, own.own_over, 100. * own.own_over as f64 / own.own_ticks as f64, own.own_over_flat));
                     }
                     let audit = &stats.audit;
                     if audit.samples > 0 {
