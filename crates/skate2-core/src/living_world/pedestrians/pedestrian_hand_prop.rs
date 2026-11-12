@@ -71,6 +71,11 @@ impl PedestrianConstruction {
             .map_err(|e|format!("hand prop collision group: {e:?}"))?;
         object.group=15;
         if object.monitoring_entities.len()<4 {object.monitoring_entities.push(self.id);}
+        // Co-op fork (M19): a puppet's held prop is not culled by this console's distance from
+        // its own skater: a puppet lives within its owner's stream radius, often past this
+        // census's cull radius, and its prop was culled out of its hand while it walked on (the
+        // M19 probe's third run). Its release makes it cullable again.
+        if self.puppet.is_some() {object.allow_cull=false;}
         Ok(())
     }
 
@@ -518,6 +523,10 @@ impl PedestrianConstruction {
                 .map_err(|e| format!("hand prop collision group: {e:?}"))?;
             object.group = group;
             object.hand_prop_cull_timer = cvars.try_dmo_hand_prop_cull_timer().map_err(|e| format!("hand prop cull timer: {e:?}"))?;
+            // Co-op fork (M19): a puppet's prop, kept from the distance cull while held, is the
+            // census's again once let go, a puppet handed to this console included (the
+            // hand-prop pass spawns every hand prop cullable, so this is the original's state).
+            object.allow_cull = true;
             // DeregisterEntityMonitor82d35090 removes the FIRST matching entry.
             if let Some(index) = object.monitoring_entities.iter().position(|&entity| entity == self.id) {
                 object.monitoring_entities.remove(index);
