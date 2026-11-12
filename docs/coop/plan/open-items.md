@@ -32,6 +32,16 @@ Front page: [README](../README.md).
 34. A puppet's startle, stumble and mood gestures do not travel: its intents are its owner's
     velocity through the speed table, so a startled run shows as a run and nothing else. The
     owner's graph behaviour (a small index) is the next thing to stream if play wants it.
+    **Fixed (2026-11-12, M16):** every sample carries the owner's AI graph state
+    (`EntityState::graph`, stream format 5) and the puppet's graph is held at it every tick
+    (`PedestrianGraph::update_delegate_held`): the behaviours' `Begin` and `End` run on the
+    puppet as on the owner, so a startle, a stumble, a knockdown, a photographer's pose or a
+    sit are the owner's and not a reading of the puppet's own perception; a state the puppet
+    cannot enter is traced once and that puppet keeps the M6 gate. With it a puppet predicts
+    no hit of its own any more: a contact goes to the owner and the owner's flags and state
+    play it back one round trip later (the field test had 63 corrections of predicted
+    knockdowns against 38 confirmations on one seat). Proof:
+    `../bench/evidence/probe/2026-11-12-m16-puppets.md`.
 
 ## Kinds ([topic](topics/kinds.md), M7)
 
@@ -48,7 +58,9 @@ Front page: [README](../README.md).
 
 39. The first audit: a puppet's speed differs from its owner's by more than 0.5 m/s in 28 %
     of pairs and its yaw by more than 5° in 5 %, while its position holds within 0.5 m in
-    99.95 %. The puppet's velocity is its drive's own (the coast, then the hold); carrying the
+    99.95 %. M16 turns a puppet to each sample's facing over the stream's cadence (three
+    ticks, `YAW_SLEW_TICKS`) instead of snapping and holding it [the probe's audit says by
+    how much]. The puppet's velocity is its drive's own (the coast, then the hold); carrying the
     owner's velocity through to the puppet's `core.velocity` and yaw target is the next
     improvement the audit will measure.
 40. Retired: the live audit (the receiving end measures every sample against the puppet it
@@ -87,8 +99,10 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     of their own; two testers at once keep the lower slot's copy ([world](topics/world.md)).
     Proof: `../bench/evidence/probe/2026-11-12-m14-story.md` (the photo mission: the joiner's
     tester first, the host's puppet of it at the same spot and facing to the centimetre, no
-    second copy, the mission completing on both); the tie and the owner's despawn freeing the
-    entry are unexercised there. The intro scene's own characters stay each console's scene's.
+    second copy, the mission completing on both); the tie fired in the regression's flip-tricks
+    tutorial (`2026-11-12-crawl-m14`: both testers in one tick, the host kept its copy, the
+    joiner culled its own and took the puppet); the owner's despawn freeing the entry is
+    unexercised. The intro scene's own characters stay each console's scene's.
 71. **The joiner's objective copy dies at the host's first bail** (the logs; the player saw
     the joiner unable to complete). Every console's scripts hear every human's skater messages
     from the lockstep frames with the message's `PlayerID` the campaign slot, and the shipped
