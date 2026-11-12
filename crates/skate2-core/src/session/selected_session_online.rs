@@ -38,7 +38,7 @@ use skate2_net::frames::{HEADER_WORDS, INTERVAL, MAX_RUN, NetFrame, PLAYING_INTE
 use skate2_net::protocol::{
     ClientMessage, GameAttributes, Phase, PlayNow, PlayNowMode, PlayerInfo, ServerMessage, challenge, owned, play_now, refuse, request, timer, valid_chat,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 fn error(e: impl std::fmt::Display) -> SelectedLiveError {
@@ -245,6 +245,9 @@ pub(super) struct Online {
     /// tick ends a run too, as the local skater's does).
     owned_runs: BTreeMap<u8, Vec<NetFrame>>,
     owned_teleported: BTreeMap<u8, bool>,
+    /// Co-op fork (M11.1): the owned slots whose frames have carried an audio record here, for
+    /// the trace (the puppet sounds as the owner's actor does).
+    owned_sound: BTreeSet<u8>,
     /// The trick HUD's view of the local skater that its replay frames carry, and whether the
     /// last tick could not take it (traced once a time it starts failing).
     hud: crate::online::hud_record::HudRecorder,
@@ -323,10 +326,11 @@ const fn ends_at(tick: u32, interval: u32) -> bool {
 
 /// Co-op fork (M10): the replay frames of the challenge AI skaters this console owns (the
 /// slots after the campaign's `humans` with a challenge controller), each as its own skater's
-/// go out: the header, the pose on a sample tick, the twist ratios; no camera, no audio record
-/// and no trick HUD (a puppet has none to show); a teleporting tick is a sample, as the local
-/// skater's is. With each the skater's recipe and, when the look of that recipe has not gone
-/// for the slot yet (`sent`), the look to send first.
+/// go out: the header, the pose on a sample tick, the twist ratios, and the actor's audio record
+/// (its wheels and landings, relative to its root as the player's own travels; M11.1); no
+/// camera and no trick HUD (a puppet has none to show); a teleporting tick is a sample, as the
+/// local skater's is. With each the skater's recipe and, when the look of that recipe has not
+/// gone for the slot yet (`sent`), the look to send first.
 fn owned_ai_net_frames<T, C>(
     inner: &mut super::SelectedSession<T, C>,
     humans: usize,
@@ -376,7 +380,14 @@ fn owned_ai_net_frames<T, C>(
                 })
                 .collect()
         });
-        frames.push((slot, recipe_id, recipe, NetFrame { tick, header, pose, twist: frame.twist_ratios, camera: Vec::new(), audio_floats: Vec::new(), audio_words: Vec::new(), hud: Vec::new() }));
+        let root = [header[36], header[37], header[38]].map(f32::from_bits);
+        let audio = skater
+            .actor
+            .cached_physical_allocation()
+            .ok()
+            .and_then(|physical| physical.owner().phys_out().lock().ok().and_then(|output| output.try_audio_phys_out().ok()));
+        let (audio_floats, audio_words) = audio.map(|record| crate::online::audio_record::flatten(&crate::online::audio_record::relative_to_root(record, root))).unwrap_or_default();
+        frames.push((slot, recipe_id, recipe, NetFrame { tick, header, pose, twist: frame.twist_ratios, camera: Vec::new(), audio_floats, audio_words, hud: Vec::new() }));
     }
     Ok(frames)
 }
@@ -552,6 +563,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                             None => game.remotes.get_mut(&user_id),
                         };
                         if let Some(remote) = remote {
+                            if let Some(slot) = owned::slot_of_id(user_id)
+                                && !frame.audio_words.is_empty()
+                                && self.online.owned_sound.insert(slot)
+                            {
+                                crate::coop::trace(format_args!("owned AI skater at slot {slot}: its frames carry its sound from tick {}", frame.tick));
+                            }
                             remote.receive(tick, *frame, paced, run_end);
                         }
                     }
@@ -1778,6 +1795,12 @@ impl<T, C> SelectedLiveSession<T, C> {
             let after_teleport = std::mem::replace(self.online.owned_teleported.entry(slot).or_default(), teleport);
             let run = self.online.owned_runs.entry(slot).or_default();
             let ends = ends_at(tick, interval) || teleport || after_teleport;
+            // As the player's own run: while watched, the later samples carry the first tick's
+            // audio floats (no restore blends them).
+            let mut net = net;
+            if watched && let Some(first) = run.first() {
+                net.audio_floats.clone_from(&first.audio_floats);
+            }
             run.push(net);
             if ends || run.len() == MAX_RUN {
                 let run = std::mem::take(run);
@@ -1966,9 +1989,10 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
     }
 
-    /// Co-op fork (M10): an owned skater's slot was created or destroyed, the round's frames
-    /// say: its unsent frames go (a destroyed skater's run never completes), and its look goes
-    /// again at its next frame (a skater built again at the slot, whatever its recipe).
+    /// Co-op fork (M10): an owned skater's slot was destroyed, the round's frames say: its
+    /// unsent frames go (a destroyed skater's run never completes), and the look of the next
+    /// skater at the slot goes at its first frame, whatever its recipe (M11.1: on the
+    /// destruction alone; the creation's clearing sent every look twice).
     pub(super) fn online_owned_slot_changed(&mut self, slot: i32) {
         let Ok(slot) = u8::try_from(slot) else { return };
         self.online.owned_runs.remove(&slot);
@@ -1983,6 +2007,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     pub(super) fn online_drop_owned_puppets(&mut self) {
         self.online.owned_runs.clear();
         self.online.owned_teleported.clear();
+        self.online.owned_sound.clear();
         if let Some(game) = self.online.game.as_mut() {
             game.remotes.retain(|&user_id, _| owned::slot_of_id(user_id).is_none());
             game.owned_sent.clear();

@@ -35,8 +35,10 @@ and the index space settled: [the AI day](../reports/2026-11-11-ai-skaters.md),
   its own skater's take (`OwnedFrames`, relayed as `RemoteFrames` under the marked slot
   `owned::frames_slot`, acknowledged under `OwnedFrameAck`); the other consoles drive a
   `RemoteSkater` of it (`protocol::owned::skater_id`), shown while the round runs, hidden with
-  its last facts frame, dropped with the round. No camera, audio record or trick HUD travels
-  with it.
+  its last facts frame, dropped with the round. Its frames carry the actor's audio physics
+  record (M11.1: the wheels and landings, relative to its root), so the puppet sounds as a
+  remote player does and the microphone follows it when the console does; no camera, no trick
+  HUD, and not the AI's own call-out words (open item 66).
 - **The natives.** A script's AI natives on a non-owner reach the manager (the row, the slot)
   and no actor: a teleport, reposition or request of a slot without a controller does nothing
   there (`try_teleport_ai_player` false, the controller map empty at the slot), and the owner's
@@ -59,13 +61,13 @@ and the index space settled: [the AI day](../reports/2026-11-11-ai-skaters.md),
 
 ## Not shared, recorded
 
-- The AI's sound on the non-owner (no audio record travels with an owned frame).
-- A handoff when the owner leaves the round: the AI stops with it (open item 65).
+- The AI's call-outs on the non-owner (its audio words do not travel; its physics sound does
+  since M11.1, open item 66).
 - The puppet's scoring body (`RemoteScoringSkater`) is collected as a remote player's; whether
   a trick over the pro scores alike on both consoles is play's to say.
-- A prop the owner's AI knocks over is not claimed for the owner (the prop rule counts only
-  the console's own skater's touch), so it stands on the other console and the puppet, which
-  has no body, runs through it (open item 67, seen in play).
+- A prop the owner's AI knocks over is claimed for the owner as its own skater's touch is
+  (read in the logs, M10.1) and the puppet follows it since M10.1; the puppet AI has no body
+  to hit anything with (open item 67: what stays unclaimed is a car's or a pedestrian's push).
 
 ## History
 

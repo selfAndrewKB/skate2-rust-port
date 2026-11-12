@@ -227,6 +227,18 @@ the scripts heard no creation or destruction across the hand-off. The AI's routi
 on the new owner. The nine-mission regression on this build: `2026-11-11-crawl-m11` [see the
 run note in missions].
 
+## And the morning after: the pro's sound (M11.1, 2026-11-12)
+
+Open item 66: the puppet pro was silent, and its look went out twice per spawn. The owner now
+puts the actor's audio physics record in every owned frame, relative to its root as the
+player's own travels, so the puppet's wheels and landings sound on the other console through
+the audio's remote skaters, and the microphone follows the leader the camera is switched to.
+The look's sent record clears on a slot's destruction alone, so a look goes once. Proof
+(`../bench/evidence/probe/2026-11-12-crawl-m11-1-probe.md`): the S.K.A.T.E. with two looks
+for two pros (four before) and seat 2 tracing each pro's frames carrying its sound; the Dyrdek
+demo with four looks for four pros. Still silent: the pro's call-outs (its AI audio words have
+no place in the wire frame).
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

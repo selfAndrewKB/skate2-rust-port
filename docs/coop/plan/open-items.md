@@ -341,14 +341,20 @@ Front page: [README](../README.md).
     routine (a leader mid-trick begins its run again); a script's camera switch to the AI in
     the ticks between the take-over and the actor's build would find no actor (the M10 first
     build's stop), not seen here. Not yet played by the player.
-66. An owned AI skater's puppet is silent: no audio record travels with its frames (the
-    remote players' do), so the pro's wheels and landings sound only on the owner's console.
-    The owner's `controller_audio` record is the thing to carry, as the player's own
-    `AudioSkater` record is. Also: an owned skater's look goes out twice per spawn (at its
-    first frame, and again when the slot's creation reaches the owner through the round's
-    frames, `online_owned_slot_changed`), 31 KB each; the second send is owed only to a spawn
-    at a slot whose puppet still wears another recipe, so clearing the record on the slot's
-    destruction alone would halve it.
+66. **Fixed in part (2026-11-12, M11.1).** An owned AI skater's puppet was silent: no audio
+    record travelled with its frames (the remote players' do), so the pro's wheels and landings
+    sounded only on the owner's console. The owner now puts the actor's audio physics record
+    (`try_audio_phys_out`, relative to its root as the player's own travels) in every owned
+    frame, and the puppet sounds through the audio's remote skaters as a remote player does;
+    the one the console follows is the audio's local skater, so the microphone follows the
+    leader a S.K.A.T.E. switches the camera to. Also fixed: the look went out twice per spawn
+    (at the first frame and again when the slot's creation reached the owner through the
+    round's frames); the sent record now clears on a slot's destruction alone, and a look goes
+    once (31 KB). Proof: `../bench/evidence/probe/2026-11-12-crawl-m11-1-probe.md` (the
+    S.K.A.T.E.: two looks for two pros where there had been four, seat 2 tracing each pro's
+    frames carrying its sound; the Dyrdek demo: four looks for four). **Still open:** the AI's
+    own audio words (`AIOut_Audio`: its call-outs and gesture cues, `controller_audio`) do not
+    travel; the wire frame has no field for them, so a pro's call-out sounds on the owner alone.
 67. **Props an AI skater moves** (the player, 2026-11-11, in play): a railing an AI skater
     knocks down on one instance stands on the other, and the AI there runs through it as if it
     were not there. The first reading (that an AI's hit claims nothing) was wrong: the scoring

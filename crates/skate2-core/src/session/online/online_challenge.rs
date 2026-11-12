@@ -2048,7 +2048,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             if streamed && notification == SkaterNotification::Destroyed {
                 hidden.push(slot);
             }
-            if owner {
+            if owner && notification == SkaterNotification::Destroyed {
                 changed.push(slot);
             }
         }
