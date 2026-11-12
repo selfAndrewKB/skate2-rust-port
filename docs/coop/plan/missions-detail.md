@@ -8,7 +8,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 998959534 started with 2 players, seed 4eaca268; saves: none.
 
-Census audit: 89 dumps, 1321 pairs, one seat only 15 / 27, owner clashes 0; position 99.5 %, yaw 90.7 %, speed 70.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 20 (0200007a speed since 900; 0200007c speed since 900; 02000074 yaw since 900; 02000074 speed since 900; 02000075 position since 960; 02000075 speed since 960; 02000079 speed since 960; 12000077 speed since 1260…).
+Census audit: 89 dumps, 1321 pairs, one seat only 15 / 27, owner clashes 0; position 99.5 %, yaw 90.7 %, speed 70.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 20 (0200007a speed since 900; 0200007c speed since 900; 02000074 yaw since 900; 02000074 speed since 900; 02000079 speed since 960; 02000075 position since 960; 02000075 speed since 960; 12000077 speed since 1260…).
 - **Seat 1** (`bench/evidence/crawl-m_08_01_film_team_ender_1-seat-1.log`, 2630 lines): executed; won by diagnostic at 1800 (10 objectives completed); cleanup 4563; complete —; no save; crawl stop: (done) after 95 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→end_options
   - Rule: Anyone for players [0, 1] (key 5f6f16b748fe1ba9)
@@ -50,7 +50,7 @@ Family property (teleport) (45), global 2 (location), rule Anyone (table). **PAS
 
 Server (build 20523640): campaign round 884997711 started with 2 players, seed d9b94c5d; saves: campaign save from Seat 2 at session 884997711 tick 1800: 130246 B, hash 559729e520761bf7; Seat 1 has not saved; campaign save from Seat 1 at session 884997711 tick 1800: 130246 B, hash 559729e520761bf7; Seat 2 agrees (tick 1800).
 
-Census audit: 43 dumps, 608 pairs, one seat only 10 / 5, owner clashes 0; position 100.0 %, yaw 91.9 %, speed 72.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (02000079 yaw since 2340; 02000079 speed since 2340; 12000088 speed since 2460; 12000076 speed since 2520; 0200007e yaw since 2520; 0200007e speed since 2520; 12000086 speed since 2520; 0200008d speed since 2520…).
+Census audit: 43 dumps, 608 pairs, one seat only 10 / 5, owner clashes 0; position 100.0 %, yaw 91.9 %, speed 72.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (02000079 yaw since 2340; 02000079 speed since 2340; 12000088 speed since 2460; 0200008d speed since 2520; 12000086 speed since 2520; 1200007f yaw since 2520; 12000084 speed since 2520; 02000071 speed since 2520…).
 - **Seat 1** (`bench/evidence/crawl-m_08_01_teleport_trainingfacility_in-seat-1.log`, 1725 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `559729e520761bf7` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup_teleporter→wait_for_teleport_volume
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 8
@@ -70,7 +70,7 @@ Family property (teleport) (45), global 2 (location), rule Anyone (table). **PAS
 
 Server (build 20523640): campaign round 679947922 started with 2 players, seed 5556e5cf; saves: campaign save from Seat 2 at session 679947922 tick 1800: 130246 B, hash 7d0be8c372e28261; Seat 1 has not saved; campaign save from Seat 1 at session 679947922 tick 1800: 130246 B, hash 7d0be8c372e28261; Seat 2 agrees (tick 1800).
 
-Census audit: 43 dumps, 581 pairs, one seat only 7 / 2, owner clashes 0; position 100.0 %, yaw 91.7 %, speed 78.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 5 (0200006d speed since 480; 1200007b speed since 1500; 12000085 yaw since 2520; 12000085 speed since 2520; 0200005b speed since 2520).
+Census audit: 43 dumps, 581 pairs, one seat only 7 / 2, owner clashes 0; position 100.0 %, yaw 91.7 %, speed 78.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 5 (0200006d speed since 480; 1200007b speed since 1500; 0200005b speed since 2520; 12000085 yaw since 2520; 12000085 speed since 2520).
 - **Seat 1** (`bench/evidence/crawl-m_08_01_teleport_trainingfacility_out-seat-1.log`, 1483 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `7d0be8c372e28261` (130246 B).
   - Path: initial→setup_teleporter→wait_for_teleport_volume
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 8
@@ -86,67 +86,67 @@ Census audit: 43 dumps, 581 pairs, one seat only 7 / 2, owner clashes 0; positio
 
 ## `m_1a_01_goto_slappys`
 
-Family tutorial (0), global 3 (main), rule Everyone. **PASS**; cause: —; in step: yes. Runs: 2026-11-10-crawl-m1a: PASS, 2026-11-11-crawl-m9: PASS, 2026-11-11-crawl-m10: PASS, 2026-11-11-crawl-m10-2: PASS, 2026-11-11-crawl-m10-3: PASS, 2026-11-11-crawl-m11: PASS, 2026-11-12-crawl-m11-2: PASS. 
+Family tutorial (0), global 3 (main), rule Everyone. **PASS**; cause: —; in step: yes. Runs: 2026-11-10-crawl-m1a: PASS, 2026-11-11-crawl-m9: PASS, 2026-11-11-crawl-m10: PASS, 2026-11-11-crawl-m10-2: PASS, 2026-11-11-crawl-m10-3: PASS, 2026-11-11-crawl-m11: PASS, 2026-11-12-crawl-m11-2: PASS, 2026-11-12-crawl-m12: PASS. 
 
-Server (build 368bf2ed): campaign round 2278221695 started with 2 players, seed 908bbb68; saves: campaign save from Seat 2 at session 2278221695 tick 8720: 130246 B, hash 7d0be8c372e28261; Seat 1 has not saved; campaign save from Seat 1 at session 2278221695 tick 8720: 130246 B, hash 7d0be8c372e28261; Seat 2 agrees (tick 8720).
+Server (build ec4b678e): campaign round 4221621600 started with 2 players, seed 96fbc145; saves: campaign save from Seat 2 at session 4221621600 tick 8655: 130246 B, hash 7d0be8c372e28261; Seat 1 has not saved; campaign save from Seat 1 at session 4221621600 tick 8655: 130246 B, hash 7d0be8c372e28261; Seat 2 agrees (tick 8655).
 
 Census audit: no dumps paired.
-- **Seat 1** (`bench/evidence/crawl-m_1a_01_goto_slappys-seat-1.log`, 2233 lines): executed; won by diagnostic at 1202 (13 objectives completed); cleanup 8719; complete 8719; save at 8720 hash `7d0be8c372e28261` (130246 B); crawl stop: (done) after 165 s.
+- **Seat 1** (`bench/evidence/crawl-m_1a_01_goto_slappys-seat-1.log`, 2243 lines): executed; won by diagnostic at 1202 (13 objectives completed); cleanup 8654; complete 8654; save at 8655 hash `7d0be8c372e28261` (130246 B); crawl stop: (done) after 165 s.
   - Path: initial→make_hud→make_objectives→setup→asset_load→challenge_running→show_results→play_pres_event→challenge_cleanup→complete
   - Rule: Everyone for players [0, 1] (key ee4594d4bf57f08c)
   - Objectives: player 0: 13 copies, 13 complete, 0 failed; player 1: 13 copies, 13 complete, 0 failed; 26 presentations withheld
-  - Presentation: 31 groups, 174 events of kinds [2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 19, 20, 21, 28, 29, 30, 31, 34], 117 finished; scenes: Goto_m_1a_01_goto_slappys_outro_2@1643, Goto_m_1a_01_goto_slappys_outro_3@2185, Goto_m_1a_01_goto_slappys_outro_4@2758, Goto_m_1a_01_goto_slappys_outro_2@4351, Goto_m_1a_01_goto_slappys_outro_3@5267, Goto_m_1a_01_goto_slappys_outro_4@5902, 01_Welcome_Back@6821; characters instanced [0, 0, 4, 0, 0, 4, 3]; triggers entered 44
-  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 16 windows, 15995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 7, starved 3, teleport frames 8
-- **Seat 2** (`bench/evidence/crawl-m_1a_01_goto_slappys-seat-2.log`, 1957 lines): executed; won by diagnostic at 1202 (13 objectives completed); cleanup 8719; complete 8719; save at 8720 hash `7d0be8c372e28261` (130246 B).
+  - Presentation: 31 groups, 176 events of kinds [2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 19, 20, 21, 28, 29, 30, 31, 34], 119 finished; scenes: Goto_m_1a_01_goto_slappys_outro_2@1611, Goto_m_1a_01_goto_slappys_outro_3@2152, Goto_m_1a_01_goto_slappys_outro_4@2723, Goto_m_1a_01_goto_slappys_outro_2@4300, Goto_m_1a_01_goto_slappys_outro_3@5211, Goto_m_1a_01_goto_slappys_outro_4@5844, 01_Welcome_Back@6759; characters instanced [0, 0, 4, 0, 0, 4, 3]; triggers entered 44
+  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 16 windows, 15995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 9
+- **Seat 2** (`bench/evidence/crawl-m_1a_01_goto_slappys-seat-2.log`, 1982 lines): executed; won by diagnostic at 1202 (13 objectives completed); cleanup 8654; complete 8654; save at 8655 hash `7d0be8c372e28261` (130246 B); crawl stop: (done) after 165 s.
   - Path: initial→make_hud→make_objectives→setup→asset_load→challenge_running→show_results→play_pres_event→challenge_cleanup→complete
   - Rule: Everyone for players [0, 1] (key ee4594d4bf57f08c)
   - Objectives: player 0: 13 copies, 13 complete, 0 failed; player 1: 13 copies, 13 complete, 0 failed; 26 presentations withheld
-  - Presentation: 31 groups, 172 events of kinds [2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 19, 20, 21, 28, 29, 30, 31, 34], 115 finished; scenes: Goto_m_1a_01_goto_slappys_outro_2@1643, Goto_m_1a_01_goto_slappys_outro_3@2185, Goto_m_1a_01_goto_slappys_outro_4@2758, Goto_m_1a_01_goto_slappys_outro_2@4351, Goto_m_1a_01_goto_slappys_outro_3@5267, Goto_m_1a_01_goto_slappys_outro_4@5902, 01_Welcome_Back@6821; characters instanced [0, 0, 4, 0, 0, 4, 3]; triggers entered 44
-  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 15 windows, 14995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 4, teleport frames 8
+  - Presentation: 31 groups, 174 events of kinds [2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 19, 20, 21, 28, 29, 30, 31, 34], 117 finished; scenes: Goto_m_1a_01_goto_slappys_outro_2@1611, Goto_m_1a_01_goto_slappys_outro_3@2152, Goto_m_1a_01_goto_slappys_outro_4@2723, Goto_m_1a_01_goto_slappys_outro_2@4300, Goto_m_1a_01_goto_slappys_outro_3@5211, Goto_m_1a_01_goto_slappys_outro_4@5844, 01_Welcome_Back@6759; characters instanced [0, 0, 4, 0, 0, 4, 3]; triggers entered 44
+  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 15 windows, 14995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 13
 
 ## `m_1a_02_open_up`
 
-Family tutorial (0), global 4 (main), rule Everyone. **PASS**; cause: —; in step: yes. Runs: 2026-11-10-crawl-m1a: PASS, 2026-11-11-crawl-m9: PASS, 2026-11-11-crawl-m10: PASS, 2026-11-11-crawl-m10-2: PASS, 2026-11-11-crawl-m10-3: PASS, 2026-11-11-crawl-m11: PASS, 2026-11-12-crawl-m11-2: PASS. 
+Family tutorial (0), global 4 (main), rule Everyone. **PASS**; cause: —; in step: yes. Runs: 2026-11-10-crawl-m1a: PASS, 2026-11-11-crawl-m9: PASS, 2026-11-11-crawl-m10: PASS, 2026-11-11-crawl-m10-2: PASS, 2026-11-11-crawl-m10-3: PASS, 2026-11-11-crawl-m11: PASS, 2026-11-12-crawl-m11-2: PASS, 2026-11-12-crawl-m12: PASS. 
 
-Server (build 368bf2ed): campaign round 2410275001 started with 2 players, seed 26f3394f; saves: campaign save from Seat 2 at session 2410275001 tick 1716: 130246 B, hash c011b7b895b36f8a; Seat 1 has not saved; campaign save from Seat 1 at session 2410275001 tick 1716: 130246 B, hash c011b7b895b36f8a; Seat 2 agrees (tick 1716).
+Server (build ec4b678e): campaign round 2065771283 started with 2 players, seed 69cc15d7; saves: campaign save from Seat 2 at session 2065771283 tick 1714: 130246 B, hash c011b7b895b36f8a; Seat 1 has not saved; campaign save from Seat 1 at session 2065771283 tick 1714: 130246 B, hash c011b7b895b36f8a; Seat 2 agrees (tick 1714).
 
 Census audit: no dumps paired.
-- **Seat 1** (`bench/evidence/crawl-m_1a_02_open_up-seat-1.log`, 704 lines): executed; won by diagnostic at 1202 (3 objectives completed); cleanup 1716; complete 1716; save at 1716 hash `c011b7b895b36f8a` (130246 B); crawl stop: (done) after 50 s.
+- **Seat 1** (`bench/evidence/crawl-m_1a_02_open_up-seat-1.log`, 716 lines): executed; won by diagnostic at 1202 (3 objectives completed); cleanup 1714; complete 1714; save at 1714 hash `c011b7b895b36f8a` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→make_hud→make_objectives→setup→asset_load→challenge_running→show_results→play_pres_event→challenge_cleanup→complete
   - Rule: Everyone for players [0, 1] (key f0850c3db1724d8d)
   - Objectives: player 0: 3 copies, 3 complete, 0 failed; player 1: 3 copies, 3 complete, 0 failed; 6 presentations withheld
-  - Presentation: 3 groups, 6 events of kinds [4, 5, 6, 7, 13, 14], 4 finished; scenes: TestFlythrough1@1384; characters instanced [0]; triggers entered 0
+  - Presentation: 3 groups, 6 events of kinds [4, 5, 6, 7, 13, 14], 4 finished; scenes: TestFlythrough1@1383; characters instanced [0]; triggers entered 0
   - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 4 windows, 3995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 0
   - `teleport to unknown location m_1a_02_open_up_challengelocator01 (0), held (744, 56, 1)`
   - Unknown/unported lines: `career: teleport to unknown location m_1a_02_open_up_challengelocator01 (N), held (N, N, N)` ×1
-- **Seat 2** (`bench/evidence/crawl-m_1a_02_open_up-seat-2.log`, 697 lines): executed; won by diagnostic at 1202 (3 objectives completed); cleanup 1716; complete 1716; save at 1716 hash `c011b7b895b36f8a` (130246 B).
+- **Seat 2** (`bench/evidence/crawl-m_1a_02_open_up-seat-2.log`, 710 lines): executed; won by diagnostic at 1202 (3 objectives completed); cleanup 1714; complete 1714; save at 1714 hash `c011b7b895b36f8a` (130246 B).
   - Path: initial→make_hud→make_objectives→setup→asset_load→challenge_running→show_results→play_pres_event→challenge_cleanup→complete
   - Rule: Everyone for players [0, 1] (key f0850c3db1724d8d)
   - Objectives: player 0: 3 copies, 3 complete, 0 failed; player 1: 3 copies, 3 complete, 0 failed; 6 presentations withheld
-  - Presentation: 3 groups, 6 events of kinds [4, 5, 6, 7, 13, 14], 4 finished; scenes: TestFlythrough1@1384; characters instanced [0]; triggers entered 0
+  - Presentation: 3 groups, 6 events of kinds [4, 5, 6, 7, 13, 14], 4 finished; scenes: TestFlythrough1@1383; characters instanced [0]; triggers entered 0
   - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 4 windows, 3995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 0
   - `teleport to unknown location m_1a_02_open_up_challengelocator01 (0), held (744, 56, 1)`
   - Unknown/unported lines: `career: teleport to unknown location m_1a_02_open_up_challengelocator01 (N), held (N, N, N)` ×1
 
 ## `m_1a_03_tutorial_fliptricks`
 
-Family tutorial (0), global 3 (main), rule Everyone. **PASS (no save)**; cause: —; in step: yes. Runs: 2026-11-10-crawl-m1a: PASS (saves differ), 2026-11-11-crawl-m9: PASS (no save), 2026-11-11-crawl-m10: PASS (no save), 2026-11-11-crawl-m10-2: PASS (no save), 2026-11-11-crawl-m10-3: PASS (no save), 2026-11-11-crawl-m11: PASS (no save), 2026-11-12-crawl-m11-2: PASS (no save). Note: a tutorial autosaves nothing; the first report's "saves differ" was the old label for no save.
+Family tutorial (0), global 3 (main), rule Everyone. **PASS (no save)**; cause: —; in step: yes. Runs: 2026-11-10-crawl-m1a: PASS (saves differ), 2026-11-11-crawl-m9: PASS (no save), 2026-11-11-crawl-m10: PASS (no save), 2026-11-11-crawl-m10-2: PASS (no save), 2026-11-11-crawl-m10-3: PASS (no save), 2026-11-11-crawl-m11: PASS (no save), 2026-11-12-crawl-m11-2: PASS (no save), 2026-11-12-crawl-m12: PASS (no save). Note: a tutorial autosaves nothing; the first report's "saves differ" was the old label for no save.
 
-Server (build 368bf2ed): campaign round 1881241197 started with 2 players, seed cf9e2504; saves: none.
+Server (build ec4b678e): campaign round 1478136008 started with 2 players, seed 4f19952d; saves: none.
 
-Census audit: 17 dumps, 16 pairs, one seat only 1 / 0, owner clashes 0; position 100.0 %, yaw 75.0 %, speed 81.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 0.
-- **Seat 1** (`bench/evidence/crawl-m_1a_03_tutorial_fliptricks-seat-1.log`, 884 lines): executed; won by diagnostic at 1202 (6 objectives completed); cleanup 1504; complete 1504; no save; crawl stop: (done) after 45 s.
+Census audit: 11 dumps, 11 pairs, one seat only 0 / 0, owner clashes 0; position 100.0 %, yaw 81.8 %, speed 63.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 1 (12000052 yaw since 2160).
+- **Seat 1** (`bench/evidence/crawl-m_1a_03_tutorial_fliptricks-seat-1.log`, 877 lines): executed; won by diagnostic at 1202 (6 objectives completed); cleanup 1505; complete 1505; no save.
   - Path: initial→make_hud→make_objectives→setup→asset_load→challenge_running→show_results→play_pres_event→challenge_cleanup→complete
   - Rule: Everyone for players [0, 1] (key 0c92c114691f9308)
   - Objectives: player 0: 6 copies, 6 complete, 0 failed; player 1: 6 copies, 6 complete, 0 failed; 12 presentations withheld
   - Presentation: 14 groups, 27 events of kinds [3, 4, 20, 21, 29], 15 finished; scenes: none; triggers entered 0
-  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 4 windows, 10543 B, peak 639 B/s, peak 2 pedestrians here (1 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 1
-- **Seat 2** (`bench/evidence/crawl-m_1a_03_tutorial_fliptricks-seat-2.log`, 866 lines): executed; won by diagnostic at 1202 (6 objectives completed); cleanup 1504; complete 1504; no save.
+  - Sync: audit 128 samples in 1 windows, position 100.0 %, yaw 96.1 %, speed 77.3 %, flags 100.0 %, worst 0.13 m / 13°; stream 4 windows, 3995 B, peak 100 B/s, peak 2 pedestrians here (0 owned, 1 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 2
+- **Seat 2** (`bench/evidence/crawl-m_1a_03_tutorial_fliptricks-seat-2.log`, 855 lines): executed; won by diagnostic at 1202 (6 objectives completed); cleanup 1505; complete 1505; no save; crawl stop: (done) after 45 s.
   - Path: initial→make_hud→make_objectives→setup→asset_load→challenge_running→show_results→play_pres_event→challenge_cleanup→complete
   - Rule: Everyone for players [0, 1] (key 0c92c114691f9308)
   - Objectives: player 0: 6 copies, 6 complete, 0 failed; player 1: 6 copies, 6 complete, 0 failed; 12 presentations withheld
   - Presentation: 14 groups, 27 events of kinds [3, 4, 20, 21, 29], 15 finished; scenes: none; triggers entered 0
-  - Sync: audit 198 samples in 1 windows, position 100.0 %, yaw 88.4 %, speed 76.3 %, flags 100.0 %, worst 0.08 m / 18°; stream 3 windows, 2995 B, peak 100 B/s, peak 2 pedestrians here (0 owned, 1 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 1
+  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 3 windows, 5563 B, peak 357 B/s, peak 2 pedestrians here (1 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 27, teleport frames 4
 
 ## `m_1a_04_tutorial_manuals`
 
@@ -474,7 +474,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 1644547109 started with 2 players, seed 81567e2a; saves: none.
 
-Census audit: 34 dumps, 223 pairs, one seat only 3 / 1, owner clashes 0; position 96.4 %, yaw 91.0 %, speed 73.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 10 (0200001b speed since 900; 02000018 position since 960; 02000018 speed since 960; 02000019 position since 960; 02000019 speed since 960; 12000116 yaw since 2460; 12000119 speed since 2460; 0200010c speed since 2460…).
+Census audit: 34 dumps, 223 pairs, one seat only 3 / 1, owner clashes 0; position 96.4 %, yaw 91.0 %, speed 73.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 10 (0200001b speed since 900; 02000018 position since 960; 02000018 speed since 960; 02000019 position since 960; 02000019 speed since 960; 02000109 yaw since 2460; 12000116 yaw since 2460; 12000119 speed since 2460…).
 - **Seat 1** (`bench/evidence/crawl-m_2a_02-seat-1.log`, 1217 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 73a79453dbc13e85)
@@ -514,7 +514,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 3534956257 started with 2 players, seed 32b40711; saves: none.
 
-Census audit: 40 dumps, 205 pairs, one seat only 2 / 1, owner clashes 0; position 94.6 %, yaw 93.2 %, speed 70.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 12 (02000018 speed since 840; 0200001a speed since 840; 02000018 position since 960; 12000019 position since 960; 12000019 speed since 960; 12000031 position since 1560; 12000031 speed since 1560; 12000078 speed since 2460…).
+Census audit: 40 dumps, 205 pairs, one seat only 2 / 1, owner clashes 0; position 94.6 %, yaw 93.2 %, speed 70.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 12 (02000018 speed since 840; 0200001a speed since 840; 02000018 position since 960; 12000019 position since 960; 12000019 speed since 960; 12000031 position since 1560; 12000031 speed since 1560; 1200007e speed since 2460…).
 - **Seat 1** (`bench/evidence/crawl-m_2a_04_spotfilm_sm_security_jerks-seat-1.log`, 995 lines): executed; won by diagnostic at 1800 (28 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key e69601e6e6b9fc42)
@@ -534,7 +534,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 1844333504 started with 2 players, seed 6ceeb9df; saves: campaign save from Seat 2 at session 1844333504 tick 1800: 130246 B, hash be59ce0032037585; Seat 1 has not saved; campaign save from Seat 1 at session 1844333504 tick 1800: 130246 B, hash be59ce0032037585; Seat 2 agrees (tick 1800).
 
-Census audit: 42 dumps, 461 pairs, one seat only 5 / 2, owner clashes 0; position 99.1 %, yaw 88.5 %, speed 54.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 24 (12000019 speed since 840; 1200001a position since 960; 1200001a yaw since 960; 1200001a speed since 960; 12000019 position since 960; 12000019 yaw since 1020; 0200005b yaw since 1620; 12000057 speed since 1680…).
+Census audit: 42 dumps, 461 pairs, one seat only 5 / 2, owner clashes 0; position 99.1 %, yaw 88.5 %, speed 54.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 24 (12000019 speed since 840; 12000019 position since 960; 1200001a position since 960; 1200001a yaw since 960; 1200001a speed since 960; 12000019 yaw since 1020; 0200005b yaw since 1620; 12000057 speed since 1680…).
 - **Seat 1** (`bench/evidence/crawl-m_2b_01_goto_permission_pool-seat-1.log`, 1277 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `be59ce0032037585` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -550,7 +550,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 407101116 started with 2 players, seed 2cf87bfb; saves: campaign save from Seat 2 at session 407101116 tick 1800: 130246 B, hash 9f28ec72fced3741; Seat 1 has not saved; campaign save from Seat 1 at session 407101116 tick 1800: 130246 B, hash 9f28ec72fced3741; Seat 2 agrees (tick 1800).
 
-Census audit: 42 dumps, 622 pairs, one seat only 16 / 1, owner clashes 0; position 99.2 %, yaw 88.1 %, speed 63.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 32 (12000045 speed since 300; 02000042 speed since 540; 0200004c yaw since 840; 0200003b yaw since 900; 0200003f speed since 900; 02000048 speed since 900; 12000055 speed since 900; 12000047 speed since 900…).
+Census audit: 42 dumps, 622 pairs, one seat only 16 / 1, owner clashes 0; position 99.2 %, yaw 88.1 %, speed 63.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 32 (12000045 speed since 300; 02000042 speed since 540; 0200004c yaw since 840; 12000047 speed since 900; 0200003f speed since 900; 02000044 speed since 900; 02000048 speed since 900; 0200003b yaw since 900…).
 - **Seat 1** (`bench/evidence/crawl-m_2c_01_goto_find_pool-seat-1.log`, 2602 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `9f28ec72fced3741` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -566,7 +566,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 3169368401 started with 2 players, seed 5665496f; saves: campaign save from Seat 2 at session 3169368401 tick 1800: 130246 B, hash 6417c4fd346bb8b3; Seat 1 has not saved; campaign save from Seat 1 at session 3169368401 tick 1800: 130246 B, hash 6417c4fd346bb8b3; Seat 2 agrees (tick 1800).
 
-Census audit: 43 dumps, 469 pairs, one seat only 16 / 12, owner clashes 0; position 98.7 %, yaw 90.6 %, speed 71.4 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 29 (02000045 yaw since 840; 02000041 yaw since 840; 1200004d speed since 900; 12000049 speed since 900; 02000055 speed since 900; 1200004d position since 960; 1200004d yaw since 960; 12000050 position since 960…).
+Census audit: 43 dumps, 469 pairs, one seat only 16 / 12, owner clashes 0; position 98.7 %, yaw 90.6 %, speed 71.4 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 29 (02000041 yaw since 840; 02000045 yaw since 840; 1200004d speed since 900; 12000049 speed since 900; 02000055 speed since 900; 12000047 position since 960; 12000047 yaw since 960; 12000047 speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_2c_02_goto_find_pool-seat-1.log`, 2176 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `6417c4fd346bb8b3` (130246 B).
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -582,7 +582,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 3710227899 started with 2 players, seed b658aa64; saves: campaign save from Seat 2 at session 3710227899 tick 1863: 130246 B, hash 2f4381043106d824; Seat 1 differs: d1ad4fff0ae7c73b at tick 1800; campaign save from Seat 1 at session 3710227899 tick 1863: 130246 B, hash 2f4381043106d824; Seat 2 agrees (tick 1863).
 
-Census audit: 41 dumps, 477 pairs, one seat only 9 / 1, owner clashes 0; position 98.7 %, yaw 89.7 %, speed 67.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 15 (12000036 speed since 900; 0200003c speed since 900; 12000036 position since 960; 12000034 position since 960; 12000034 speed since 960; 1200003a position since 960; 1200003a speed since 960; 1200003a yaw since 1020…).
+Census audit: 41 dumps, 477 pairs, one seat only 9 / 1, owner clashes 0; position 98.7 %, yaw 89.7 %, speed 67.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 15 (0200003c speed since 900; 12000036 speed since 900; 1200003a position since 960; 1200003a speed since 960; 12000036 position since 960; 12000034 position since 960; 12000034 speed since 960; 1200003a yaw since 1020…).
 - **Seat 1** (`bench/evidence/crawl-m_2c_03_goto_find_pool-seat-1.log`, 2103 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1863 hash `2f4381043106d824` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -598,7 +598,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 3359083822 started with 2 players, seed cd8de99f; saves: campaign save from Seat 2 at session 3359083822 tick 1863: 130246 B, hash 2a273121e10b4e22; Seat 1 agrees (tick 1800); campaign save from Seat 1 at session 3359083822 tick 1863: 130246 B, hash 2a273121e10b4e22; Seat 2 agrees (tick 1863).
 
-Census audit: 43 dumps, 479 pairs, one seat only 15 / 6, owner clashes 0; position 100.0 %, yaw 88.3 %, speed 71.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 13 (0200003c speed since 540; 02000040 yaw since 780; 12000047 speed since 840; 02000042 speed since 840; 0200004c yaw since 840; 02000050 speed since 900; 0200004c speed since 900; 02000047 speed since 900…).
+Census audit: 43 dumps, 479 pairs, one seat only 15 / 6, owner clashes 0; position 100.0 %, yaw 88.3 %, speed 71.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 13 (0200003c speed since 540; 02000040 yaw since 780; 0200004c yaw since 840; 02000042 speed since 840; 12000047 speed since 840; 0200004c speed since 900; 02000047 speed since 900; 02000050 speed since 900…).
 - **Seat 1** (`bench/evidence/crawl-m_2c_04_goto_find_pool-seat-1.log`, 1741 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1863 hash `2a273121e10b4e22` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -614,7 +614,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 1345419955 started with 2 players, seed 915e391b; saves: campaign save from Seat 2 at session 1345419955 tick 1863: 130246 B, hash 4770e535d5ae11c7; Seat 1 agrees (tick 1800); campaign save from Seat 1 at session 1345419955 tick 1863: 130246 B, hash 4770e535d5ae11c7; Seat 2 agrees (tick 1863).
 
-Census audit: 43 dumps, 638 pairs, one seat only 5 / 2, owner clashes 0; position 99.4 %, yaw 91.2 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 19 (1200002a speed since 660; 02000024 yaw since 660; 0200002d speed since 780; 1200002a position since 900; 02000022 speed since 900; 0200002a speed since 900; 1200002a yaw since 960; 1200002e position since 960…).
+Census audit: 43 dumps, 638 pairs, one seat only 5 / 2, owner clashes 0; position 99.4 %, yaw 91.2 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 19 (02000024 yaw since 660; 1200002a speed since 660; 0200002d speed since 780; 02000022 speed since 900; 0200002a speed since 900; 1200002a position since 900; 1200002b position since 960; 1200002b yaw since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_2c_05_goto_find_pool-seat-1.log`, 1516 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1863 hash `4770e535d5ae11c7` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -630,7 +630,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 3134510861 started with 2 players, seed 6d92ae85; saves: campaign save from Seat 2 at session 3134510861 tick 1863: 130246 B, hash d8a0fcc8aaf6b2cf; Seat 1 agrees (tick 1800); campaign save from Seat 1 at session 3134510861 tick 1863: 130246 B, hash d8a0fcc8aaf6b2cf; Seat 2 agrees (tick 1863).
 
-Census audit: 42 dumps, 627 pairs, one seat only 15 / 7, owner clashes 0; position 98.7 %, yaw 83.3 %, speed 71.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 34 (0200004f speed since 840; 02000057 speed since 900; 0200005b speed since 900; 0200004e speed since 900; 02000051 speed since 900; 12000063 speed since 900; 1200005e speed since 900; 02000055 yaw since 900…).
+Census audit: 42 dumps, 627 pairs, one seat only 15 / 7, owner clashes 0; position 98.7 %, yaw 83.3 %, speed 71.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 34 (0200004f speed since 840; 0200005b speed since 900; 0200004e speed since 900; 02000055 yaw since 900; 02000055 speed since 900; 02000051 speed since 900; 12000063 speed since 900; 02000057 speed since 900…).
 - **Seat 1** (`bench/evidence/crawl-m_2c_06_goto_find_pool-seat-1.log`, 2743 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1863 hash `d8a0fcc8aaf6b2cf` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -646,7 +646,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 954420681 started with 2 players, seed ba7428d6; saves: campaign save from Seat 2 at session 954420681 tick 1800: 130246 B, hash 090f91733cbf35d8; Seat 1 has not saved; campaign save from Seat 1 at session 954420681 tick 1800: 130246 B, hash 090f91733cbf35d8; Seat 2 agrees (tick 1800).
 
-Census audit: 43 dumps, 707 pairs, one seat only 49 / 11, owner clashes 0; position 98.4 %, yaw 87.0 %, speed 71.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 36 (02000048 position since 180; 02000048 yaw since 180; 02000045 position since 240; 02000045 yaw since 240; 02000043 position since 240; 02000043 yaw since 240; 02000043 speed since 240; 02000048 speed since 240…).
+Census audit: 43 dumps, 707 pairs, one seat only 49 / 11, owner clashes 0; position 98.4 %, yaw 87.0 %, speed 71.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 36 (02000048 position since 180; 02000048 yaw since 180; 02000045 position since 240; 02000045 yaw since 240; 02000048 speed since 240; 02000043 position since 240; 02000043 yaw since 240; 02000043 speed since 240…).
 - **Seat 1** (`bench/evidence/crawl-m_2d_01_goto_return-seat-1.log`, 2370 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `090f91733cbf35d8` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
@@ -682,7 +682,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 1704351490 started with 2 players, seed fb814ee8; saves: none.
 
-Census audit: 42 dumps, 653 pairs, one seat only 14 / 14, owner clashes 0; position 100.0 %, yaw 93.0 %, speed 73.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 14 (0200005a speed since 1140; 02000047 speed since 1140; 0200004b speed since 1260; 02000066 speed since 1260; 0200003b yaw since 1320; 0200003b speed since 1320; 0200005c speed since 1320; 120000de speed since 2340…).
+Census audit: 42 dumps, 653 pairs, one seat only 14 / 14, owner clashes 0; position 100.0 %, yaw 93.0 %, speed 73.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 14 (02000047 speed since 1140; 0200005a speed since 1140; 02000066 speed since 1260; 0200004b speed since 1260; 0200003b yaw since 1320; 0200003b speed since 1320; 0200005c speed since 1320; 120000de speed since 2340…).
 - **Seat 1** (`bench/evidence/crawl-m_2e_01_photo_tm_burnette-seat-1.log`, 2740 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key ea836de2e1c9a2f6)
@@ -702,7 +702,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 594030134 started with 2 players, seed 66563b83; saves: none.
 
-Census audit: 41 dumps, 403 pairs, one seat only 14 / 1, owner clashes 0; position 90.8 %, yaw 96.3 %, speed 50.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 29 (0200003d speed since 360; 0200003c speed since 480; 02000051 speed since 840; 0200003b speed since 900; 0200003e speed since 900; 0200003c position since 960; 0200003b position since 960; 0200004e position since 960…).
+Census audit: 41 dumps, 403 pairs, one seat only 14 / 1, owner clashes 0; position 90.8 %, yaw 96.3 %, speed 50.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 29 (0200003d speed since 360; 0200003c speed since 480; 02000051 speed since 840; 0200003b speed since 900; 0200003e speed since 900; 0200003b position since 960; 02000051 position since 960; 0200004e position since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_2e_02_photo_tm_burnett-seat-1.log`, 2265 lines): executed; won by diagnostic at 1800 (7 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key b9421ddc99de8a59)
@@ -722,7 +722,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 3501068891 started with 2 players, seed c93ce772; saves: none.
 
-Census audit: 42 dumps, 544 pairs, one seat only 14 / 4, owner clashes 0; position 92.1 %, yaw 87.9 %, speed 64.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 36 (0200004e speed since 540; 02000050 speed since 780; 0200004b speed since 900; 0200003d speed since 960; 02000050 position since 960; 1200004d speed since 960; 0200005c position since 960; 0200005c speed since 960…).
+Census audit: 42 dumps, 544 pairs, one seat only 14 / 4, owner clashes 0; position 92.1 %, yaw 87.9 %, speed 64.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 36 (0200004e speed since 540; 02000050 speed since 780; 0200004b speed since 900; 02000042 speed since 960; 0200004b position since 960; 02000047 position since 960; 02000047 speed since 960; 0200004d position since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_2e_03_photo_tm_burnett-seat-1.log`, 2497 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 4ec8ef30b696ba8a)
@@ -742,7 +742,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 3357167698 started with 2 players, seed d072c33c; saves: none.
 
-Census audit: 42 dumps, 443 pairs, one seat only 16 / 9, owner clashes 0; position 89.8 %, yaw 93.5 %, speed 57.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 25 (02000041 speed since 780; 1200004a speed since 900; 12000052 speed since 900; 1200004c speed since 900; 0200003d position since 960; 0200003d speed since 960; 1200004d speed since 960; 02000057 position since 960…).
+Census audit: 42 dumps, 443 pairs, one seat only 16 / 9, owner clashes 0; position 89.8 %, yaw 93.5 %, speed 57.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 25 (02000041 speed since 780; 1200004a speed since 900; 1200004c speed since 900; 12000052 speed since 900; 0200004c position since 960; 0200004f position since 960; 1200004d speed since 960; 12000050 speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_2e_04_photo_tm_burnett-seat-1.log`, 2399 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 68344486c9e111c8)
@@ -762,7 +762,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 489306879 started with 2 players, seed ace8bb09; saves: none.
 
-Census audit: 42 dumps, 655 pairs, one seat only 16 / 3, owner clashes 0; position 89.9 %, yaw 91.0 %, speed 53.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 53 (02000046 speed since 360; 02000049 yaw since 480; 12000047 speed since 720; 12000052 speed since 720; 02000042 speed since 720; 02000054 speed since 840; 0200003e speed since 840; 02000057 speed since 900…).
+Census audit: 42 dumps, 655 pairs, one seat only 16 / 3, owner clashes 0; position 89.9 %, yaw 91.0 %, speed 53.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 53 (02000046 speed since 360; 02000049 yaw since 480; 02000042 speed since 720; 12000047 speed since 720; 12000052 speed since 720; 0200003e speed since 840; 02000054 speed since 840; 1200004e speed since 900…).
 - **Seat 1** (`bench/evidence/crawl-m_2e_05_photo_tm_burnette-seat-1.log`, 2722 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 1be4f3b2f3c5105f)
@@ -782,7 +782,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 2462067252 started with 2 players, seed f2146bd2; saves: none.
 
-Census audit: 42 dumps, 385 pairs, one seat only 13 / 5, owner clashes 0; position 89.6 %, yaw 93.2 %, speed 60.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 29 (0200003d speed since 900; 1200004d speed since 900; 0200003d position since 960; 12000045 speed since 960; 02000049 speed since 960; 02000039 position since 960; 02000039 speed since 960; 02000058 position since 960…).
+Census audit: 42 dumps, 385 pairs, one seat only 13 / 5, owner clashes 0; position 89.6 %, yaw 93.2 %, speed 60.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 29 (0200003d speed since 900; 1200004d speed since 900; 0200004c speed since 960; 02000058 position since 960; 02000058 speed since 960; 02000047 speed since 960; 02000041 position since 960; 02000041 speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_2e_06_photo_tm_burnette-seat-1.log`, 2324 lines): executed; won by diagnostic at 1800 (3 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 0f509910286254c6)
@@ -822,7 +822,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 1834228236 started with 2 players, seed 2ad67314; saves: none.
 
-Census audit: 41 dumps, 393 pairs, one seat only 12 / 0, owner clashes 0; position 93.1 %, yaw 90.6 %, speed 56.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 27 (02000045 speed since 480; 02000040 speed since 660; 02000046 speed since 720; 02000042 yaw since 720; 0200004c speed since 720; 02000048 speed since 720; 0200004f speed since 780; 02000042 speed since 840…).
+Census audit: 41 dumps, 393 pairs, one seat only 12 / 0, owner clashes 0; position 93.1 %, yaw 90.6 %, speed 56.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 27 (02000045 speed since 480; 02000040 speed since 660; 0200004c speed since 720; 02000042 yaw since 720; 02000046 speed since 720; 02000048 speed since 720; 0200004f speed since 780; 02000055 yaw since 840…).
 - **Seat 1** (`bench/evidence/crawl-m_3a_01_pro_duffy-seat-1.log`, 2270 lines): executed; won by diagnostic at 1800 (10 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 086bf0bc3506f089)
@@ -842,7 +842,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 3539665134 started with 2 players, seed b1b07a3c; saves: none.
 
-Census audit: 34 dumps, 372 pairs, one seat only 15 / 4, owner clashes 0; position 99.5 %, yaw 93.8 %, speed 69.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 16 (02000048 speed since 60; 0200004d speed since 180; 0200003f speed since 540; 02000043 speed since 720; 02000046 speed since 840; 02000045 speed since 840; 0200005c speed since 840; 0200004f speed since 840…).
+Census audit: 34 dumps, 372 pairs, one seat only 15 / 4, owner clashes 0; position 99.5 %, yaw 93.8 %, speed 69.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 16 (02000048 speed since 60; 0200004d speed since 180; 0200003f speed since 540; 02000043 speed since 720; 0200004f speed since 840; 02000041 speed since 840; 12000053 yaw since 840; 02000046 speed since 840…).
 - **Seat 1** (`bench/evidence/crawl-m_3a_02_pro_ladd-seat-1.log`, 2321 lines): executed; won by diagnostic at 1800 (10 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key f9fca1e4266bd4a2)
@@ -876,20 +876,20 @@ Census audit: no dumps paired.
 
 ## `m_4a_01_skate_carroll_koston`
 
-Family S.K.A.T.E. † (4), global 3 (main), rule Anyone (table). **STOPPED**; cause: in step: the mission runs on; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: STOPPED, 2026-11-11-crawl-ai4: STOPPED, 2026-11-11-crawl-m9: STOPPED, 2026-11-11-crawl-m10: STOPPED, 2026-11-11-crawl-m10-1: STOPPED, 2026-11-11-crawl-m10-2: STOPPED, 2026-11-11-crawl-m10-3: STOPPED, 2026-11-11-crawl-m11: STOPPED, 2026-11-12-crawl-m11-2: STOPPED. Note: the two AI leaders spawn at slots 2 and 3 on both seats and the rounds run in step (53 states alike, `2026-11-11-crawl-ai2`); each AI leader fails its set trick in turn and the bench sets none, so the game has no end on the bench (the competing kinds, [kinds](topics/kinds.md)).
+Family S.K.A.T.E. † (4), global 3 (main), rule Anyone (table). **STOPPED**; cause: in step: the mission runs on; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: STOPPED, 2026-11-11-crawl-ai4: STOPPED, 2026-11-11-crawl-m9: STOPPED, 2026-11-11-crawl-m10: STOPPED, 2026-11-11-crawl-m10-1: STOPPED, 2026-11-11-crawl-m10-2: STOPPED, 2026-11-11-crawl-m10-3: STOPPED, 2026-11-11-crawl-m11: STOPPED, 2026-11-12-crawl-m11-2: STOPPED, 2026-11-12-crawl-m12: STOPPED. Note: the two AI leaders spawn at slots 2 and 3 on both seats and the rounds run in step (53 states alike, `2026-11-11-crawl-ai2`); each AI leader fails its set trick in turn and the bench sets none, so the game has no end on the bench (the competing kinds, [kinds](topics/kinds.md)).
 
-Server (build 368bf2ed): campaign round 2032702050 started with 2 players, seed 15c1c152; saves: none.
+Server (build ec4b678e): campaign round 4248968612 started with 2 players, seed c3a9f7db; saves: none.
 
-Census audit: 157 dumps, 1279 pairs, one seat only 6 / 4, owner clashes 3; position 100.0 %, yaw 92.9 %, speed 79.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 14 (12000044 speed since 2400; 12000043 yaw since 5280; 12000043 speed since 5280; 12000056 speed since 5340; 0200006e speed since 5580; 02000073 yaw since 6540; 1200006f speed since 6960; 12000074 speed since 7320…).
-- **Seat 1** (`bench/evidence/crawl-m_4a_01_skate_carroll_koston-seat-1.log`, 3349 lines): executed; won by diagnostic at 2477 (0 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
+Census audit: 157 dumps, 1400 pairs, one seat only 4 / 7, owner clashes 5; position 100.0 %, yaw 92.4 %, speed 74.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 15 (02000045 speed since 3720; 1200005b speed since 3840; 12000043 speed since 4200; 02000070 speed since 5940; 0200006a yaw since 5940; 1200004f speed since 6300; 1200007a speed since 6960; 02000071 speed since 7320…).
+- **Seat 1** (`bench/evidence/crawl-m_4a_01_skate_carroll_koston-seat-1.log`, 3495 lines): executed; won by diagnostic at 2475 (0 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
   - Path: initial→make_hud→pres_setup→pres_overview→setup_skate→asset_load→spawn_players→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring
-  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: 05_ProChallenge_Carroll_Koston@901; characters instanced [3]; triggers entered 84
-  - Sync: audit 20707 samples in 15 windows, position 100.0 %, yaw 92.5 %, speed 80.8 %, flags 100.0 %, worst 0.83 m / 30°; stream 19 windows, 124884 B, peak 2342 B/s, peak 11 pedestrians here (4 owned, 11 puppets), props 4 owned of 5, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 8
+  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: 05_ProChallenge_Carroll_Koston@901; characters instanced [3]; triggers entered 80
+  - Sync: audit 22988 samples in 15 windows, position 100.0 %, yaw 94.0 %, speed 79.0 %, flags 100.0 %, worst 0.13 m / 30°; stream 19 windows, 171370 B, peak 2902 B/s, peak 12 pedestrians here (6 owned, 11 puppets), props 2 owned of 2, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 9
   - AI players selected: 1: Eric Koston, 2: Mike Carroll
-- **Seat 2** (`bench/evidence/crawl-m_4a_01_skate_carroll_koston-seat-2.log`, 3173 lines): executed; won by diagnostic at 2477 (0 objectives completed); cleanup —; complete —; no save.
+- **Seat 2** (`bench/evidence/crawl-m_4a_01_skate_carroll_koston-seat-2.log`, 3316 lines): executed; won by diagnostic at 2475 (0 objectives completed); cleanup —; complete —; no save.
   - Path: initial→make_hud→pres_setup→pres_overview→setup_skate→asset_load→spawn_players→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→wait→check_players→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring→leader_failure→process_round→round_setup→wait_for_leader→wait_for_scoring
-  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: 05_ProChallenge_Carroll_Koston@901; characters instanced [3]; triggers entered 86
-  - Sync: audit 3225 samples in 10 windows, position 100.0 %, yaw 94.9 %, speed 79.4 %, flags 100.0 %, worst 0.13 m / 15°; stream 19 windows, 631589 B, peak 5199 B/s, peak 11 pedestrians here (10 owned, 4 puppets), props 2 owned of 5, contacts 0/0/0/0, 12 older-epoch records; handoffs 6, promotions 6, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 19
+  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: 05_ProChallenge_Carroll_Koston@901; characters instanced [3]; triggers entered 80
+  - Sync: audit 4171 samples in 12 windows, position 100.0 %, yaw 95.7 %, speed 77.1 %, flags 100.0 %, worst 0.09 m / 18°; stream 19 windows, 654470 B, peak 6090 B/s, peak 12 pedestrians here (12 owned, 5 puppets), props 0 owned of 2, contacts 0/0/0/0, 6 older-epoch records; handoffs 3, promotions 3, demotions 0, knockdowns 0; stalled 0, starved 488, teleport frames 18
   - AI players selected: 1: Eric Koston, 2: Mike Carroll
 
 ## `m_4a_01_skate_carroll_koston_ol`
@@ -910,24 +910,24 @@ Census audit: 42 dumps, 679 pairs, one seat only 15 / 3, owner clashes 0; positi
 
 ## `m_4b_01_pro_navarrette_1`
 
-Family follow (23), global 3 (main), rule Anyone. **STOPPED**; cause: in step: the mission runs on; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: STOPPED, 2026-11-11-crawl-ai4: STOPPED, 2026-11-11-crawl-m9: STOPPED, 2026-11-11-crawl-m10: STOPPED, 2026-11-11-crawl-m10-1: STOPPED, 2026-11-11-crawl-m10-2: STOPPED, 2026-11-11-crawl-m10-3: STOPPED, 2026-11-11-crawl-m11: STOPPED, 2026-11-12-crawl-m11-2: STOPPED. Note: the pro spawns at slot 2 on both seats and the heat runs in step past the diagnostic win (`run_heat`, `2026-11-11-crawl-ai2`); its end is the pro's path, past the bench's deadline (open item 45).
+Family follow (23), global 3 (main), rule Anyone. **STOPPED**; cause: in step: the mission runs on; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: STOPPED, 2026-11-11-crawl-ai4: STOPPED, 2026-11-11-crawl-m9: STOPPED, 2026-11-11-crawl-m10: STOPPED, 2026-11-11-crawl-m10-1: STOPPED, 2026-11-11-crawl-m10-2: STOPPED, 2026-11-11-crawl-m10-3: STOPPED, 2026-11-11-crawl-m11: STOPPED, 2026-11-12-crawl-m11-2: STOPPED, 2026-11-12-crawl-m12: STOPPED. Note: the pro spawns at slot 2 on both seats and the heat runs in step past the diagnostic win (`run_heat`, `2026-11-11-crawl-ai2`); its end is the pro's path, past the bench's deadline (open item 45).
 
-Server (build 368bf2ed): campaign round 689264355 started with 2 players, seed 1bb00b14; saves: none.
+Server (build ec4b678e): campaign round 2261097990 started with 2 players, seed bf18679f; saves: none.
 
-Census audit: 150 dumps, 2510 pairs, one seat only 1 / 5, owner clashes 21; position 99.8 %, yaw 89.2 %, speed 77.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (12000042 speed since 3240; 12000049 speed since 3420; 0200006f speed since 6180; 12000059 position since 7440; 1200007c speed since 7740; 020000b8 speed since 9720; 020000cd speed since 10020; 12000065 yaw since 10920…).
-- **Seat 1** (`bench/evidence/crawl-m_4b_01_pro_navarrette_1-seat-1.log`, 3967 lines): executed; won by diagnostic at 3078 (3 objectives completed); cleanup —; complete —; no save.
+Census audit: 150 dumps, 2389 pairs, one seat only 5 / 3, owner clashes 21; position 100.0 %, yaw 89.5 %, speed 74.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 20 (02000061 speed since 5220; 0200007c speed since 5400; 02000074 speed since 5700; 0200003c speed since 6600; 1200004a speed since 6720; 120000af speed since 7620; 020000a2 speed since 8280; 020000aa speed since 8640…).
+- **Seat 1** (`bench/evidence/crawl-m_4b_01_pro_navarrette_1-seat-1.log`, 3881 lines): executed; won by diagnostic at 3070 (3 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
   - Path: initial→setup_code→nis_overview→wait_for_assetload→setup_challenge→setup_heat→countdown→run_heat
   - Rule: Anyone for players [0, 1] (key 1b0bdb3e8c099e26)
   - Objectives: player 0: 3 copies, 3 complete, 0 failed; player 1: 3 copies, 3 complete, 0 failed; 7 presentations withheld
   - Presentation: 3 groups, 6 events of kinds [4, 5, 20, 21], 4 finished; scenes: 11a_ProChallenge_Navarette@1081; characters instanced [2]; triggers entered 24
-  - Sync: audit 23691 samples in 15 windows, position 99.9 %, yaw 90.3 %, speed 79.0 %, flags 100.0 %, worst 0.92 m / 30°; stream 19 windows, 609695 B, peak 5958 B/s, peak 21 pedestrians here (11 owned, 11 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 4
+  - Sync: audit 24866 samples in 14 windows, position 100.0 %, yaw 90.8 %, speed 79.9 %, flags 100.0 %, worst 0.17 m / 31°; stream 19 windows, 537658 B, peak 5248 B/s, peak 18 pedestrians here (11 owned, 12 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 5
   - AI players selected: 1: Darren Navarrette
-- **Seat 2** (`bench/evidence/crawl-m_4b_01_pro_navarrette_1-seat-2.log`, 3948 lines): executed; won by diagnostic at 3078 (1 objectives completed); cleanup —; complete —; no save.
+- **Seat 2** (`bench/evidence/crawl-m_4b_01_pro_navarrette_1-seat-2.log`, 3879 lines): executed; won by diagnostic at 3070 (1 objectives completed); cleanup —; complete —; no save.
   - Path: initial→setup_code→nis_overview→wait_for_assetload→setup_challenge→setup_heat→countdown→run_heat
   - Rule: Anyone for players [0, 1] (key 1b0bdb3e8c099e26)
   - Objectives: player 0: 3 copies, 3 complete, 0 failed; player 1: 3 copies, 3 complete, 0 failed; 7 presentations withheld
   - Presentation: 3 groups, 6 events of kinds [4, 5, 20, 21], 4 finished; scenes: 11a_ProChallenge_Navarette@1081; characters instanced [2]; triggers entered 24
-  - Sync: audit 23658 samples in 15 windows, position 100.0 %, yaw 92.0 %, speed 80.3 %, flags 100.0 %, worst 1.13 m / 30°; stream 19 windows, 725785 B, peak 6161 B/s, peak 21 pedestrians here (11 owned, 11 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 11
+  - Sync: audit 20887 samples in 15 windows, position 100.0 %, yaw 89.7 %, speed 80.0 %, flags 100.0 %, worst 0.20 m / 30°; stream 19 windows, 739946 B, peak 6742 B/s, peak 18 pedestrians here (12 owned, 11 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 490, teleport frames 9
   - AI players selected: 1: Darren Navarrette
 
 ## `m_4b_02_pro_navarrette_2`
@@ -936,7 +936,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 3071515362 started with 2 players, seed d7b8c586; saves: none.
 
-Census audit: 42 dumps, 392 pairs, one seat only 13 / 14, owner clashes 0; position 98.5 %, yaw 91.6 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 23 (0200003e speed since 240; 1200004b speed since 720; 02000057 yaw since 900; 02000042 speed since 900; 12000057 speed since 900; 1200004d speed since 960; 1200004e yaw since 960; 12000057 position since 960…).
+Census audit: 42 dumps, 392 pairs, one seat only 13 / 14, owner clashes 0; position 98.5 %, yaw 91.6 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 23 (0200003e speed since 240; 1200004b speed since 720; 12000057 speed since 900; 02000042 speed since 900; 02000057 yaw since 900; 12000057 position since 960; 12000057 yaw since 960; 1200004d speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_4b_02_pro_navarrette_2-seat-1.log`, 2377 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key d355ab69c34f8457)
@@ -956,7 +956,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 3500710574 started with 2 players, seed 71413ef3; saves: none.
 
-Census audit: 42 dumps, 525 pairs, one seat only 16 / 0, owner clashes 0; position 97.3 %, yaw 89.7 %, speed 66.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 43 (0200003f speed since 120; 0200004b speed since 360; 12000050 speed since 1080; 02000049 speed since 1140; 12000055 speed since 1140; 0200005b speed since 1140; 12000058 speed since 1140; 12000056 speed since 1140…).
+Census audit: 42 dumps, 525 pairs, one seat only 16 / 0, owner clashes 0; position 97.3 %, yaw 89.7 %, speed 66.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 43 (0200003f speed since 120; 0200004b speed since 360; 12000050 speed since 1080; 02000049 speed since 1140; 0200005b speed since 1140; 12000055 speed since 1140; 12000058 speed since 1140; 12000056 speed since 1140…).
 - **Seat 1** (`bench/evidence/crawl-m_4c_01_pro_cardiel-seat-1.log`, 2585 lines): executed; won by diagnostic at 1800 (6 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key afe3d95c710476fa)
@@ -976,7 +976,7 @@ Family goto (30), global 2 (location), rule Anyone (table). **PASS**; cause: —
 
 Server (build 20523640): campaign round 1101885565 started with 2 players, seed e9a65956; saves: campaign save from Seat 2 at session 1101885565 tick 1800: 130246 B, hash 4fb3ad44ef50c424; Seat 1 has not saved; campaign save from Seat 1 at session 1101885565 tick 1800: 130246 B, hash 4fb3ad44ef50c424; Seat 2 agrees (tick 1800).
 
-Census audit: 42 dumps, 564 pairs, one seat only 15 / 0, owner clashes 0; position 98.6 %, yaw 89.9 %, speed 68.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 31 (02000042 speed since 720; 02000049 speed since 840; 02000054 speed since 840; 02000041 speed since 840; 02000045 speed since 900; 12000050 speed since 900; 12000047 speed since 900; 12000053 yaw since 900…).
+Census audit: 42 dumps, 564 pairs, one seat only 15 / 0, owner clashes 0; position 98.6 %, yaw 89.9 %, speed 68.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 31 (02000042 speed since 720; 02000049 speed since 840; 02000041 speed since 840; 02000054 speed since 840; 12000047 speed since 900; 12000050 speed since 900; 12000053 yaw since 900; 02000045 speed since 900…).
 - **Seat 1** (`bench/evidence/crawl-m_4d_01_goto_dill_dyrdek-seat-1.log`, 2583 lines): executed; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `4fb3ad44ef50c424` (130246 B); crawl stop: (done) after 50 s.
   - Path: initial→setup→wait_for_location
   - Presentation: 1 groups, 1 events of kinds [5], 0 finished; scenes: 08a_ProChallenge_Dill_Dyrdek@1011; characters instanced [5]; triggers entered 12
@@ -992,7 +992,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 3690553347 started with 2 players, seed 99b5696a; saves: none.
 
-Census audit: 43 dumps, 558 pairs, one seat only 11 / 1, owner clashes 0; position 99.1 %, yaw 84.8 %, speed 72.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 26 (0200006f speed since 300; 12000072 speed since 660; 0200006d speed since 1500; 0200007a speed since 1500; 12000078 position since 1560; 12000078 yaw since 1560; 12000078 speed since 1560; 1200008c position since 1560…).
+Census audit: 43 dumps, 558 pairs, one seat only 11 / 1, owner clashes 0; position 99.1 %, yaw 84.8 %, speed 72.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 26 (0200006f speed since 300; 12000072 speed since 660; 0200006d speed since 1500; 0200007a speed since 1500; 1200007a position since 1560; 1200007a speed since 1560; 12000080 position since 1560; 12000080 yaw since 1560…).
 - **Seat 1** (`bench/evidence/crawl-m_4d_01_spotfilm_dill_dyrdek-seat-1.log`, 1627 lines): executed; won by diagnostic at 1800 (6 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 1423b26bd59d7666)
@@ -1076,7 +1076,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 322500643 started with 2 players, seed b111db02; saves: none.
 
-Census audit: 43 dumps, 477 pairs, one seat only 11 / 0, owner clashes 0; position 99.0 %, yaw 89.9 %, speed 70.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 33 (0200006e speed since 600; 02000071 speed since 600; 0200006d speed since 660; 0200007a yaw since 780; 02000083 speed since 1080; 02000084 speed since 1080; 0200007e yaw since 1080; 0200006b speed since 1080…).
+Census audit: 43 dumps, 477 pairs, one seat only 11 / 0, owner clashes 0; position 99.0 %, yaw 89.9 %, speed 70.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 33 (0200006e speed since 600; 02000071 speed since 600; 0200006d speed since 660; 0200007a yaw since 780; 02000084 speed since 1080; 0200007e yaw since 1080; 0200006b speed since 1080; 02000083 speed since 1080…).
 - **Seat 1** (`bench/evidence/crawl-m_4f_01_pro_brown-seat-1.log`, 1646 lines): executed; won by diagnostic at 1800 (6 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 5b621e7d15a2138f)
@@ -1096,7 +1096,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 871f84ae): campaign round 130698737 started with 2 players, seed ffc1756b; saves: none.
 
-Census audit: 29 dumps, 283 pairs, one seat only 1 / 1, owner clashes 0; position 97.2 %, yaw 92.2 %, speed 64.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 13 (02000052 yaw since 3360; 02000066 position since 3720; 02000066 speed since 3720; 12000054 yaw since 4140; 0200005d speed since 4140; 0200005f yaw since 4200; 0200005f speed since 4200; 12000066 speed since 4260…).
+Census audit: 29 dumps, 283 pairs, one seat only 1 / 1, owner clashes 0; position 97.2 %, yaw 92.2 %, speed 64.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 13 (02000052 yaw since 3360; 02000066 position since 3720; 02000066 speed since 3720; 12000054 yaw since 4140; 0200005d speed since 4140; 0200005f yaw since 4200; 0200005f speed since 4200; 12000054 speed since 4260…).
 - **Seat 1** (`bench/evidence/crawl-m_4g_01_spotfilm_johnson-seat-1.log`, 1024 lines): executed; won by diagnostic at 3600 (6 objectives completed); cleanup 3600; complete —; no save; crawl stop: (done) after 80 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 1488bb3404ce96eb)
@@ -1134,24 +1134,24 @@ Census audit: 155 dumps, 2456 pairs, one seat only 6 / 5, owner clashes 0; posit
 
 ## `m_4i_01_spotfilm_barbee`
 
-Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: —; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai3: PASS (no save), 2026-11-11-crawl-m9: PASS (no save), 2026-11-11-crawl-m10: PASS (no save), 2026-11-11-crawl-m10-2: PASS (no save), 2026-11-11-crawl-m10-3: PASS (no save), 2026-11-11-crawl-m11: PASS (no save), 2026-11-12-crawl-m11-2: PASS (no save). Note: PASS on the AI-day build (`2026-11-11-crawl-ai3`), as `m_4e_01_spotfilm_braydon_kennedy_2`; the `check_ai` divergence of 2026-11-10 was the scripts' index space (open item 56).
+Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: —; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai3: PASS (no save), 2026-11-11-crawl-m9: PASS (no save), 2026-11-11-crawl-m10: PASS (no save), 2026-11-11-crawl-m10-2: PASS (no save), 2026-11-11-crawl-m10-3: PASS (no save), 2026-11-11-crawl-m11: PASS (no save), 2026-11-12-crawl-m11-2: PASS (no save), 2026-11-12-crawl-m12: PASS (no save). Note: PASS on the AI-day build (`2026-11-11-crawl-ai3`), as `m_4e_01_spotfilm_braydon_kennedy_2`; the `check_ai` divergence of 2026-11-10 was the scripts' index space (open item 56).
 
-Server (build 368bf2ed): campaign round 3593671458 started with 2 players, seed 564bfe39; saves: none.
+Server (build ec4b678e): campaign round 4269555861 started with 2 players, seed 6e9c3c9d; saves: none.
 
-Census audit: 20 dumps, 76 pairs, one seat only 2 / 0, owner clashes 6; position 98.7 %, yaw 85.5 %, speed 72.4 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 2 (02000091 speed since 4260; 0200008f speed since 4260).
-- **Seat 1** (`bench/evidence/crawl-m_4i_01_spotfilm_barbee-seat-1.log`, 1218 lines): executed; won by diagnostic at 3471 (4 objectives completed); cleanup 3472; complete —; no save; crawl stop: (done) after 80 s.
+Census audit: 21 dumps, 124 pairs, one seat only 2 / 0, owner clashes 9; position 100.0 %, yaw 87.9 %, speed 71.0 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 5 (12000091 speed since 3600; 0200008e speed since 4260; 02000096 speed since 4260; 0200008d speed since 4260; 02000094 speed since 4260).
+- **Seat 1** (`bench/evidence/crawl-m_4i_01_spotfilm_barbee-seat-1.log`, 1280 lines): executed; won by diagnostic at 3470 (4 objectives completed); cleanup 3471; complete —; no save; crawl stop: (done) after 80 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 6f060fa498ded8b0)
   - Objectives: player 0: 4 copies, 4 complete, 0 failed; player 1: 4 copies, 4 complete, 0 failed; 4 presentations withheld
   - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: 02_ProChallenge_Barbee@901; characters instanced [4]; triggers entered 8
-  - Sync: audit 200 samples in 2 windows, position 100.0 %, yaw 98.5 %, speed 77.5 %, flags 100.0 %, worst 0.09 m / 13°; stream 7 windows, 24795 B, peak 1864 B/s, peak 4 pedestrians here (2 owned, 2 puppets), props 2 owned of 2, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 6
+  - Sync: audit 739 samples in 2 windows, position 100.0 %, yaw 92.2 %, speed 77.9 %, flags 100.0 %, worst 0.21 m / 13°; stream 7 windows, 28623 B, peak 2052 B/s, peak 7 pedestrians here (4 owned, 3 puppets), props 2 owned of 2, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 7
   - AI players selected: 1: Ray Barbee
-- **Seat 2** (`bench/evidence/crawl-m_4i_01_spotfilm_barbee-seat-2.log`, 1200 lines): executed; won by diagnostic at 3471 (4 objectives completed); cleanup 3472; complete —; no save.
+- **Seat 2** (`bench/evidence/crawl-m_4i_01_spotfilm_barbee-seat-2.log`, 1277 lines): executed; won by diagnostic at 3470 (4 objectives completed); cleanup 3471; complete —; no save; crawl stop: (done) after 80 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 6f060fa498ded8b0)
   - Objectives: player 0: 4 copies, 4 complete, 0 failed; player 1: 4 copies, 4 complete, 0 failed; 4 presentations withheld
   - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: 02_ProChallenge_Barbee@901; characters instanced [4]; triggers entered 8
-  - Sync: audit 988 samples in 2 windows, position 100.0 %, yaw 94.6 %, speed 75.5 %, flags 100.0 %, worst 0.09 m / 13°; stream 7 windows, 15230 B, peak 567 B/s, peak 4 pedestrians here (1 owned, 3 puppets), props 0 owned of 2, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 8
+  - Sync: audit 1372 samples in 2 windows, position 100.0 %, yaw 92.1 %, speed 77.9 %, flags 100.0 %, worst 0.17 m / 18°; stream 7 windows, 27323 B, peak 1809 B/s, peak 7 pedestrians here (4 owned, 5 puppets), props 0 owned of 2, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 467, teleport frames 8
   - AI players selected: 1: Ray Barbee
 
 ## `m_4j_01_pro_busenitz`
@@ -1160,7 +1160,7 @@ Family follow (23), global 3 (main), rule Anyone. **STOPPED**; cause: in step: t
 
 Server (build 9981ee26): campaign round 3961560922 started with 2 players, seed ada063b3; saves: none.
 
-Census audit: 153 dumps, 1747 pairs, one seat only 1 / 2, owner clashes 0; position 99.9 %, yaw 86.8 %, speed 75.8 %, flags 98.7 %, down 98.8 %, model 100.0 %; open at the end: 11 (1200003a speed since 4080; 02000052 speed since 4200; 12000086 speed since 7920; 1200008b speed since 8820; 120000aa speed since 10560; 120000a8 speed since 10740; 02000075 yaw since 11400; 02000074 yaw since 11460…).
+Census audit: 153 dumps, 1747 pairs, one seat only 1 / 2, owner clashes 0; position 99.9 %, yaw 86.8 %, speed 75.8 %, flags 98.7 %, down 98.8 %, model 100.0 %; open at the end: 11 (1200003a speed since 4080; 02000052 speed since 4200; 12000086 speed since 7920; 1200008b speed since 8820; 120000aa speed since 10560; 120000a8 speed since 10740; 02000075 yaw since 11400; 02000083 yaw since 11460…).
 - **Seat 1** (`bench/evidence/crawl-m_4j_01_pro_busenitz-seat-1.log`, 3129 lines): executed; won by diagnostic at 2705 (4 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
   - Path: initial→setup_code→nis_overview→wait_for_assetload→setup_challenge→setup_heat→countdown→run_heat
   - Rule: Anyone for players [0, 1] (key 79de0123cf2e3709)
@@ -1204,7 +1204,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 3527065644 started with 2 players, seed 305f0a39; saves: none.
 
-Census audit: 118 dumps, 2203 pairs, one seat only 10 / 5, owner clashes 0; position 98.7 %, yaw 92.1 %, speed 76.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 38 (0200006c speed since 240; 0200007d speed since 840; 0200007c speed since 840; 02000070 speed since 900; 02000075 speed since 900; 12000076 speed since 960; 02000075 position since 960; 0200007d position since 960…).
+Census audit: 118 dumps, 2203 pairs, one seat only 10 / 5, owner clashes 0; position 98.7 %, yaw 92.1 %, speed 76.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 38 (0200006c speed since 240; 0200007c speed since 840; 0200007d speed since 840; 02000070 speed since 900; 02000075 speed since 900; 1200007e speed since 960; 0200006d speed since 960; 0200005b speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_4l_01_pro_rattray_cole_1-seat-1.log`, 3684 lines): executed; won by diagnostic at 1800 (12 objectives completed); cleanup 7757; complete —; no save; crawl stop: (done) after 150 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→end_options
   - Rule: Anyone for players [0, 1] (key 734c4048de410868)
@@ -1224,7 +1224,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 825204612 started with 2 players, seed c888ca1f; saves: none.
 
-Census audit: 114 dumps, 1999 pairs, one seat only 14 / 2, owner clashes 0; position 98.6 %, yaw 93.3 %, speed 70.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 40 (12000074 speed since 780; 02000071 speed since 780; 02000073 speed since 960; 12000078 speed since 960; 02000072 speed since 960; 02000080 speed since 960; 0200007a position since 960; 0200007a speed since 960…).
+Census audit: 114 dumps, 1999 pairs, one seat only 14 / 2, owner clashes 0; position 98.6 %, yaw 93.3 %, speed 70.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 40 (02000071 speed since 780; 12000074 speed since 780; 02000072 speed since 960; 1200007a speed since 960; 0200006f speed since 960; 02000073 speed since 960; 0200007a position since 960; 0200007a speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_4m_01_pro_rattray_cole_2-seat-1.log`, 3364 lines): executed; won by diagnostic at 1800 (10 objectives completed); cleanup 7212; complete —; no save; crawl stop: (done) after 140 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→end_options
   - Rule: Anyone for players [0, 1] (key 9a3a9888244f39f0)
@@ -1262,24 +1262,24 @@ Census audit: 22 dumps, 259 pairs, one seat only 1 / 0, owner clashes 6; positio
 
 ## `m_5a_01_photo_thrasher`
 
-Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; cause: —; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: PASS (no save), 2026-11-11-crawl-ai4: PASS (no save), 2026-11-11-crawl-m9: PASS (no save), 2026-11-11-crawl-m10: PASS (no save), 2026-11-11-crawl-m10-2: PASS (no save), 2026-11-11-crawl-m10-3: PASS (no save), 2026-11-11-crawl-m11: PASS (no save), 2026-11-12-crawl-m11-2: PASS (no save). Note: PASS on the AI-day build (`2026-11-11-crawl-ai2`, `-ai4`): Chris Haslam selected at the asset load on both seats, spawned at slot 2 on both, the states identical to the tick; before, the recipe-None stop (open items 55, 56).
+Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; cause: —; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: PASS (no save), 2026-11-11-crawl-ai4: PASS (no save), 2026-11-11-crawl-m9: PASS (no save), 2026-11-11-crawl-m10: PASS (no save), 2026-11-11-crawl-m10-2: PASS (no save), 2026-11-11-crawl-m10-3: PASS (no save), 2026-11-11-crawl-m11: PASS (no save), 2026-11-12-crawl-m11-2: PASS (no save), 2026-11-12-crawl-m12: PASS (no save). Note: PASS on the AI-day build (`2026-11-11-crawl-ai2`, `-ai4`): Chris Haslam selected at the asset load on both seats, spawned at slot 2 on both, the states identical to the tick; before, the recipe-None stop (open items 55, 56).
 
-Server (build 368bf2ed): campaign round 4096043535 started with 2 players, seed ae2266c9; saves: none.
+Server (build ec4b678e): campaign round 1763798966 started with 2 players, seed eefdda4e; saves: none.
 
-Census audit: 19 dumps, 38 pairs, one seat only 0 / 3, owner clashes 0; position 100.0 %, yaw 100.0 %, speed 78.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 0.
-- **Seat 1** (`bench/evidence/crawl-m_5a_01_photo_thrasher-seat-1.log`, 1073 lines): executed; won by diagnostic at 1906 (2 objectives completed); cleanup 1907; complete —; no save; crawl stop: (done) after 55 s.
+Census audit: no dumps paired.
+- **Seat 1** (`bench/evidence/crawl-m_5a_01_photo_thrasher-seat-1.log`, 1066 lines): executed; won by diagnostic at 1905 (2 objectives completed); cleanup 1906; complete —; no save; crawl stop: (done) after 55 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 165e6912c8acf63c)
   - Objectives: player 0: 2 copies, 2 complete, 0 failed; player 1: 2 copies, 2 complete, 0 failed; 2 presentations withheld
-  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: photo_in_m_5a_01_thrash_haslam@901; characters instanced [0]; triggers entered 10
-  - Sync: audit 512 samples in 2 windows, position 100.0 %, yaw 94.3 %, speed 74.8 %, flags 100.0 %, worst 0.09 m / 17°; stream 5 windows, 4995 B, peak 100 B/s, peak 4 pedestrians here (0 owned, 3 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 2
+  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: photo_in_m_5a_01_thrash_haslam@901; characters instanced [0]; triggers entered 12
+  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 5 windows, 4995 B, peak 100 B/s, peak 1 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 3
   - AI players selected: 1: Chris Haslam
-- **Seat 2** (`bench/evidence/crawl-m_5a_01_photo_thrasher-seat-2.log`, 1061 lines): executed; won by diagnostic at 1906 (2 objectives completed); cleanup 1907; complete —; no save.
+- **Seat 2** (`bench/evidence/crawl-m_5a_01_photo_thrasher-seat-2.log`, 1052 lines): executed; won by diagnostic at 1905 (2 objectives completed); cleanup 1906; complete —; no save; crawl stop: (done) after 55 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→wait→check_ai→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 165e6912c8acf63c)
   - Objectives: player 0: 2 copies, 2 complete, 0 failed; player 1: 2 copies, 2 complete, 0 failed; 2 presentations withheld
-  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: photo_in_m_5a_01_thrash_haslam@901; characters instanced [0]; triggers entered 10
-  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 4 windows, 15554 B, peak 1108 B/s, peak 4 pedestrians here (3 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 4
+  - Presentation: 1 groups, 1 events of kinds [5], 1 finished; scenes: photo_in_m_5a_01_thrash_haslam@901; characters instanced [0]; triggers entered 12
+  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 4 windows, 3995 B, peak 100 B/s, peak 1 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 181, teleport frames 4
   - AI players selected: 1: Chris Haslam
 
 ## `m_5a_02_photo_thrasher`
@@ -1382,7 +1382,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 9981ee26): campaign round 2677167754 started with 2 players, seed 37120c21; saves: none.
 
-Census audit: 17 dumps, 179 pairs, one seat only 4 / 1, owner clashes 9; position 99.4 %, yaw 88.3 %, speed 68.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 3 (12000064 speed since 2460; 02000075 speed since 2460; 12000071 speed since 2460).
+Census audit: 17 dumps, 179 pairs, one seat only 4 / 1, owner clashes 9; position 99.4 %, yaw 88.3 %, speed 68.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 3 (12000064 speed since 2460; 12000071 speed since 2460; 02000075 speed since 2460).
 - **Seat 1** (`bench/evidence/crawl-m_5b_01_photo_sbm_puig-seat-1.log`, 1239 lines): executed; won by diagnostic at 1778 (4 objectives completed); cleanup 1778; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→check_ai→wait→check_ai→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key b2eb734dee24e621)
@@ -1444,7 +1444,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 9981ee26): campaign round 3913368292 started with 2 players, seed 2c635edb; saves: none.
 
-Census audit: 17 dumps, 135 pairs, one seat only 1 / 0, owner clashes 3; position 99.3 %, yaw 85.2 %, speed 73.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 9 (12000070 yaw since 2340; 02000080 yaw since 2400; 02000080 speed since 2400; 0200006c speed since 2460; 12000070 speed since 2460; 02000067 yaw since 2460; 02000067 speed since 2460; 02000079 speed since 2460…).
+Census audit: 17 dumps, 135 pairs, one seat only 1 / 0, owner clashes 3; position 99.3 %, yaw 85.2 %, speed 73.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 9 (12000070 yaw since 2340; 02000080 yaw since 2400; 02000080 speed since 2400; 12000070 speed since 2460; 02000067 yaw since 2460; 02000067 speed since 2460; 0200006c speed since 2460; 02000079 speed since 2460…).
 - **Seat 1** (`bench/evidence/crawl-m_5b_04_photo_sbm_appleyard-seat-1.log`, 1233 lines): executed; won by diagnostic at 1776 (4 objectives completed); cleanup 1776; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→check_ai→wait→check_ai→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 6bee31016170acf5)
@@ -1594,7 +1594,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 3098320709 started with 2 players, seed 400e955b; saves: none.
 
-Census audit: 42 dumps, 513 pairs, one seat only 14 / 5, owner clashes 0; position 93.4 %, yaw 89.7 %, speed 57.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 33 (02000074 speed since 300; 02000076 speed since 660; 02000072 speed since 840; 0200007f speed since 840; 02000073 position since 960; 02000073 speed since 960; 02000072 position since 960; 02000070 speed since 960…).
+Census audit: 42 dumps, 513 pairs, one seat only 14 / 5, owner clashes 0; position 93.4 %, yaw 89.7 %, speed 57.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 33 (02000074 speed since 300; 02000076 speed since 660; 02000072 speed since 840; 0200007f speed since 840; 02000072 position since 960; 0200007f position since 960; 02000070 speed since 960; 02000078 position since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_01_thrasher_01-seat-1.log`, 1989 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 823f5e75ced36fab)
@@ -1614,7 +1614,7 @@ Family pro film † (41), global 0 (none), rule Anyone (table). **PASS**; cause:
 
 Server (build 20523640): campaign round 2161956509 started with 2 players, seed dd4ab0fd; saves: campaign save from Seat 2 at session 2161956509 tick 1800: 130246 B, hash 42f2998820b9c351; Seat 1 has not saved; campaign save from Seat 1 at session 2161956509 tick 1800: 130246 B, hash 42f2998820b9c351; Seat 2 agrees (tick 1800).
 
-Census audit: 43 dumps, 608 pairs, one seat only 9 / 0, owner clashes 0; position 100.0 %, yaw 88.2 %, speed 75.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (02000072 yaw since 1740; 02000072 speed since 1800; 1200007b speed since 2400; 02000078 yaw since 2460; 02000082 speed since 2520; 0200008c speed since 2520; 12000080 speed since 2520; 02000089 speed since 2520…).
+Census audit: 43 dumps, 608 pairs, one seat only 9 / 0, owner clashes 0; position 100.0 %, yaw 88.2 %, speed 75.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (02000072 yaw since 1740; 02000072 speed since 1800; 1200007b speed since 2400; 02000078 yaw since 2460; 0200008c speed since 2520; 02000082 speed since 2520; 1200007e speed since 2520; 12000080 speed since 2520…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_02_film_pool_team_02-seat-1.log`, 1577 lines): execute not logged; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `42f2998820b9c351` (130246 B); crawl stop: (done) after 50 s.
   - Path: (no states)
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 8
@@ -1630,7 +1630,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 1981540281 started with 2 players, seed fb8255e3; saves: none.
 
-Census audit: 42 dumps, 435 pairs, one seat only 11 / 1, owner clashes 0; position 91.3 %, yaw 92.0 %, speed 60.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 28 (0200006d speed since 180; 0200007b speed since 420; 02000076 speed since 840; 1200007a speed since 900; 0200006f speed since 900; 02000073 position since 960; 02000073 speed since 960; 02000070 speed since 960…).
+Census audit: 42 dumps, 435 pairs, one seat only 11 / 1, owner clashes 0; position 91.3 %, yaw 92.0 %, speed 60.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 28 (0200006d speed since 180; 0200007b speed since 420; 02000076 speed since 840; 1200007a speed since 900; 0200006f speed since 900; 02000070 speed since 960; 02000073 position since 960; 02000073 speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_02_photo_pool_thrasher_2-seat-1.log`, 1748 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 0dd0efbaec1e6c2e)
@@ -1646,16 +1646,16 @@ Census audit: 42 dumps, 435 pairs, one seat only 11 / 1, owner clashes 0; positi
 
 ## `m_6p_03_demo_pool_team_03`
 
-Family film team † (43), global 3 (main), rule Anyone (table). **PASS**; cause: —; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-m9: PASS, 2026-11-11-crawl-m10: PASS, 2026-11-11-crawl-m10-2: PASS, 2026-11-11-crawl-m10-3: PASS, 2026-11-11-crawl-m11: PASS, 2026-11-12-crawl-m11-2: PASS. Note: the film-team graph goes `initial→challenge_running→complete` at tick 1082, 182 ticks after the execute, and autosaves (hashes agree); the win at 1800 found nothing left. The run report's STOPPED is the old pass test (`challenge_cleanup` only); the ledger counts `complete`. Open item 52.
+Family film team † (43), global 3 (main), rule Anyone (table). **PASS**; cause: —; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-m9: PASS, 2026-11-11-crawl-m10: PASS, 2026-11-11-crawl-m10-2: PASS, 2026-11-11-crawl-m10-3: PASS, 2026-11-11-crawl-m11: PASS, 2026-11-12-crawl-m11-2: PASS, 2026-11-12-crawl-m12: PASS. Note: the film-team graph goes `initial→challenge_running→complete` at tick 1082, 182 ticks after the execute, and autosaves (hashes agree); the win at 1800 found nothing left. The run report's STOPPED is the old pass test (`challenge_cleanup` only); the ledger counts `complete`. Open item 52.
 
-Server (build 368bf2ed): campaign round 1665425894 started with 2 players, seed 3573a14c; saves: campaign save from Seat 2 at session 1665425894 tick 1082: 130246 B, hash 7d0be8c372e28261; Seat 1 has not saved; campaign save from Seat 1 at session 1665425894 tick 1082: 130246 B, hash 7d0be8c372e28261; Seat 2 agrees (tick 1082).
+Server (build ec4b678e): campaign round 3770251142 started with 2 players, seed 5498a0c8; saves: campaign save from Seat 2 at session 3770251142 tick 1082: 130246 B, hash 7d0be8c372e28261; Seat 1 has not saved; campaign save from Seat 1 at session 3770251142 tick 1082: 130246 B, hash 7d0be8c372e28261; Seat 2 agrees (tick 1082).
 
 Census audit: no dumps paired.
-- **Seat 1** (`bench/evidence/crawl-m_6p_03_demo_pool_team_03-seat-1.log`, 648 lines): executed; won by diagnostic at 1201 (0 objectives completed); cleanup —; complete 1082; save at 1082 hash `7d0be8c372e28261` (130246 B); crawl stop: (done) after 40 s.
+- **Seat 1** (`bench/evidence/crawl-m_6p_03_demo_pool_team_03-seat-1.log`, 658 lines): executed; won by diagnostic at 1201 (0 objectives completed); cleanup —; complete 1082; save at 1082 hash `7d0be8c372e28261` (130246 B); crawl stop: (done) after 40 s.
   - Path: initial→challenge_running→complete
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
-  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 3 windows, 2995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 0
-- **Seat 2** (`bench/evidence/crawl-m_6p_03_demo_pool_team_03-seat-2.log`, 615 lines): executed; won by diagnostic at 1201 (0 objectives completed); cleanup —; complete 1082; save at 1082 hash `7d0be8c372e28261` (130246 B); crawl stop: (done) after 40 s.
+  - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 3 windows, 2995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 1
+- **Seat 2** (`bench/evidence/crawl-m_6p_03_demo_pool_team_03-seat-2.log`, 639 lines): executed; won by diagnostic at 1201 (0 objectives completed); cleanup —; complete 1082; save at 1082 hash `7d0be8c372e28261` (130246 B); crawl stop: (done) after 40 s.
   - Path: initial→challenge_running→complete
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 0
   - Sync: audit 0 samples in 0 windows, position —, yaw —, speed —, flags —, worst 0.00 m / 0°; stream 3 windows, 2995 B, peak 100 B/s, peak 0 pedestrians here (0 owned, 0 puppets), props 0 owned of 0, contacts 0/0/0/0, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 0, teleport frames 0
@@ -1666,7 +1666,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 1006806194 started with 2 players, seed 2d7fdb6e; saves: none.
 
-Census audit: 21 dumps, 232 pairs, one seat only 6 / 6, owner clashes 0; position 89.2 %, yaw 92.7 %, speed 61.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 22 (02000076 speed since 840; 0200007c speed since 900; 02000073 speed since 960; 0200006e position since 960; 0200006e speed since 960; 02000075 speed since 960; 0200007d position since 960; 0200007d speed since 960…).
+Census audit: 21 dumps, 232 pairs, one seat only 6 / 6, owner clashes 0; position 89.2 %, yaw 92.7 %, speed 61.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 22 (02000076 speed since 840; 0200007c speed since 900; 0200006e position since 960; 0200006e speed since 960; 0200006d position since 960; 0200006d speed since 960; 0200006f speed since 960; 02000073 speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_03_film_team_03-seat-1.log`, 1249 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 280441bbac3179bf)
@@ -1686,7 +1686,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 940326792 started with 2 players, seed 855524fb; saves: none.
 
-Census audit: 42 dumps, 370 pairs, one seat only 9 / 3, owner clashes 0; position 90.3 %, yaw 83.8 %, speed 56.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 26 (02000072 speed since 780; 0200007d speed since 780; 02000070 speed since 840; 02000075 speed since 840; 0200007e speed since 840; 0200007b speed since 900; 0200007f speed since 900; 02000070 position since 960…).
+Census audit: 42 dumps, 370 pairs, one seat only 9 / 3, owner clashes 0; position 90.3 %, yaw 83.8 %, speed 56.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 26 (02000072 speed since 780; 0200007d speed since 780; 02000070 speed since 840; 0200007e speed since 840; 02000075 speed since 840; 0200007f speed since 900; 0200007b speed since 900; 02000072 position since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_03_photo_pool_thrasher_3-seat-1.log`, 1503 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key e2890f76dbdedea8)
@@ -1706,7 +1706,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 2729731978 started with 2 players, seed 22ba79a4; saves: none.
 
-Census audit: 42 dumps, 417 pairs, one seat only 10 / 5, owner clashes 0; position 92.6 %, yaw 94.2 %, speed 70.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 25 (0200006e speed since 540; 0200007c speed since 840; 0200007d speed since 900; 02000073 speed since 960; 0200007d position since 960; 0200006d speed since 960; 12000075 speed since 960; 0200007c position since 960…).
+Census audit: 42 dumps, 417 pairs, one seat only 10 / 5, owner clashes 0; position 92.6 %, yaw 94.2 %, speed 70.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 25 (0200006e speed since 540; 0200007c speed since 840; 0200007d speed since 900; 0200006d speed since 960; 02000078 position since 960; 02000078 speed since 960; 02000073 speed since 960; 12000075 speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_04_photo_pool_thrasher_4-seat-1.log`, 1530 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 471dbebe6ad6d0c0)
@@ -1742,7 +1742,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 3376272454 started with 2 players, seed 7555b302; saves: none.
 
-Census audit: 43 dumps, 596 pairs, one seat only 9 / 0, owner clashes 0; position 99.8 %, yaw 89.4 %, speed 77.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 3 (12000088 speed since 2520; 02000083 speed since 2520; 0200007e speed since 2520).
+Census audit: 43 dumps, 596 pairs, one seat only 9 / 0, owner clashes 0; position 99.8 %, yaw 89.4 %, speed 77.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 3 (0200007e speed since 2520; 12000088 speed since 2520; 02000083 speed since 2520).
 - **Seat 1** (`bench/evidence/crawl-m_6p_06_film_pool_team_6-seat-1.log`, 1713 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 385cf9237b733e16)
@@ -1762,7 +1762,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 2003576800 started with 2 players, seed 8e0ca4e6; saves: none.
 
-Census audit: 42 dumps, 373 pairs, one seat only 12 / 26, owner clashes 0; position 91.7 %, yaw 91.7 %, speed 66.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 43 (0200006c speed since 720; 0200007a speed since 900; 02000078 speed since 900; 02000073 speed since 960; 02000077 position since 960; 02000077 speed since 960; 02000070 speed since 960; 0200006d speed since 960…).
+Census audit: 42 dumps, 373 pairs, one seat only 12 / 26, owner clashes 0; position 91.7 %, yaw 91.7 %, speed 66.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 43 (0200006c speed since 720; 02000078 speed since 900; 0200007a speed since 900; 02000077 position since 960; 02000077 speed since 960; 0200006d speed since 960; 02000070 speed since 960; 02000078 position since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_06_photo_pool_sm_1-seat-1.log`, 1528 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 4863dcb26c420d17)
@@ -1802,7 +1802,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 2267093877 started with 2 players, seed 51413009; saves: none.
 
-Census audit: 43 dumps, 504 pairs, one seat only 10 / 7, owner clashes 0; position 94.8 %, yaw 93.8 %, speed 70.4 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 30 (1200007c speed since 900; 02000071 speed since 900; 02000073 speed since 960; 02000077 position since 960; 02000077 speed since 960; 02000070 speed since 960; 0200006e speed since 960; 02000072 speed since 960…).
+Census audit: 43 dumps, 504 pairs, one seat only 10 / 7, owner clashes 0; position 94.8 %, yaw 93.8 %, speed 70.4 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 30 (02000071 speed since 900; 1200007c speed since 900; 02000072 speed since 960; 0200006e speed since 960; 02000077 position since 960; 02000077 speed since 960; 0200006d position since 960; 0200006d speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_07_photo_pool_sm_2-seat-1.log`, 1797 lines): executed; won by diagnostic at 1800 (3 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 7ff58d7a35ed43e3)
@@ -1822,7 +1822,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 3131053328 started with 2 players, seed 0a32d5b7; saves: none.
 
-Census audit: 43 dumps, 687 pairs, one seat only 9 / 2, owner clashes 0; position 99.9 %, yaw 91.3 %, speed 69.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 9 (0200006e speed since 720; 12000076 speed since 1800; 02000085 position since 1860; 02000085 speed since 1860; 02000087 speed since 2460; 02000073 speed since 2520; 0200008c speed since 2520; 1200008a speed since 2520…).
+Census audit: 43 dumps, 687 pairs, one seat only 9 / 2, owner clashes 0; position 99.9 %, yaw 91.3 %, speed 69.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 9 (0200006e speed since 720; 12000076 speed since 1800; 02000085 position since 1860; 02000085 speed since 1860; 02000087 speed since 2460; 12000083 yaw since 2520; 0200008c speed since 2520; 02000073 speed since 2520…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_08_film_pool_team_8-seat-1.log`, 1646 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 10ad89819d978593)
@@ -1842,7 +1842,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 3330137388 started with 2 players, seed f56f7468; saves: none.
 
-Census audit: 42 dumps, 408 pairs, one seat only 11 / 2, owner clashes 0; position 95.8 %, yaw 90.4 %, speed 68.4 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 22 (02000070 speed since 480; 12000074 speed since 900; 0200007c speed since 900; 02000073 speed since 960; 02000077 speed since 960; 0200006d speed since 960; 0200007c position since 960; 0200007b position since 960…).
+Census audit: 42 dumps, 408 pairs, one seat only 11 / 2, owner clashes 0; position 95.8 %, yaw 90.4 %, speed 68.4 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 22 (02000070 speed since 480; 0200007c speed since 900; 12000074 speed since 900; 02000077 speed since 960; 0200006d speed since 960; 0200006f speed since 960; 02000073 speed since 960; 0200007c position since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_08_photo_pool_sm_3-seat-1.log`, 1665 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 34ea4295d5ca7801)
@@ -1862,7 +1862,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 2246353716 started with 2 players, seed 02ea67b2; saves: none.
 
-Census audit: 44 dumps, 728 pairs, one seat only 11 / 18, owner clashes 0; position 99.9 %, yaw 90.0 %, speed 72.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (02000079 speed since 1920; 12000084 speed since 2340; 0200006f speed since 2460; 12000077 speed since 2460; 02000082 yaw since 2520; 02000082 speed since 2520; 12000081 yaw since 2520; 02000075 speed since 2520…).
+Census audit: 44 dumps, 728 pairs, one seat only 11 / 18, owner clashes 0; position 99.9 %, yaw 90.0 %, speed 72.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (02000079 speed since 1920; 12000084 speed since 2340; 0200006f speed since 2460; 12000077 speed since 2460; 0200006d yaw since 2520; 0200005b speed since 2520; 02000082 yaw since 2520; 02000082 speed since 2520…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_09_film_pool_team_9-seat-1.log`, 1939 lines): executed; won by diagnostic at 1800 (2 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key df050eadfc4125ba)
@@ -1898,7 +1898,7 @@ Family spot film (40), global 3 (main), rule Anyone. **PASS (no save)**; cause: 
 
 Server (build 20523640): campaign round 3638379216 started with 2 players, seed ea2ee42f; saves: none.
 
-Census audit: 41 dumps, 311 pairs, one seat only 11 / 6, owner clashes 0; position 91.3 %, yaw 90.7 %, speed 60.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 20 (0200006c speed since 180; 0200006e speed since 660; 0200007b speed since 780; 0200007c speed since 840; 02000070 position since 960; 02000070 speed since 960; 0200007d position since 960; 0200007d speed since 960…).
+Census audit: 41 dumps, 311 pairs, one seat only 11 / 6, owner clashes 0; position 91.3 %, yaw 90.7 %, speed 60.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 20 (0200006c speed since 180; 0200006e speed since 660; 0200007b speed since 780; 0200007c speed since 840; 0200006e position since 960; 0200006d position since 960; 0200006d speed since 960; 02000070 position since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_09_spotfilm_pool_sm_4-seat-1.log`, 1569 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key f7923b5110ffa9d8)
@@ -1918,7 +1918,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 3384332771 started with 2 players, seed 801b8dae; saves: none.
 
-Census audit: 44 dumps, 768 pairs, one seat only 12 / 22, owner clashes 0; position 100.0 %, yaw 91.0 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 4 (0200006f speed since 1260; 0200007a speed since 1260; 12000081 speed since 2520; 0200006d yaw since 2520).
+Census audit: 44 dumps, 768 pairs, one seat only 12 / 22, owner clashes 0; position 100.0 %, yaw 91.0 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 4 (0200006f speed since 1260; 0200007a speed since 1260; 0200006d yaw since 2520; 12000081 speed since 2520).
 - **Seat 1** (`bench/evidence/crawl-m_6p_10_film_pool_team_10-seat-1.log`, 1886 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key e0ed400dcbecfa46)
@@ -1990,7 +1990,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 4219359716 started with 2 players, seed 60568a67; saves: none.
 
-Census audit: 44 dumps, 646 pairs, one seat only 8 / 18, owner clashes 0; position 99.2 %, yaw 91.6 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (12000075 speed since 780; 12000073 speed since 840; 1200007f speed since 1800; 0200006c speed since 2280; 02000084 speed since 2520; 1200008a speed since 2520; 02000087 yaw since 2520; 1200008b speed since 2520…).
+Census audit: 44 dumps, 646 pairs, one seat only 8 / 18, owner clashes 0; position 99.2 %, yaw 91.6 %, speed 76.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (12000075 speed since 780; 12000073 speed since 840; 1200007f speed since 1800; 0200006c speed since 2280; 0200007e yaw since 2520; 02000087 yaw since 2520; 02000083 speed since 2520; 02000084 speed since 2520…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_12_film_pool_team_12-seat-1.log`, 1689 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key f7298ffbb94e02a8)
@@ -2010,7 +2010,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 4235946154 started with 2 players, seed 2ad15470; saves: none.
 
-Census audit: 44 dumps, 619 pairs, one seat only 8 / 19, owner clashes 0; position 100.0 %, yaw 91.4 %, speed 76.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 8 (02000071 speed since 60; 02000070 yaw since 720; 0200007d speed since 960; 02000086 speed since 1560; 1200007a speed since 1680; 0200007c speed since 2160; 1200008c yaw since 2520; 0200007c yaw since 2520).
+Census audit: 44 dumps, 619 pairs, one seat only 8 / 19, owner clashes 0; position 100.0 %, yaw 91.4 %, speed 76.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 8 (02000071 speed since 60; 02000070 yaw since 720; 0200007d speed since 960; 02000086 speed since 1560; 1200007a speed since 1680; 0200007c speed since 2160; 0200007c yaw since 2520; 1200008c yaw since 2520).
 - **Seat 1** (`bench/evidence/crawl-m_6p_13_film_pool_team_13-seat-1.log`, 1635 lines): executed; won by diagnostic at 1800 (12 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key fc880c308c0e3e2d)
@@ -2030,7 +2030,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 462777925 started with 2 players, seed 7282024a; saves: none.
 
-Census audit: 43 dumps, 655 pairs, one seat only 9 / 1, owner clashes 0; position 100.0 %, yaw 94.8 %, speed 72.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 13 (02000077 speed since 1500; 1200007d yaw since 2340; 0200008e speed since 2460; 02000073 speed since 2520; 1200008c speed since 2520; 02000084 speed since 2520; 0200007d yaw since 2520; 0200007d speed since 2520…).
+Census audit: 43 dumps, 655 pairs, one seat only 9 / 1, owner clashes 0; position 100.0 %, yaw 94.8 %, speed 72.8 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 13 (02000077 speed since 1500; 1200007d yaw since 2340; 0200008e speed since 2460; 02000084 speed since 2520; 0200006d speed since 2520; 12000084 speed since 2520; 0200007d yaw since 2520; 0200007d speed since 2520…).
 - **Seat 1** (`bench/evidence/crawl-m_6p_14_film_pool_team_14-seat-1.log`, 1715 lines): executed; won by diagnostic at 1800 (14 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 9f2ea666613b0301)
@@ -2046,24 +2046,24 @@ Census audit: 43 dumps, 655 pairs, one seat only 9 / 1, owner clashes 0; positio
 
 ## `m_7a_01_demo_dyrdek`
 
-Family demo † (2), global 3 (main), rule Anyone. **STOPPED**; cause: in step: the mission ended on its own terms; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: STOPPED, 2026-11-11-crawl-ai4: STOPPED, 2026-11-11-crawl-m9: STOPPED, 2026-11-11-crawl-m10: STOPPED, 2026-11-11-crawl-m10-2: STOPPED, 2026-11-11-crawl-m10-3: STOPPED, 2026-11-11-crawl-m11: STOPPED, 2026-11-12-crawl-m11-2: STOPPED. Note: four pros spawn at slots 2 to 5 on both seats; the demo's rounds run in step to `end_options` (14 states alike, `2026-11-11-crawl-ai2`), lost by a bench that does no tricks.
+Family demo † (2), global 3 (main), rule Anyone. **STOPPED**; cause: in step: the mission ended on its own terms; in step: yes. Runs: 2026-11-10-crawl-rest2: STOPPED, 2026-11-11-crawl-ai2: STOPPED, 2026-11-11-crawl-ai4: STOPPED, 2026-11-11-crawl-m9: STOPPED, 2026-11-11-crawl-m10: STOPPED, 2026-11-11-crawl-m10-2: STOPPED, 2026-11-11-crawl-m10-3: STOPPED, 2026-11-11-crawl-m11: STOPPED, 2026-11-12-crawl-m11-2: STOPPED, 2026-11-12-crawl-m12: STOPPED. Note: four pros spawn at slots 2 to 5 on both seats; the demo's rounds run in step to `end_options` (14 states alike, `2026-11-11-crawl-ai2`), lost by a bench that does no tricks.
 
-Server (build 368bf2ed): campaign round 3078623758 started with 2 players, seed b173fb3d; saves: none.
+Server (build ec4b678e): campaign round 526614643 started with 2 players, seed 945b9a6d; saves: none.
 
-Census audit: 158 dumps, 2081 pairs, one seat only 0 / 44, owner clashes 60; position 99.9 %, yaw 99.7 %, speed 99.7 %, flags 37.1 %, down 99.6 %, model 100.0 %; open at the end: 9 (02000074 flags since 1980; 12000064 flags since 1980; 02000065 flags since 1980; 12000058 flags since 2040; 1200005f flags since 2040; 12000063 flags since 2040; 1200005b flags since 2040; 02000075 flags since 2040…).
-- **Seat 1** (`bench/evidence/crawl-m_7a_01_demo_dyrdek-seat-1.log`, 16405 lines): executed; won by diagnostic at 2579 (2 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
+Census audit: 158 dumps, 2110 pairs, one seat only 0 / 7, owner clashes 60; position 100.0 %, yaw 99.3 %, speed 99.4 %, flags 45.6 %, down 97.6 %, model 100.0 %; open at the end: 7 (02000074 flags since 1980; 0200006f flags since 1980; 1200006b flags since 2100; 1200006a flags since 2460; 02000072 flags since 7800; 1200005b flags since 11160; 02000069 flags since 11220).
+- **Seat 1** (`bench/evidence/crawl-m_7a_01_demo_dyrdek-seat-1.log`, 10467 lines): executed; won by diagnostic at 2582 (2 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
   - Path: initial→setup_code→nis_overview→wait_for_assetload→nis_with_characters→setup_challenge→setup_round→countdown→run_round→end_round→results_screen→cleanup_round→end_challenge→end_options
   - Rule: Anyone for players [0, 1] (key 9e120bb75542b446)
   - Objectives: player 0: 2 copies, 2 complete, 0 failed; player 1: 2 copies, 2 complete, 0 failed; 2 presentations withheld
-  - Presentation: 1 groups, 1 events of kinds [5], 3 finished; scenes: besttrick_m_7a_01_demo_dyrdek@901; characters instanced [0]; triggers entered 22
-  - Sync: audit 19518 samples in 15 windows, position 100.0 %, yaw 99.8 %, speed 99.9 %, flags 17.0 %, worst 0.72 m / 13°; stream 19 windows, 599987 B, peak 7104 B/s, peak 18 pedestrians here (9 owned, 12 puppets), props 0 owned of 0, contacts 5965/6009/0/2, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 19, starved 15, teleport frames 3
+  - Presentation: 1 groups, 1 events of kinds [5], 3 finished; scenes: besttrick_m_7a_01_demo_dyrdek@901; characters instanced [0]; triggers entered 26
+  - Sync: audit 20743 samples in 16 windows, position 100.0 %, yaw 99.7 %, speed 99.4 %, flags 56.2 %, worst 0.76 m / 14°; stream 20 windows, 584748 B, peak 6287 B/s, peak 18 pedestrians here (9 owned, 12 puppets), props 0 owned of 0, contacts 3368/3364/2/7, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 1; stalled 0, starved 0, teleport frames 4
   - AI players selected: 1: Eric Koston, 2: PJ Ladd, 3: Jason Dill, 4: Terry Kennedy
-- **Seat 2** (`bench/evidence/crawl-m_7a_01_demo_dyrdek-seat-2.log`, 16393 lines): executed; won by diagnostic at 2579 (2 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
+- **Seat 2** (`bench/evidence/crawl-m_7a_01_demo_dyrdek-seat-2.log`, 10495 lines): executed; won by diagnostic at 2582 (2 objectives completed); cleanup —; complete —; no save; crawl stop: (deadline) after 200 s.
   - Path: initial→setup_code→nis_overview→wait_for_assetload→nis_with_characters→setup_challenge→setup_round→countdown→run_round→end_round→results_screen→cleanup_round→end_challenge→end_options
   - Rule: Anyone for players [0, 1] (key 9e120bb75542b446)
   - Objectives: player 0: 2 copies, 2 complete, 0 failed; player 1: 2 copies, 2 complete, 0 failed; 2 presentations withheld
-  - Presentation: 1 groups, 1 events of kinds [5], 3 finished; scenes: besttrick_m_7a_01_demo_dyrdek@901; characters instanced [0]; triggers entered 22
-  - Sync: audit 20733 samples in 16 windows, position 100.0 %, yaw 99.8 %, speed 99.3 %, flags 54.4 %, worst 0.86 m / 15°; stream 19 windows, 647763 B, peak 6341 B/s, peak 32 pedestrians here (9 owned, 23 puppets), props 0 owned of 0, contacts 6329/6283/4/5, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 33, teleport frames 25
+  - Presentation: 1 groups, 1 events of kinds [5], 3 finished; scenes: besttrick_m_7a_01_demo_dyrdek@901; characters instanced [0]; triggers entered 26
+  - Sync: audit 20405 samples in 16 windows, position 100.0 %, yaw 99.7 %, speed 99.3 %, flags 31.6 %, worst 0.76 m / 13°; stream 19 windows, 610012 B, peak 6325 B/s, peak 25 pedestrians here (9 owned, 16 puppets), props 0 owned of 0, contacts 3358/3362/3/5, 0 older-epoch records; handoffs 0, promotions 0, demotions 0, knockdowns 0; stalled 0, starved 8, teleport frames 32
   - AI players selected: 1: Eric Koston, 2: PJ Ladd, 3: Jason Dill, 4: Terry Kennedy
 
 ## `m_7a_02_jam_monster_public_park`
@@ -2090,7 +2090,7 @@ Family jam (15), global 0 (none), rule Compete (table). **PASS**; cause: —; in
 
 Server (build 20523640): campaign round 2613848515 started with 2 players, seed a9346845; saves: campaign save from Seat 2 at session 2613848515 tick 1800: 130246 B, hash 1b34282b2f7284c3; Seat 1 has not saved; campaign save from Seat 1 at session 2613848515 tick 1800: 130246 B, hash 1b34282b2f7284c3; Seat 2 agrees (tick 1800).
 
-Census audit: 43 dumps, 550 pairs, one seat only 8 / 1, owner clashes 0; position 100.0 %, yaw 88.9 %, speed 80.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 7 (02000073 speed since 780; 0200006b yaw since 2460; 1200008b speed since 2460; 12000088 speed since 2520; 02000075 speed since 2520; 0200008e speed since 2520; 02000086 yaw since 2520).
+Census audit: 43 dumps, 550 pairs, one seat only 8 / 1, owner clashes 0; position 100.0 %, yaw 88.9 %, speed 80.2 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 7 (02000073 speed since 780; 1200008b speed since 2460; 0200006b yaw since 2460; 0200008e speed since 2520; 02000075 speed since 2520; 02000086 yaw since 2520; 12000088 speed since 2520).
 - **Seat 1** (`bench/evidence/crawl-m_7a_02_jam_monster_public_park_ol-seat-1.log`, 1414 lines): execute not logged; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `1b34282b2f7284c3` (130246 B); crawl stop: (done) after 50 s.
   - Path: (no states)
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 8
@@ -2106,7 +2106,7 @@ Family photo (team) † (38), global 0 (none), rule Anyone (table). **PASS**; ca
 
 Server (build 20523640): campaign round 4255091554 started with 2 players, seed 8a10de5a; saves: campaign save from Seat 2 at session 4255091554 tick 1800: 130246 B, hash 2ae8def6d7ac4361; Seat 1 has not saved; campaign save from Seat 1 at session 4255091554 tick 1800: 130246 B, hash 2ae8def6d7ac4361; Seat 2 agrees (tick 1800).
 
-Census audit: 44 dumps, 630 pairs, one seat only 7 / 19, owner clashes 0; position 100.0 %, yaw 92.4 %, speed 77.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 7 (1200007c speed since 1500; 02000077 yaw since 2400; 02000070 speed since 2520; 02000079 speed since 2520; 12000080 yaw since 2520; 12000080 speed since 2520; 12000083 speed since 2520).
+Census audit: 44 dumps, 630 pairs, one seat only 7 / 19, owner clashes 0; position 100.0 %, yaw 92.4 %, speed 77.3 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 7 (1200007c speed since 1500; 02000077 yaw since 2400; 12000083 speed since 2520; 02000079 speed since 2520; 02000070 speed since 2520; 12000080 yaw since 2520; 12000080 speed since 2520).
 - **Seat 1** (`bench/evidence/crawl-m_7b_02_photo_cover_thrasher-seat-1.log`, 1594 lines): execute not logged; not won; completed by name at 1800; cleanup —; complete —; save at 1800 hash `2ae8def6d7ac4361` (130246 B); crawl stop: (done) after 50 s.
   - Path: (no states)
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 8
@@ -2122,7 +2122,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 100325213 started with 2 players, seed 59528c64; saves: none.
 
-Census audit: 44 dumps, 418 pairs, one seat only 13 / 24, owner clashes 0; position 100.0 %, yaw 93.3 %, speed 69.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 14 (02000071 speed since 780; 02000070 speed since 840; 0200006f speed since 840; 02000072 speed since 900; 0200006e speed since 900; 02000075 speed since 900; 0200006c yaw since 900; 12000076 yaw since 960…).
+Census audit: 44 dumps, 418 pairs, one seat only 13 / 24, owner clashes 0; position 100.0 %, yaw 93.3 %, speed 69.6 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 14 (02000071 speed since 780; 02000070 speed since 840; 0200006f speed since 840; 02000072 speed since 900; 0200006e speed since 900; 0200006c yaw since 900; 02000075 speed since 900; 12000076 yaw since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_7b_03_photo_cover_thrasher_3-seat-1.log`, 1567 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 2dc716e7e254b1bd)
@@ -2142,7 +2142,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 2025745931 started with 2 players, seed 3c5a1979; saves: none.
 
-Census audit: 41 dumps, 458 pairs, one seat only 9 / 39, owner clashes 0; position 90.2 %, yaw 89.5 %, speed 62.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 51 (0200006c speed since 120; 0200006e speed since 900; 0200007c speed since 900; 1200007a speed since 900; 02000077 speed since 960; 0200007d position since 960; 0200007d speed since 960; 02000070 speed since 960…).
+Census audit: 41 dumps, 458 pairs, one seat only 9 / 39, owner clashes 0; position 90.2 %, yaw 89.5 %, speed 62.7 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 51 (0200006c speed since 120; 0200006e speed since 900; 1200007a speed since 900; 0200007c speed since 900; 02000077 speed since 960; 12000076 speed since 960; 1200007e speed since 960; 02000070 speed since 960…).
 - **Seat 1** (`bench/evidence/crawl-m_7c_03_photo_cover_sm_3-seat-1.log`, 1577 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save; crawl stop: (done) after 50 s.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 6398cda6aa20ab37)
@@ -2162,7 +2162,7 @@ Family film team † (43), global 3 (main), rule Anyone (table). **PASS**; cause
 
 Server (build 20523640): campaign round 372919515 started with 2 players, seed ff7ac5ac; saves: campaign save from Seat 2 at session 372919515 tick 1082: 130246 B, hash 79af64eaa3cd0b36; Seat 1 has not saved; campaign save from Seat 1 at session 372919515 tick 1082: 130246 B, hash 79af64eaa3cd0b36; Seat 2 agrees (tick 1082).
 
-Census audit: 164 dumps, 3034 pairs, one seat only 10 / 2, owner clashes 0; position 99.8 %, yaw 92.6 %, speed 81.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 19 (02000070 speed since 540; 0200007d yaw since 960; 02000085 speed since 1800; 12000078 speed since 1800; 12000091 speed since 2520; 02000071 speed since 2520; 12000091 position since 3000; 1200008e speed since 5100…).
+Census audit: 164 dumps, 3034 pairs, one seat only 10 / 2, owner clashes 0; position 99.8 %, yaw 92.6 %, speed 81.9 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 19 (02000070 speed since 540; 0200007d yaw since 960; 12000078 speed since 1800; 02000085 speed since 1800; 02000071 speed since 2520; 12000091 speed since 2520; 12000091 position since 3000; 1200008e speed since 5100…).
 - **Seat 1** (`bench/evidence/crawl-m_8_01_04-seat-1.log`, 4354 lines): executed; won by diagnostic at 1800 (0 objectives completed); cleanup —; complete 1082; save at 1082 hash `79af64eaa3cd0b36` (130246 B); crawl stop: (deadline) after 170 s.
   - Path: initial→challenge_running→complete
   - Presentation: 0 groups, 0 events of kinds [], 0 finished; scenes: none; triggers entered 8
@@ -2214,7 +2214,7 @@ Family film (pool team) † (39), global 3 (main), rule Anyone. **PASS (no save)
 
 Server (build 20523640): campaign round 423957532 started with 2 players, seed c68a6d82; saves: none.
 
-Census audit: 43 dumps, 574 pairs, one seat only 5 / 1, owner clashes 0; position 100.0 %, yaw 88.2 %, speed 80.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (0200006e yaw since 720; 02000074 speed since 1320; 02000079 speed since 1380; 02000076 yaw since 1440; 1200007c speed since 2400; 02000090 speed since 2520; 02000084 yaw since 2520; 12000079 yaw since 2520…).
+Census audit: 43 dumps, 574 pairs, one seat only 5 / 1, owner clashes 0; position 100.0 %, yaw 88.2 %, speed 80.5 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 11 (0200006e yaw since 720; 02000074 speed since 1320; 02000079 speed since 1380; 02000076 yaw since 1440; 1200007c speed since 2400; 02000084 yaw since 2520; 02000090 speed since 2520; 02000078 speed since 2520…).
 - **Seat 1** (`bench/evidence/crawl-m_8a_03_film_team_ender_3-seat-1.log`, 1499 lines): executed; won by diagnostic at 1800 (8 objectives completed); cleanup 1800; complete —; no save.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→killed_it→highlight_reel→end_options
   - Rule: Anyone for players [0, 1] (key 69504d2d046dd635)
@@ -2234,7 +2234,7 @@ Family photo (team) † (38), global 3 (main), rule Anyone. **PASS (no save)**; 
 
 Server (build 20523640): campaign round 4093999837 started with 2 players, seed 3f8d1eb6; saves: none.
 
-Census audit: 43 dumps, 679 pairs, one seat only 6 / 0, owner clashes 0; position 100.0 %, yaw 90.6 %, speed 66.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 7 (02000071 yaw since 840; 02000073 speed since 2460; 12000090 yaw since 2520; 12000090 speed since 2520; 1200008b yaw since 2520; 0200006f speed since 2520; 12000084 speed since 2520).
+Census audit: 43 dumps, 679 pairs, one seat only 6 / 0, owner clashes 0; position 100.0 %, yaw 90.6 %, speed 66.1 %, flags 100.0 %, down 100.0 %, model 100.0 %; open at the end: 7 (02000071 yaw since 840; 02000073 speed since 2460; 12000084 speed since 2520; 0200006f speed since 2520; 1200008b yaw since 2520; 12000090 yaw since 2520; 12000090 speed since 2520).
 - **Seat 1** (`bench/evidence/crawl-m_9a_09_photo_dlc-seat-1.log`, 1652 lines): executed; won by diagnostic at 1800 (4 objectives completed); cleanup 1800; complete —; no save.
   - Path: initial→pin_player→make_objectives→prefilm_display→nis_overview→setup→wait_for_assetload→spawn_player→countdown→challenge_running→challenge_cleanup→display_photo
   - Rule: Anyone for players [0, 1] (key 4c72e52ea17c08df)
