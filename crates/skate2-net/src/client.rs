@@ -183,6 +183,9 @@ impl ClientCore {
     /// Queues a message for reliable delivery. Co-op fork (M18): an owned skater's look the
     /// server already has from this client goes by hash (`OwnedRecipeRef`).
     pub fn send(&mut self, message: &ClientMessage) {
+        if !matches!(self.state, State::Connected { .. }) {
+            return;
+        }
         let reference = match message {
             ClientMessage::OwnedRecipe { slot, data } => {
                 let hash = protocol::look_hash(data);

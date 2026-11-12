@@ -301,13 +301,32 @@ fn hand_prop_of(pedestrian: &crate::living_world_pedestrian_entity::PedestrianCo
     pedestrian.hand_prop_attributes.as_ref().and_then(|attributes| attributes.collection_key()).unwrap_or(0)
 }
 
+/// M19: whether a hand prop's model is resident here (the hand-prop pass's own lookup: the
+/// `hand_props` row's model, its `dmo_models` row's asset). The pass clears a pending prop whose
+/// model is not, so a puppet waits for it instead of setting it pending again at every
+/// descriptor (the M19 probe's first run: up to 22 times on one puppet).
+fn hand_prop_model_resident(
+    models: &crate::living_world_grind_services::dmo_models::DmoModelMan,
+    vault: &Arc<crate::attribute_runtime::AttributeRuntimeVault>,
+    hand_prop: u64,
+) -> bool {
+    let word = |data: Option<_>| -> Option<u64> {
+        let data: crate::attribute_runtime::AttributeRuntimeData = data?;
+        Some(u64::from_be_bytes(data.bytes().try_into().ok()?))
+    };
+    let Some(model_key) = vault.instance(0xec8b_7565_46e2_26f6, hand_prop).try_cached_layout_field(40, 8).ok().and_then(word) else { return false };
+    let Some(asset) = vault.instance(skate2_formats::attrib::string_hash64("dmo_models"), model_key).try_cached_layout_field(0, 8).ok().and_then(word) else { return false };
+    models.model(asset).is_some()
+}
+
 /// M19: a puppet's hand prop made the owner's: a prop the owner holds and the puppet does not
-/// is set pending (the hand-prop pass spawns and attaches it as it does the census's own); one
-/// the owner no longer holds is thrown away here.
+/// is set pending (the hand-prop pass spawns and attaches it as it does the census's own) once
+/// its model is resident here; one the owner no longer holds is thrown away here.
 fn sync_hand_prop(
     pedestrian: &mut crate::living_world_pedestrian_entity::PedestrianConstruction,
     hand_prop: u64,
     vault: &Arc<crate::attribute_runtime::AttributeRuntimeVault>,
+    models: &crate::living_world_grind_services::dmo_models::DmoModelMan,
     cvars: &crate::input_cvar_runtime::InputCvarReferences,
     id: u32,
 ) -> Result<(), String> {
@@ -324,6 +343,16 @@ fn sync_hand_prop(
             pedestrian.hand_prop_attributes = None;
         }
         return Ok(());
+    }
+    if !hand_prop_model_resident(models, vault, hand_prop) {
+        if let Some(drive) = pedestrian.puppet.as_mut().filter(|drive| drive.prop_waiting != hand_prop) {
+            drive.prop_waiting = hand_prop;
+            trace(format_args!("puppet {id:08x}: hand prop {hand_prop:016x} as its owner's, waiting for its model here"));
+        }
+        return Ok(());
+    }
+    if let Some(drive) = pedestrian.puppet.as_mut() {
+        drive.prop_waiting = 0;
     }
     if here != 0 && pedestrian.held_hand_prop.is_some() {
         pedestrian.throw_hand_prop_away(cvars)?;
@@ -515,6 +544,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                 // 1. The owners' samples drive the puppets; an owner's knockdown plays here.
                 {
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                    let living = &mut *living;
+                    let models = &living.dmo_models;
                     let roster = living.pedestrian_entities.as_deref_mut().ok_or("pedestrian EntityMan absent")?;
                     // 0. Own entities another console claimed become puppets first.
                     for id in std::mem::take(&mut coop.demotions) {
@@ -578,7 +609,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         // M19: a descriptor's hand prop, taken or dropped as the owner's.
                         if let Some(descriptor) = sample.descriptor.as_ref() {
-                            sync_hand_prop(pedestrian, descriptor.hand_prop, vault, cvars, sample.id)?;
+                            sync_hand_prop(pedestrian, descriptor.hand_prop, vault, models, cvars, sample.id)?;
                         }
                         puppet.updated = tick;
                         let knocked = sample.flags & flags::KNOCKED_DOWN != 0;
@@ -771,6 +802,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let owner = spawn.owner;
                     {
                         let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                        let living = &mut *living;
+                        let models = &living.dmo_models;
                         let pedestrian = living.pedestrian_entities.as_deref_mut().and_then(|p| p.get_mut(entity)).ok_or("spawned puppet absent")?;
                         let mut drive = PuppetDrive::new(transform);
                         drive.arrive(transform, spawn.state.velocity, spawn.state.flags);
@@ -781,7 +814,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         // M19: the owner's hand prop, spawned here by the hand-prop pass as any
                         // pedestrian's pending prop is.
-                        sync_hand_prop(pedestrian, spawn.descriptor.hand_prop, vault, cvars, id)?;
+                        sync_hand_prop(pedestrian, spawn.descriptor.hand_prop, vault, models, cvars, id)?;
                     }
                     let kind = spawn.state.kind;
                     ownership::decide(kind, id, None, Owner::Remote(owner), "its census spawned it");
@@ -1120,6 +1153,22 @@ impl<T, C> SelectedLiveSession<T, C> {
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.refused, stats.stale
                     ));
                     trace(format_args!("world stream at {tick}: {} samples withheld by the send-on-error rule (M17)", stats.withheld));
+                    // M19: the puppets' stutter since the last window: each tick's step against
+                    // the walk its velocity gives, summed over every puppet here.
+                    let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
+                    if let Some(roster) = living.pedestrian_entities.as_deref_mut() {
+                        let (mut ticks, mut stray, mut over) = (0_u64, 0_f64, 0_u64);
+                        for entity in roster.ids() {
+                            let Some(drive) = roster.get_mut(entity).and_then(|pedestrian| pedestrian.puppet.as_mut()) else { continue };
+                            let meter = std::mem::take(&mut drive.stutter);
+                            ticks += u64::from(meter.ticks);
+                            stray += f64::from(meter.stray);
+                            over += u64::from(meter.over);
+                        }
+                        if ticks > 0 {
+                            trace(format_args!("puppet steps at {tick}: {ticks} ticks, mean stray {:.1} mm, {over} past 10 mm ({:.2} %) (M19)", 1000. * stray / ticks as f64, 100. * over as f64 / ticks as f64));
+                        }
+                    }
                     let audit = &stats.audit;
                     if audit.samples > 0 {
                         trace(format_args!(

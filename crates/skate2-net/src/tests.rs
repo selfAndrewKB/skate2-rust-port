@@ -1834,6 +1834,61 @@ fn a_campaign_lobby_takes_its_players_and_starts_no_challenge() {
     }
 }
 
+/// Co-op fork (M18): a look sent again (an ambient skater respawning in an outfit already seen)
+/// crosses the wire as an eight-byte reference both ways and still reaches the others whole; a
+/// member that never saw the bytes (it joined after them) asks for them and gets them.
+#[test]
+fn a_look_sent_again_travels_by_hash_and_resolves_everywhere() {
+    use crate::protocol::owned::skater_id;
+    let mut net = Net::new();
+    let host = net.add("Host");
+    let guest = net.add("Guest");
+    net.run(100);
+    net.send(host, &campaign_lobby(true));
+    net.run(100);
+    net.send(guest, &campaign_lobby(false));
+    net.run(100);
+    net.events(host);
+    net.events(guest);
+    let looks = |net: &mut Net, client: usize| -> Vec<(u64, Vec<u8>)> {
+        net.messages(client).into_iter().filter_map(|message| match message {
+            ServerMessage::Recipe { user_id, data } => Some((user_id, data)),
+            _ => None,
+        }).collect()
+    };
+    let wire = |net: &Net| -> usize { net.wire.iter().map(Vec::len).sum() };
+    let a: Vec<u8> = (0..30_000_u32).map(|i| (i % 251) as u8).collect();
+    let b: Vec<u8> = (0..30_000_u32).map(|i| (i % 241) as u8).collect();
+    // The first sending of a look is the look.
+    net.send(host, &ClientMessage::OwnedRecipe { slot: 2, data: a.clone() });
+    net.run(300);
+    assert_eq!(looks(&mut net, guest), [(skater_id(0, 2), a.clone())]);
+    // The same look again, at another slot: a reference each way, the guest given it whole.
+    let before = wire(&net);
+    net.send(host, &ClientMessage::OwnedRecipe { slot: 3, data: a.clone() });
+    net.run(300);
+    assert!(wire(&net) - before < 2_000, "{} bytes on the wire for a look sent again", wire(&net) - before);
+    assert_eq!(looks(&mut net, guest), [(skater_id(0, 3), a.clone())]);
+    // Slots 2 and 3 take another look; a late member joins, given the looks the slots hold now
+    // (b only), and never sees a's bytes.
+    net.send(host, &ClientMessage::OwnedRecipe { slot: 2, data: b.clone() });
+    net.send(host, &ClientMessage::OwnedRecipe { slot: 3, data: b.clone() });
+    net.run(300);
+    looks(&mut net, guest);
+    let late = net.add("Late");
+    net.run(100);
+    net.send(late, &campaign_lobby(false));
+    net.run(300);
+    let joined = looks(&mut net, late);
+    assert!(joined.iter().all(|(_, data)| *data == b), "the late member is given the looks the slots hold");
+    // a again, by reference: the guest has it; the late member asks and is given it.
+    net.send(host, &ClientMessage::OwnedRecipe { slot: 4, data: a.clone() });
+    net.run(300);
+    assert_eq!(looks(&mut net, guest), [(skater_id(0, 4), a.clone())]);
+    assert_eq!(looks(&mut net, late), [(skater_id(0, 4), a.clone())], "asked for by hash and given whole");
+    assert!(!net.server_log.lock().expect("log").iter().any(|line| line.contains("names no look here")));
+}
+
 #[test]
 fn a_campaign_s_world_runs_reach_the_other_members_as_sent_and_no_one_elsewhere() {
     let mut net = Net::new();
