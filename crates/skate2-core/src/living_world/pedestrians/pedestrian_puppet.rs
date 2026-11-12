@@ -76,12 +76,22 @@ pub(crate) struct PuppetDrive {
 }
 
 /// M19: how much a puppet's steps jerked (changed from one tick to the next), since the meter
-/// was last read.
+/// was last read; `over_flat` the ticks whose jerk along the ground alone passed the mark (the
+/// rest is the height: a kerb, a step, the ground under the owner).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct Stutter {
     pub(crate) ticks: u32,
     pub(crate) stray: f32,
     pub(crate) over: u32,
+    pub(crate) over_flat: u32,
+}
+
+/// Diagnostics (M19's A/B): `SKATE2_DIAGNOSTIC_PUPPET_BLEND=linear` drives this seat's puppets
+/// with the M19 probe's fourth-run blend (the gap to the sample faded linearly at the sample's
+/// velocity) instead of the smoothstep between paths, so one build measures both.
+fn linear_blend() -> bool {
+    static LINEAR: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *LINEAR.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_PUPPET_BLEND").is_ok_and(|value| value == "linear"))
 }
 
 impl PuppetDrive {
@@ -104,7 +114,15 @@ impl PuppetDrive {
     /// `SNAP_DISTANCE` is taken at once.
     pub(crate) fn arrive(&mut self, target: Transform, velocity: [f32; 3], flags: u8) {
         let showing = if self.last_dt > 0. { self.last_step.map(|step| step / self.last_dt) } else { [0.; 3] };
-        let here = [0, 1, 2].map(|lane| self.last_position[lane] + self.last_step[lane]);
+        let mut here = [0, 1, 2].map(|lane| self.last_position[lane] + self.last_step[lane]);
+        let mut showing = showing;
+        if linear_blend() {
+            // The fourth run's blend: carried on at the old sample's velocity, then faded at the
+            // new one's.
+            let carried = self.carried_velocity(self.age);
+            here = [0, 1, 2].map(|lane| self.last_position[lane] + carried[lane] * self.last_dt);
+            showing = velocity;
+        }
         let sample = [target[3][0], target[3][1], target[3][2]];
         let gap = [0, 1, 2].map(|lane| here[lane] - sample[lane]).iter().map(|value| value * value).sum::<f32>().sqrt();
         if gap > SNAP_DISTANCE {
@@ -132,7 +150,7 @@ impl PuppetDrive {
     /// the old path's at the start and the new path's at the end.
     fn into_new_path(age: u32) -> f32 {
         let s = ((age + 1).min(POSITION_BLEND_TICKS) as f32) / POSITION_BLEND_TICKS as f32;
-        s * s * (3. - 2. * s)
+        if linear_blend() { s } else { s * s * (3. - 2. * s) }
     }
 
     /// The velocity the puppet's animation walks at: the owner's last, or none once it has
@@ -168,6 +186,8 @@ impl PuppetDrive {
         self.stutter.ticks += 1;
         self.stutter.stray += jerk;
         self.stutter.over += u32::from(jerk > JERK_METRES);
+        let flat = ((step[0] - self.last_step[0]).powi(2) + (step[2] - self.last_step[2]).powi(2)).sqrt();
+        self.stutter.over_flat += u32::from(flat > JERK_METRES);
         self.last_step = step;
         self.last_position = position;
         self.last_yaw = yaw;

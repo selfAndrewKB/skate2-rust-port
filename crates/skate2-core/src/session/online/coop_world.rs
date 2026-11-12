@@ -1172,16 +1172,17 @@ impl<T, C> SelectedLiveSession<T, C> {
                     // tick before's, summed over every puppet here.
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
                     if let Some(roster) = living.pedestrian_entities.as_deref_mut() {
-                        let (mut ticks, mut stray, mut over) = (0_u64, 0_f64, 0_u64);
+                        let (mut ticks, mut stray, mut over, mut over_flat) = (0_u64, 0_f64, 0_u64, 0_u64);
                         for entity in roster.ids() {
                             let Some(drive) = roster.get_mut(entity).and_then(|pedestrian| pedestrian.puppet.as_mut()) else { continue };
                             let meter = std::mem::take(&mut drive.stutter);
                             ticks += u64::from(meter.ticks);
                             stray += f64::from(meter.stray);
                             over += u64::from(meter.over);
+                            over_flat += u64::from(meter.over_flat);
                         }
                         if ticks > 0 {
-                            trace(format_args!("puppet jerk at {tick}: {ticks} ticks, mean {:.2} mm, {over} past 5 mm ({:.2} %) (M19)", 1000. * stray / ticks as f64, 100. * over as f64 / ticks as f64));
+                            trace(format_args!("puppet jerk at {tick}: {ticks} ticks, mean {:.2} mm, {over} past 5 mm ({:.2} %), {over_flat} along the ground (M19)", 1000. * stray / ticks as f64, 100. * over as f64 / ticks as f64));
                         }
                     }
                     let audit = &stats.audit;
