@@ -1168,8 +1168,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.refused, stats.stale
                     ));
                     trace(format_args!("world stream at {tick}: {} samples withheld by the send-on-error rule (M17)", stats.withheld));
-                    // M19: the puppets' stutter since the last window: each tick's step against
-                    // the walk its velocity gives, summed over every puppet here.
+                    // M19: the puppets' jerk since the last window: each tick's step against the
+                    // tick before's, summed over every puppet here.
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
                     if let Some(roster) = living.pedestrian_entities.as_deref_mut() {
                         let (mut ticks, mut stray, mut over) = (0_u64, 0_f64, 0_u64);
@@ -1181,7 +1181,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             over += u64::from(meter.over);
                         }
                         if ticks > 0 {
-                            trace(format_args!("puppet steps at {tick}: {ticks} ticks, mean stray {:.1} mm, {over} past 10 mm ({:.2} %) (M19)", 1000. * stray / ticks as f64, 100. * over as f64 / ticks as f64));
+                            trace(format_args!("puppet jerk at {tick}: {ticks} ticks, mean {:.2} mm, {over} past 5 mm ({:.2} %) (M19)", 1000. * stray / ticks as f64, 100. * over as f64 / ticks as f64));
                         }
                     }
                     let audit = &stats.audit;
