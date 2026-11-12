@@ -628,6 +628,13 @@ pub enum ClientMessage {
     /// the AI's slot in the round, as [`Self::Recipe`] carries the player's own; the server
     /// relays it as the recipe of [`owned::skater_id`] and keeps it for joiners.
     OwnedRecipe { slot: u8, data: Vec<u8> },
+    /// Co-op fork (M18): an owned skater's look the server already holds, by its hash
+    /// (`look_hash`): the ambient skaters' outfits repeat, so a respawn's look costs eight bytes
+    /// instead of thirty kilobytes. The server resolves it and relays `ServerMessage::RecipeRef`.
+    OwnedRecipeRef { slot: u8, hash: u64 },
+    /// Co-op fork (M18): a look a `RecipeRef` named that this client has never received (it
+    /// joined after the bytes went by); the server answers with the `Recipe` itself.
+    LookRequest { user_id: u64, hash: u64 },
     /// Co-op fork (M10): a run of an owned challenge AI skater's replay frames, relayed as
     /// [`ServerMessage::RemoteFrames`] under [`owned::frames_slot`].
     OwnedFrames { slot: u8, run: EncodedRun },
@@ -734,6 +741,10 @@ pub enum ServerMessage {
     /// Co-op fork (M10): the server's acknowledgement of an owned skater's frames
     /// ([`ClientMessage::OwnedFrames`]), as [`Self::FrameAck`] is of the player's own.
     OwnedFrameAck { slot: u8, latest: u32, mask: u32 },
+    /// Co-op fork (M18): a look the receiver should already hold, by its hash, for the skater
+    /// `user_id` (a player's or an owned skater's marked id); one it does not hold it asks for
+    /// with `ClientMessage::LookRequest`.
+    RecipeRef { user_id: u64, hash: u64 },
 }
 
 /// A run: its first tick and length, the frames it is coded against as their distance back from
@@ -943,6 +954,16 @@ impl ClientMessage {
                 w.u8(*slot);
                 write_run(&mut w, run);
             }
+            Self::OwnedRecipeRef { slot, hash } => {
+                w.u8(29);
+                w.u8(*slot);
+                w.u64(*hash);
+            }
+            Self::LookRequest { user_id, hash } => {
+                w.u8(30);
+                w.u64(*user_id);
+                w.u64(*hash);
+            }
         }
         w.into_vec()
     }
@@ -1032,6 +1053,8 @@ impl ClientMessage {
             25 => Self::World { tick: r.varint_u32()?, data: r.bytes(MAX_WORLD)?.to_vec() },
             26 => Self::CampaignSave { session: r.varint_u32()?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
             27 => Self::OwnedRecipe { slot: read_owned_slot(&mut r)?, data: r.bytes(MAX_RECIPE)?.to_vec() },
+            29 => Self::OwnedRecipeRef { slot: read_owned_slot(&mut r)?, hash: r.u64()? },
+            30 => Self::LookRequest { user_id: r.u64()?, hash: r.u64()? },
             28 => {
                 let slot = read_owned_slot(&mut r)?;
                 return Ok(Self::OwnedFrames { slot, run: read_run(&mut r)? });
@@ -1217,6 +1240,11 @@ impl ServerMessage {
                 w.varint(u64::from(*latest));
                 w.u32(*mask);
             }
+            Self::RecipeRef { user_id, hash } => {
+                w.u8(31);
+                w.u64(*user_id);
+                w.u64(*hash);
+            }
         }
         w.into_vec()
     }
@@ -1309,11 +1337,19 @@ impl ServerMessage {
             28 => Self::CampaignSave { slot: read_slot(&mut r)?, session: r.varint_u32()?, tick: r.varint_u32()?, hash: r.u64()?, data: r.bytes(MAX_CAMPAIGN_SAVE)?.to_vec() },
             29 => Self::CampaignReload { session: r.varint_u32()? },
             30 => Self::OwnedFrameAck { slot: read_owned_slot(&mut r)?, latest: r.varint_u32()?, mask: r.u32()? },
+            31 => Self::RecipeRef { user_id: r.u64()?, hash: r.u64()? },
             _ => return Err(DecodeError("unknown server message")),
         };
         r.finish()?;
         Ok(message)
     }
+}
+
+/// Co-op fork (M18): a look's name by its bytes (FNV-1a, 64 bits): the same look sent again
+/// (an ambient skater respawning in an outfit the game already saw) travels as a reference.
+#[must_use]
+pub fn look_hash(data: &[u8]) -> u64 {
+    data.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
 }
 
 #[cfg(test)]
@@ -1355,6 +1391,15 @@ mod tests {
     }
 
     #[test]
+    fn a_looks_hash_is_its_bytes_alone() {
+        let a = look_hash(&[1, 2, 3, 4]);
+        assert_eq!(a, look_hash(&[1, 2, 3, 4]));
+        assert_ne!(a, look_hash(&[1, 2, 3, 5]));
+        assert_ne!(a, look_hash(&[1, 2, 3]));
+        assert_ne!(look_hash(&[]), look_hash(&[0]));
+    }
+
+    #[test]
     fn client_messages_round_trip() {
         let messages = vec![
             ClientMessage::Hello { nickname: "Skater99".into(), game_version: "v1".into(), player_id: 0x0123_4567_89ab_cdef },
@@ -1380,6 +1425,8 @@ mod tests {
             ClientMessage::Results(GameResult { event_time: 12.5, score: -3, finish_reason: 1, ranking: 2, players_choice: true }),
             ClientMessage::Facts { tick: 600, stint: 2, notes: FactsNotes::default(), data: vec![9; 40], owned: vec![(2, vec![3, 4]), (3, vec![])] },
             ClientMessage::OwnedRecipe { slot: 2, data: vec![5; 300] },
+            ClientMessage::OwnedRecipeRef { slot: 4, hash: 0xfeed_beef_0bad_f00d },
+            ClientMessage::LookRequest { user_id: owned::skater_id(1, 2), hash: 7 },
             ClientMessage::OwnedFrames { slot: 3, run: EncodedRun { tick: 70, count: 2, frame: Some(66), frame_before: None, sample: None, sample_before: None, payload: vec![1, 2] } },
             ClientMessage::Facts { tick: 601, stint: 3, notes: FactsNotes { votes: vec![(1, 3), (2, -1)], left: vec![4], syncing: false, presented: vec![Presented::Nis { seq: 7, notification: 1 }, Presented::Speech { character: 40, id: -4004, seq: 2 }, Presented::Fmv { seq: 1 }], prompts: vec![Prompt { seq: 1, kind: 1, value: 0 }, Prompt { seq: 2, kind: 8, value: -1 }], outcomes: vec![Outcome { seq: 1, kind: 3, activity: 0x1b0b_db3e_8c09_9e26, value: 0 }, Outcome { seq: 2, kind: 1, activity: 7, value: -3 }] }, data: vec![], owned: vec![] },
             ClientMessage::Frames(EncodedRun { tick: 70, count: 3, frame: Some(66), frame_before: Some(65), sample: None, sample_before: Some(60), payload: vec![5, 6, 7] }),
@@ -1431,6 +1478,7 @@ mod tests {
             ServerMessage::Facts { slot: 2, tick: 10, stint: 1, notes: FactsNotes { votes: vec![(0, 1)], left: vec![], syncing: true, presented: vec![], prompts: vec![Prompt { seq: 9, kind: 3, value: 2 }], outcomes: vec![] }, data: vec![1], owned: vec![(2, vec![7])] },
             ServerMessage::RemoteFrames { slot: owned::frames_slot(1, 2), run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: None, sample_before: None, payload: vec![9] } },
             ServerMessage::OwnedFrameAck { slot: 2, latest: 44, mask: 0xff },
+            ServerMessage::RecipeRef { user_id: owned::skater_id(0, 3), hash: u64::MAX },
             ServerMessage::RemoteFrames { slot: 5, run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: Some(8), sample_before: Some(6), payload: vec![] } },
             ServerMessage::FrameAck { latest: 44, mask: 3 },
             ServerMessage::Pong { time: 8 },

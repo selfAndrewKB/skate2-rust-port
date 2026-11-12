@@ -363,6 +363,11 @@ with the behaviours beginning and ending as the owner's do; a hit by the local s
 contact to the owner, never a prediction, and the owner's flags and state play it back one
 round trip later ([world](topics/world.md)). The facing turns over the stream's cadence.
 
+**Looks by hash, hand props, no lurch (2026-11-12, M18 and M19).** A look sent before goes
+by its hash and the server and clients resolve it from what they hold (protocol 126); a
+pedestrian's hand prop rides the descriptor and the puppet carries the same one; a puppet's
+position blends to each sample over the cadence ([world](topics/world.md)).
+
 **Story characters: the spawner's (2026-11-12, M14).** A pedestrian a challenge placed was
 every console's own (M5), so a mission's photographer or pro stood and walked differently on
 each screen (open item 70). Now the console whose tester box spawned it owns it for life and

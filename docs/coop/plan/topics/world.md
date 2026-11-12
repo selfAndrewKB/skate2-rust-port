@@ -238,6 +238,22 @@ seconds as `net bytes at <tick>`, so the ledger names what each costs. Not built
 coding against acknowledged runs (open item 33) and the looks' compression (item 75), which
 wait on the measure of this build.
 
+**Looks by hash, hand props, no lurch (2026-11-12, M18 and M19).** An owned skater's look went
+out whole (32 kB) at every ambient respawn; the server and every client now keep the looks they
+have seen by a hash of their bytes (`skate2_net::protocol::look_hash`), the sender sends a look
+it has sent before by its hash (`OwnedRecipeRef`, protocol 126), the server resolves it and
+relays a reference (`RecipeRef`), the receiver delivers its own copy as the look itself and asks
+for one it never saw (`LookRequest`); the session sees `Recipe` as before. A pedestrian's hand
+prop (a cup, a paper, a briefcase: its `hand_props` collection key) rides the descriptor, sent
+at once when it changes (stream format 6), and the puppet takes the same prop through the
+hand-prop pass that spawns every pedestrian's pending prop, and throws it away when the owner's
+goes; what the pedestrian does with it (drink, read, throw) is its owner's graph state (M16).
+A puppet's position blends from where it stood at a sample's arrival to the sample carried on,
+over the cadence, as its facing already did: a sample the send-on-error rule sent was one the
+extrapolation missed by 5 cm or more, and the step was the lurch the player saw. The
+pedestrians stopping to greet or talk (`DoGreet`, `PedestrianDoStartConversation`, the graph's
+states) are the owner's held state on the puppet since M16.
+
 ## History
 
 - 2026-11-10 M5: the table grew by story characters, guards and props; the stream by the

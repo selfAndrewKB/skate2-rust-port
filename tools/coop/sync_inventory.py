@@ -32,8 +32,8 @@ CLASSES = {
     'model': ('identity', 'the descriptor\'s model key (M6)'),
     'entity_category_key': ('identity', 'from the entity key'),
     'challenge_owner': ('local', 'set on the spawner\'s copy; a story character is its spawner\'s, streamed as a pedestrian with its entry\'s identity in the descriptor (M14; every console\'s own M5 to M13)'),
-    'hand_prop_attributes': ('local', 'hand props do not travel'),
-    'hand_prop_usage': ('local', 'hand props do not travel'),
+    'hand_prop_attributes': ('streamed', 'the owner\'s hand prop (its collection key) rides the descriptor, a change at once; the puppet spawns the same prop through the hand-prop pass (M19)'),
+    'hand_prop_usage': ('local', 'what the pedestrian does with its prop: chosen here from the same key; the owner\'s drink, read or throw come through its held graph state (M16)'),
     'positioning_test_start_height': ('plumbing', 'spawn-time ground test'),
     'target_iterators': ('local', 'navigation targets; a puppet navigates nowhere (M6)'),
     'current_waypoint': ('local', 'navigation; a puppet navigates nowhere'),
@@ -122,7 +122,7 @@ def main():
              '`living_world/pedestrians/living_world_pedestrian_entity.rs`; the classes are the reviewed part',
              '(a field the structs have and the script does not know fails the check). Front page:',
              '[README](../README.md). The audit that measures it: `tools/coop/sync_audit.py`.', '',
-             '## What travels (the world stream, format 5)', '']
+             '## What travels (the world stream, format 6)', '']
     for name, fields in wire.items():
         lines.append(f'- `{name}`: ' + ', '.join(f'`{f}`' for f in fields))
     lines += ['', '## A pedestrian\'s state (`PedestrianConstruction`)', '',

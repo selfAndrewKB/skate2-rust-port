@@ -293,6 +293,10 @@ struct Game {
     /// The freeskate activity the challenge is, from its load until the game is back in lobby
     /// skate: no matchmaking or lobby browser offers the game meanwhile.
     activity: Option<u64>,
+    /// Co-op fork (M18): every look relayed in this game, by its hash, so an owned skater's
+    /// look sent again by hash (`OwnedRecipeRef`) resolves here and a member that never saw
+    /// the bytes can ask for them (`LookRequest`).
+    looks: HashMap<u64, Arc<Vec<u8>>>,
 }
 
 impl Game {
@@ -844,6 +848,7 @@ impl ServerCore {
                         kicked: BTreeSet::new(),
                         proposal: None,
                         activity: None,
+                        looks: HashMap::new(),
                         campaign: campaign.then(|| {
                             let mut made = Campaign::default();
                             let path = campaign_save_path(location);
@@ -1161,17 +1166,45 @@ impl ServerCore {
                 if game.attributes.challenge_type != challenge::CAMPAIGN {
                     return;
                 }
+                let data = Arc::new(data);
+                game.looks.insert(crate::protocol::look_hash(&data), Arc::clone(&data));
                 let Some(member) = game.member_mut(user_id) else { return };
                 if member.owned_recipes.len() >= owned::MOST && !member.owned_recipes.contains_key(&slot) {
                     return;
                 }
-                let data = Arc::new(data);
                 member.owned_recipes.insert(slot, Arc::clone(&data));
                 let owner = member.slot;
                 self.broadcast(game_id, &ServerMessage::Recipe { user_id: owned::skater_id(owner, slot), data: data.to_vec() }, Some(user_id));
             }
+            // Co-op fork (M18): the same look again, by hash: resolved from the game's looks and
+            // relayed as a reference the others resolve from theirs.
+            ClientMessage::OwnedRecipeRef { slot, hash } => {
+                let Some(game) = self.games.get_mut(&game_id) else { return };
+                if game.attributes.challenge_type != challenge::CAMPAIGN {
+                    return;
+                }
+                let Some(data) = game.looks.get(&hash).cloned() else {
+                    (self.log)(&format!("game {game_id}: a look reference {hash:016x} names no look here, dropped"));
+                    return;
+                };
+                let Some(member) = game.member_mut(user_id) else { return };
+                if member.owned_recipes.len() >= owned::MOST && !member.owned_recipes.contains_key(&slot) {
+                    return;
+                }
+                member.owned_recipes.insert(slot, data);
+                let owner = member.slot;
+                self.broadcast(game_id, &ServerMessage::RecipeRef { user_id: owned::skater_id(owner, slot), hash }, Some(user_id));
+            }
+            ClientMessage::LookRequest { user_id: of, hash } => {
+                let Some(game) = self.games.get(&game_id) else { return };
+                let Some((data, connection)) = game.looks.get(&hash).cloned().zip(game.member(user_id).map(|member| member.connection)) else { return };
+                self.send(connection, &ServerMessage::Recipe { user_id: of, data: data.to_vec() });
+            }
             ClientMessage::Recipe(data) => {
                 let data = Arc::new(data);
+                if let Some(game) = self.games.get_mut(&game_id) {
+                    game.looks.insert(crate::protocol::look_hash(&data), Arc::clone(&data));
+                }
                 let Some(member) = self.games.get_mut(&game_id).and_then(|game| game.member_mut(user_id)) else { return };
                 if member.recipe_at.is_some_and(|at| now.saturating_duration_since(at) < RECIPE_SPACING) {
                     return;

@@ -40,18 +40,24 @@ pub(crate) struct PuppetDrive {
     /// and the sample's own.
     yaw_from: f32,
     yaw_to: f32,
+    /// M19: where the puppet stood when the last sample arrived, and where it stood last tick:
+    /// each sample's correction is spread over the cadence instead of taken in one step.
+    position_from: [f32; 3],
+    last_position: [f32; 3],
 }
 
 impl PuppetDrive {
     pub(crate) fn new(target: Transform) -> Self {
         let yaw = crate::coop::world_stream::yaw_of(&target);
-        Self { target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false, yaw_from: yaw, yaw_to: yaw }
+        let at = [target[3][0], target[3][1], target[3][2]];
+        Self { target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false, yaw_from: yaw, yaw_to: yaw, position_from: at, last_position: at }
     }
 
     /// The owner's next sample.
     pub(crate) fn arrive(&mut self, target: Transform, velocity: [f32; 3], flags: u8) {
         self.yaw_from = self.yaw();
         self.yaw_to = crate::coop::world_stream::yaw_of(&target);
+        self.position_from = self.last_position;
         self.target = target;
         self.velocity = [velocity[0], velocity[1], velocity[2], 0.];
         self.age = 0;
@@ -89,10 +95,20 @@ impl PuppetDrive {
             }
         }
         // M16: the facing turns over the cadence rather than snapping (the audit's 3 to 6 % of
-        // samples beyond 5° were the held facing of a turning owner).
+        // samples beyond 5° were the held facing of a turning owner). M19: so does the position,
+        // from where the puppet stood at the sample's arrival to the sample carried on: a sample
+        // the send-on-error rule sent is one the extrapolation missed by 5 cm or more, and a
+        // 5 cm step every few ticks was the lurch the player saw.
         let yaw = self.yaw();
+        let t = (self.age.min(YAW_SLEW_TICKS) as f32) / YAW_SLEW_TICKS as f32;
+        let position = [
+            self.position_from[0] + (target[3][0] - self.position_from[0]) * t,
+            self.position_from[1] + (target[3][1] - self.position_from[1]) * t,
+            self.position_from[2] + (target[3][2] - self.position_from[2]) * t,
+        ];
+        self.last_position = position;
         self.age = self.age.saturating_add(1);
-        let turned = crate::coop::world_stream::transform([target[3][0], target[3][1], target[3][2]], yaw);
-        [turned[0], turned[1], turned[2], target[3]]
+        let turned = crate::coop::world_stream::transform(position, yaw);
+        [turned[0], turned[1], turned[2], [position[0], position[1], position[2], target[3][3]]]
     }
 }

@@ -16,7 +16,7 @@
 
 use super::ownership::Kind;
 
-pub const FORMAT: u8 = 5;
+pub const FORMAT: u8 = 6;
 
 /// A world id names an entity across consoles: its first spawner's slot in the game (4 bits)
 /// over that console's local entity id (its type nibble and 24-bit counter); it stays through
@@ -56,6 +56,9 @@ pub struct Descriptor {
     /// and the entry's character index), so the receiver's character manager knows which entry
     /// the puppet stands for; `None` for the census's own.
     pub story: Option<(u64, u16)>,
+    /// M19: the hand prop the owner's pedestrian holds or is about to (its `hand_props`
+    /// collection key), 0 for none, so the puppet carries the same cup, paper or briefcase.
+    pub hand_prop: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -225,6 +228,7 @@ fn write_entity(out: &mut Vec<u8>, entity: &EntityState) {
                 }
                 None => out.push(0),
             }
+            out.extend_from_slice(&descriptor.hand_prop.to_le_bytes());
         }
         None => out.push(0),
     }
@@ -340,7 +344,8 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
                     }
                     _ => return Err("world run story flag"),
                 };
-                Some(Descriptor { entity_key, model_key, recipe_id, colours, story })
+                let hand_prop = r.u64()?;
+                Some(Descriptor { entity_key, model_key, recipe_id, colours, story, hand_prop })
             }
             _ => return Err("world run descriptor flag"),
         };
@@ -431,7 +436,7 @@ mod tests {
                     flags: flags::KNOCKED_DOWN | flags::COLLIDING | (2 << flags::DIRECTION_SHIFT),
                     motion: 8,
                     graph: 41,
-                    descriptor: Some(Descriptor { entity_key: 0x1234, model_key: 0xabcd_ef01_2345_6789, recipe_id: 7, colours: [3, 250], story: None }),
+                    descriptor: Some(Descriptor { entity_key: 0x1234, model_key: 0xabcd_ef01_2345_6789, recipe_id: 7, colours: [3, 250], story: None, hand_prop: 0x1234_5678_9abc_def0 }),
                 },
                 EntityState {
                     id: world_id(0, 0x0200_0004),
@@ -458,7 +463,7 @@ mod tests {
                     flags: 0,
                     motion: 2,
                     graph: 3,
-                    descriptor: Some(Descriptor { entity_key: 0x4e6e_5331_d54e_4f61, model_key: 9, recipe_id: 8, colours: [0, 0], story: Some((0xd013_3edf_cd5f_d171, 0)) }),
+                    descriptor: Some(Descriptor { entity_key: 0x4e6e_5331_d54e_4f61, model_key: 9, recipe_id: 8, colours: [0, 0], story: Some((0xd013_3edf_cd5f_d171, 0)), hand_prop: 0 }),
                 },
             ],
         }
@@ -489,6 +494,7 @@ mod tests {
         }
         assert_eq!(back.entities.len(), 3);
         assert_eq!(back.entities[2].descriptor.as_ref().and_then(|d| d.story), Some((0xd013_3edf_cd5f_d171, 0)), "the story identity travels (M14)");
+        assert_eq!(back.entities[0].descriptor.as_ref().map(|d| d.hand_prop), Some(0x1234_5678_9abc_def0), "the hand prop travels (M19)");
         for (a, b) in back.entities.iter().zip(&run.entities) {
             assert_eq!((a.id, a.kind, a.owner, a.epoch, a.flags, a.motion, a.graph, &a.descriptor), (b.id, b.kind, b.owner, b.epoch, b.flags, b.motion, b.graph, &b.descriptor));
             for lane in 0..3 {
@@ -510,7 +516,9 @@ mod tests {
         assert_eq!(back.contacts.len(), 1);
         assert_eq!(back.props.len(), 1, "the props always fit");
         assert!(back.entities.is_empty());
-        let (bytes, included) = encode(&run, 120);
+        // The rest (the despawns, a contact, a prop) takes 59 bytes; the first entity, with its
+        // descriptor (the story field, the hand prop, M14 and M19), up to 69.
+        let (bytes, included) = encode(&run, 135);
         assert_eq!(included, 1, "{} bytes", bytes.len());
     }
 
@@ -565,7 +573,7 @@ mod tests {
         let (with, _) = encode(&WorldRun { entities: vec![run.entities[0].clone()], ..Default::default() }, 1024);
         let (without, _) = encode(&WorldRun { entities: vec![run.entities[1].clone()], ..Default::default() }, 1024);
         // The budget arithmetic in docs/coop/bench.md rests on these.
-        assert!(with.len() <= 61, "{} bytes with a descriptor", with.len());
+        assert!(with.len() <= 69, "{} bytes with a descriptor", with.len());
         assert!(without.len() <= 32, "{} bytes without", without.len());
     }
 }

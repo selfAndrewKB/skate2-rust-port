@@ -6,7 +6,7 @@ use crate::crypto::{Build, Handshake, PROOF_BYTES, Session};
 use crate::frames::{FrameReceiver, FrameSender, NetFrame};
 use crate::protocol::{self, ClientMessage, FactsNotes, ServerMessage};
 use crate::transport::{self, Endpoint, kind, read_header};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
@@ -82,6 +82,11 @@ pub struct ClientCore {
     state: State,
     /// Co-op fork (M17): the bytes sent by channel, read by the session through [`Client::channel_bytes`].
     meter: Arc<Mutex<ChannelBytes>>,
+    /// Co-op fork (M18): every look seen in this game (sent or received), by its hash, so a
+    /// `RecipeRef` resolves here; and the hashes this client has sent the server, which it may
+    /// send again by reference.
+    looks: HashMap<u64, Arc<Vec<u8>>>,
+    looks_sent: HashSet<u64>,
     build: Build,
     hello: ClientMessage,
     events: Vec<ClientEvent>,
@@ -110,6 +115,8 @@ impl ClientCore {
         Self {
             state,
             meter: Arc::default(),
+            looks: HashMap::new(),
+            looks_sent: HashSet::new(),
             build,
             hello: ClientMessage::Hello { nickname: nickname.to_owned(), game_version: game_version.to_owned(), player_id },
             events,
@@ -173,15 +180,31 @@ impl ClientCore {
         }
     }
 
-    /// Queues a message for reliable delivery.
+    /// Queues a message for reliable delivery. Co-op fork (M18): an owned skater's look the
+    /// server already has from this client goes by hash (`OwnedRecipeRef`).
     pub fn send(&mut self, message: &ClientMessage) {
+        let reference = match message {
+            ClientMessage::OwnedRecipe { slot, data } => {
+                let hash = protocol::look_hash(data);
+                self.looks.entry(hash).or_insert_with(|| Arc::new(data.clone()));
+                (!self.looks_sent.insert(hash)).then_some(ClientMessage::OwnedRecipeRef { slot: *slot, hash })
+            }
+            ClientMessage::Recipe(data) => {
+                let hash = protocol::look_hash(data);
+                self.looks.entry(hash).or_insert_with(|| Arc::new(data.clone()));
+                self.looks_sent.insert(hash);
+                None
+            }
+            _ => None,
+        };
+        let message = reference.as_ref().unwrap_or(message);
         if let State::Connected { endpoint } = &mut self.state {
             let encoded = message.encode();
             endpoint.send_reliable(&encoded);
             let bytes = encoded.len();
             match message {
                 ClientMessage::Facts { .. } => self.count(|m| &mut m.facts, bytes),
-                ClientMessage::Recipe(_) | ClientMessage::OwnedRecipe { .. } => self.count(|m| &mut m.looks, bytes),
+                ClientMessage::Recipe(_) | ClientMessage::OwnedRecipe { .. } | ClientMessage::OwnedRecipeRef { .. } | ClientMessage::LookRequest { .. } => self.count(|m| &mut m.looks, bytes),
                 _ => self.count(|m| &mut m.other, bytes),
             }
         }
@@ -343,6 +366,15 @@ impl ClientCore {
                 let elapsed = u64::try_from(now.saturating_duration_since(self.epoch).as_micros()).unwrap_or(u64::MAX);
                 self.rtt = Some(Duration::from_micros(elapsed.saturating_sub(time)));
             }
+            // Co-op fork (M18): a look by hash: the bytes this client holds, delivered as the
+            // look itself; one it never saw is asked for, and arrives as a `Recipe`.
+            ServerMessage::RecipeRef { user_id, hash } => match self.looks.get(&hash) {
+                Some(data) => {
+                    let data = data.to_vec();
+                    self.events.push(ClientEvent::Message(ServerMessage::Recipe { user_id, data }));
+                }
+                None => self.send(&ClientMessage::LookRequest { user_id, hash }),
+            },
             message => {
                 match &message {
                     ServerMessage::GameJoined { players, .. } => {
@@ -351,6 +383,11 @@ impl ClientCore {
                         self.acks_sent.clear();
                         self.own_frames.reset();
                         self.owned_frames.clear();
+                        self.looks.clear();
+                        self.looks_sent.clear();
+                    }
+                    ServerMessage::Recipe { data, .. } => {
+                        self.looks.entry(protocol::look_hash(data)).or_insert_with(|| Arc::new(data.clone()));
                     }
                     ServerMessage::PlayerJoin(player) => {
                         self.slots.insert(player.user_id, player.slot);

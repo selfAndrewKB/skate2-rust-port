@@ -91,6 +91,8 @@ struct Sent {
     motion: u8,
     graph: u16,
     runs: u32,
+    /// M19: the hand prop last described, so a change sends a descriptor at once.
+    hand_prop: u64,
 }
 
 #[derive(Debug)]
@@ -290,6 +292,50 @@ fn distance_squared(a: [f32; 4], b: [f32; 4]) -> f32 {
 
 /// A pedestrian's state on the wire (`coop::world_stream::flags`): down, colliding, the hit's
 /// force and direction.
+/// M19: the hand prop a pedestrian holds or is about to (its collection key), 0 for none.
+fn hand_prop_of(pedestrian: &crate::living_world_pedestrian_entity::PedestrianConstruction) -> u64 {
+    let pending = pedestrian.state.as_ref().is_some_and(|state| state.flags[3] & 2 != 0);
+    if pedestrian.held_hand_prop.is_none() && !pending {
+        return 0;
+    }
+    pedestrian.hand_prop_attributes.as_ref().and_then(|attributes| attributes.collection_key()).unwrap_or(0)
+}
+
+/// M19: a puppet's hand prop made the owner's: a prop the owner holds and the puppet does not
+/// is set pending (the hand-prop pass spawns and attaches it as it does the census's own); one
+/// the owner no longer holds is thrown away here.
+fn sync_hand_prop(
+    pedestrian: &mut crate::living_world_pedestrian_entity::PedestrianConstruction,
+    hand_prop: u64,
+    vault: &Arc<crate::attribute_runtime::AttributeRuntimeVault>,
+    cvars: &crate::input_cvar_runtime::InputCvarReferences,
+    id: u32,
+) -> Result<(), String> {
+    let here = hand_prop_of(pedestrian);
+    if here == hand_prop {
+        return Ok(());
+    }
+    if hand_prop == 0 {
+        if pedestrian.held_hand_prop.is_some() {
+            pedestrian.throw_hand_prop_away(cvars)?;
+            trace(format_args!("puppet {id:08x}: its owner let its hand prop go: thrown away here"));
+        } else if let Some(state) = pedestrian.state.as_mut() {
+            state.flags[3] &= !2;
+            pedestrian.hand_prop_attributes = None;
+        }
+        return Ok(());
+    }
+    if here != 0 && pedestrian.held_hand_prop.is_some() {
+        pedestrian.throw_hand_prop_away(cvars)?;
+    }
+    pedestrian.hand_prop_attributes = Some(vault.instance(0xec8b_7565_46e2_26f6, hand_prop));
+    if let Some(state) = pedestrian.state.as_mut() {
+        state.flags[3] |= 2;
+    }
+    trace(format_args!("puppet {id:08x}: hand prop {hand_prop:016x} as its owner's, pending here"));
+    Ok(())
+}
+
 fn entity_flags(pedestrian: &crate::living_world_pedestrian_entity::PedestrianConstruction) -> u8 {
     let mut entity_flags = 0;
     if pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) {
@@ -456,6 +502,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             .try_with_selected_queued_frame(|mut frame, ground, _| -> Result<Option<(Vec<u8>, usize)>, String> {
                 let Some(recipes) = frame.living_world_recipes.as_mut() else { return Ok(None) };
                 let cvars = frame.cvars;
+                // M19: the attribute vault, for a puppet's hand prop as its owner's.
+                let vault = recipes.vault.clone();
+                let vault = &vault;
                 let world = &mut *frame.world;
                 let living_owner = Arc::clone(world.grind_services.living_world());
                 let (centre, _) = crate::simulation_assembly_backend::constraint_session::dmo_living_world::local_skater_census_centre(frame.actor)
@@ -526,6 +575,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                         // M16: the owner's graph state holds this puppet's graph.
                         if !drive.held_failed {
                             drive.graph = (sample.graph != crate::generated_action_load::NULL_INDEX).then_some(sample.graph);
+                        }
+                        // M19: a descriptor's hand prop, taken or dropped as the owner's.
+                        if let Some(descriptor) = sample.descriptor.as_ref() {
+                            sync_hand_prop(pedestrian, descriptor.hand_prop, vault, cvars, sample.id)?;
                         }
                         puppet.updated = tick;
                         let knocked = sample.flags & flags::KNOCKED_DOWN != 0;
@@ -726,6 +779,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                             core.colour_indices = spawn.descriptor.colours;
                             core.allow_culling = false;
                         }
+                        // M19: the owner's hand prop, spawned here by the hand-prop pass as any
+                        // pedestrian's pending prop is.
+                        sync_hand_prop(pedestrian, spawn.descriptor.hand_prop, vault, cvars, id)?;
                     }
                     let kind = spawn.state.kind;
                     ownership::decide(kind, id, None, Owner::Remote(owner), "its census spawned it");
@@ -912,6 +968,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let velocity = [core.velocity[0], core.velocity[1], core.velocity[2]];
                         let motion = pedestrian.state_out.state.min(255) as u8;
                         let graph = pedestrian.graph.current;
+                        let hand_prop = hand_prop_of(pedestrian);
+                        // M19: a hand prop taken or dropped is a descriptor's news, sent at once.
+                        let describe = describe || tracked.sent.is_some_and(|last| last.hand_prop != hand_prop);
                         let due = match tracked.sent {
                             None => true,
                             Some(last) => {
@@ -933,7 +992,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             coop.stats.withheld += 1;
                             continue;
                         }
-                        tracked.sent = Some(Sent { tick, position, yaw, velocity, flags: entity_flags, motion, graph, runs: tracked.runs });
+                        tracked.sent = Some(Sent { tick, position, yaw, velocity, flags: entity_flags, motion, graph, runs: tracked.runs, hand_prop });
                         owned.push((d2, EntityState {
                             id: wid,
                             kind,
@@ -951,6 +1010,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                                 recipe_id: core.recipe_id,
                                 colours: core.colour_indices,
                                 story: story_ids.get(&id).copied(),
+                                hand_prop,
                             }),
                         }));
                     }
@@ -973,7 +1033,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             flags: entity_flags(pedestrian),
                             motion: pedestrian.state_out.state.min(255) as u8,
                             graph: pedestrian.graph.current,
-                            descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices, story: None }),
+                            descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices, story: None, hand_prop: hand_prop_of(pedestrian) }),
                         }));
                     }
                     coop.handoffs.retain(|_, left| *left > 0);

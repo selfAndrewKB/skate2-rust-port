@@ -82,6 +82,13 @@ Front page: [README](../README.md).
     are not mirrored (the owner's motion byte travels and the receiver never applies it; the
     puppet's own graph has no moods since M5). All three are M6's first targets: the puppet
     spawned with the owner's recipe, its animation from the owner's motion state and flags.
+    **The player, 2026-11-12:** pedestrians with cups, papers and briefcases on one screen and
+    empty-handed on the other (hand props did not travel); pedestrians stopping to talk on one
+    screen and walking in place on the other; lurches in the walking puppets. **Fixed (M16 and
+    M19):** the owner's graph state holds the puppet's (the greets and conversations are its
+    states), the hand prop rides the descriptor and the puppet carries the same one, and the
+    position blends to each sample over the cadence instead of stepping. Proof:
+    `../bench/evidence/probe/2026-11-12-m18-looks-and-props.md`.
 
 ## Play (2026-11-12, the player, M12 build 4be2feea)
 
@@ -162,9 +169,12 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     kB/s (from 12.5 and 6.0 before the ambient skaters' poses went to half the cadence); the
     player's own frames 2.7 kB/s; the facts 1.7 kB/s; the looks 31 kB each at every ambient
     respawn. A look (32,566 bytes, `SKATE2_DIAGNOSTIC_DUMP_LOOK`) compresses to 27 % under
-    deflate and 22 % under lzma, 81 % under a zero-run RLE: a compressor or a dedup by content
-    hash (the ambient outfits repeat) is the next step, not built; neither is delta coding
-    against acknowledged runs (item 33), which the stream no longer needs for its budget.
+    deflate and 22 % under lzma, 81 % under a zero-run RLE. **M18 (2026-11-12):** a look sent
+    before goes by its hash (`OwnedRecipeRef`, eight bytes; protocol 126), resolved by the
+    server and the receivers from the looks they hold, a never-seen one asked for
+    (`LookRequest`) [the probe's meters say what the looks cost now]. Not built: a compressor
+    for a look's first sending, and delta coding against acknowledged runs (item 33), which the
+    stream no longer needs for its budget.
 76. **A script's state and vars are one per activity, not per player** (M13's residue): the
     graph's state (`challenge_running`, a restart state) and its `vars` table (bail counts,
     timers) are shared by both humans' events, so two humans bailing within one restart
