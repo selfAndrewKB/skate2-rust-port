@@ -6,7 +6,7 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.16.1-joiner-wins`**
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.17.0-puppets-and-bytes`**
 (2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
 puppets to the others, the owned skaters' names carrying their owner (protocol 124), each
 console spawning its share of the allowance (open item 53); M11.2, a car's or a pedestrian's
@@ -48,22 +48,28 @@ career database, and ten lesser ones). The milestone
 pages: [saves](plan/topics/saves.md), [kinds](plan/topics/kinds.md), [tooling](plan/tooling.md),
 the ledger in [versions](plan/versions.md).
 
-## Current focus (2026-11-11)
+## Current focus (2026-11-12)
 
-Play: the build in the player's hands (every milestone so far was proven on the bench, M5's
-build alone was played): a follow, a photo, a S.K.A.T.E. and a demo with two people, watching
-the owner's pro and its puppet on the other seat (its wheels sound since M11.1, its call-outs
-not, 66; the owner leaving hands the AI to the next player, M11, its routine starting over); a prop both skaters push (M10.1: the owner keeps it while it moves), or a car or a
-pedestrian pushes (M11.2); the puppets' knockdowns (39, 50). The demo's start spots (50); a save with the
-sponsor team and the dynamic competitors chosen, or a diagnostic that sets them (59). Training
-Facility travel ([session](plan/topics/session.md)); the open items a person's play decides (New
-Career in a lobby, 41; a rejoin notice, 44).
+Play: the field test of 2026-11-12 (the lobby on the M12 build, the Burnette photo "A Little
+Help Here") found the photographer in two places and the joiner's objectives dead after the
+host's first bail; the day's five milestones answer it ([versions](plan/versions.md), M13 to
+M17): a human's bail fails and re-arms that human's copy alone on both consoles (M13), the
+story characters are one console's and a puppet elsewhere (M14), the joiner's completion wins
+the mission for both (M15), the puppets play their owner's animation state and take no hit
+of their own (M16), and the stream sends only what the other console cannot extrapolate, every
+channel metered (M17). What play should judge on the next build: a photo mission with the
+joiner doing the trick; the photographer standing the same on both screens (and on the third,
+if three); a pedestrian run into by either skater, which should fall on both screens a
+round trip later and get up with its owner; a bail by each player; the `net bytes` lines in
+the seat logs on a real link. Still each console's own: the script's state and vars (76), the
+intro scenes' characters, the ambient skaters' looks at 31 kB a respawn (75), the demo's start
+spots (50), the sponsor team's save (59), Training Facility travel; the open items a person's
+play decides (New Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.14.0` lobby build: the AI missions with two people, the one pro now on
-both screens, and a S.K.A.T.E. or contest, where both consoles read the same leader and the
-first human to win ends it for both; a rail both skaters lean on, which should stay one rail. The AI day's report says what changed and what it
+Play on the `coop-v0.17.0` lobby build (both machines on it: protocol 125, stream format 5).
+The AI day's report says what changed and what it
 measured, its evening section the owned AI:
 [reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md); the night before it:
 [reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md).

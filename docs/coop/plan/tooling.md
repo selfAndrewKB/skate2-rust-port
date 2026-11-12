@@ -54,8 +54,8 @@ said otherwise, round ticks are the campaign round's, the same on every console)
 `SKATE2_DIAGNOSTIC_COOP_TELEPORT=<tick>:<x>,<y>,<z>[;...]` puts the skater there (786,-58,882 is
 the waterfront spawn, a street with pedestrians; the career's continue point has none);
 `SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND=<round tick>:<x>,<y>,<z>[;...]` the same at round ticks;
-`SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>` knocks down the nearest puppet pedestrian as a hit would
-and sends the contact to its owner; `SKATE2_DIAGNOSTIC_COOP_PRELOAD=<round tick>:<name>[;...]`
+`SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>` hits the nearest puppet pedestrian as a skater would (since M16 the contact alone goes to its owner and nothing plays until the owner's word; before, the knockdown played at once as a prediction);
+`SKATE2_DIAGNOSTIC_COOP_PRELOAD=<round tick>:<name>[;...]`
 starts a named challenge's asset load (its hulls with their locators, its AI characters and
 paths) ahead of its execute, as the loading screen does in play (2026-11-11: the crawl preloads
 at round tick 600, 300 ticks before the execute, so a script that spawns its AI as it starts
