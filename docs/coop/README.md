@@ -6,7 +6,7 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.17.0-puppets-and-bytes`**
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.18.0-looks-and-props`**
 (2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
 puppets to the others, the owned skaters' names carrying their owner (protocol 124), each
 console spawning its share of the allowance (open item 53); M11.2, a car's or a pedestrian's
@@ -68,7 +68,7 @@ play decides (New Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.17.0` lobby build (both machines on it: protocol 125, stream format 5).
+Play on the `coop-v0.18.0` lobby build (both machines on it: protocol 126, stream format 6): the pedestrians' cups, papers and briefcases on both screens, their stops to greet and talk, and whether any walking puppet still lurches.
 The AI day's report says what changed and what it
 measured, its evening section the owned AI:
 [reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md); the night before it:
