@@ -62,12 +62,31 @@ traces every decision (entity, old owner, new owner, reason). The table:
 | Kind | Rule | Streamed |
 | --- | --- | --- |
 | ambient pedestrian | `Spawner`: the census that spawned it, for life (M1) | yes |
-| story character (a pedestrian a challenge placed) | `EachConsole`: every console spawns and simulates its own copy where its own skater is (M5) | no |
+| story character (a pedestrian a challenge placed) | `Spawner`: the console whose tester box spawned it, for life, never handed over by distance; two testers reaching the entry at once keep the lower slot's copy (M14; `EachConsole` from M5 to M13) | yes, as a pedestrian, wherever the players are, its descriptor naming the challenge's entry |
 | security guard | `Chasee`: the console of the player it chases, which is its spawner until M6's migration (a guard chases only the skater of the console that simulates it) (M5) | yes, as a pedestrian |
 | ambient AI skater | `Spawner`: the console whose spawner spawned it, near its own skater; each console spawns its share of the original's three, split by player index (M12) | yes, as an owned skater's frames and look (protocol 124, [ai-skaters](ai-skaters.md)) |
 | prop (a dynamic object with a locator) | `LastToucher`: the console whose skater, or whose car or pedestrian (M11.2), touched it last, by claim number, the highest claim winning everywhere and a tie the lower slot (M5); a touch waits while the owner's latest sample still moves it (M10.1) | yes, in the run's prop list |
 
 Nearest-player ownership with hysteresis and migration: M6.
+
+**Story characters (2026-11-12, M14).** A pedestrian a challenge placed (the photographer, a
+sign-up's pro, a sponsor at a poster) was every console's own from M5: each console's tester
+box spawned its copy and ran its AI, so the field test saw the photographer in two places
+(open item 70: the host's from the intro scene's placement, the joiner's own 23 s later at the
+locator). Now it is its spawner's and travels as a pedestrian does (`Kind::StoryCharacter`,
+stream format 4): the descriptor carries the challenge entry it stands for (the activity's
+key, the entry's character index), and the receiver's character manager holds the puppet in
+that entry (`characters::remote_story_spawned`), so its own tester spawns no second copy and
+the challenge's culls and state flags reach the puppet as they reach its own. When both testers
+reach an entry in the same instant each spawns its own, each receives the other's descriptor,
+and the tie rule keeps the lower slot's copy: the higher culls its own (or the spawn in flight,
+`yielded`) and takes the puppet (`remote_story_offered`); the lower refuses the higher's until
+its despawn (`CoopWorld.refused`). A story character streams whatever the distance (a
+mission's character is wanted on every console) and is never handed over by distance; its
+puppet going (its owner despawned or stopped streaming it) frees the entry
+(`remote_story_gone`) for the local tester. The id clash of item 73 ends with it: an owned
+story character is named by its owner's slot as every streamed pedestrian is. What stays each
+console's own: the intro scenes' own characters (`nis::characters`, each console's scene).
 
 **Props (M5).** A prop is named across consoles by its locator id (the asset's guid). The owner
 samples it in the run's prop list (format 2: locator, claim, position, a unit quaternion,

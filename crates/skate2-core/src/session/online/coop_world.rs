@@ -179,8 +179,9 @@ pub(in super::super) struct CoopWorld {
     handoffs: BTreeMap<u32, u8>,
     /// This console's entities gone from its roster, with the runs left to say so.
     gone: BTreeMap<u32, u8>,
-    /// This console's own story characters (never streamed), each decided once.
-    own: BTreeSet<u32>,
+    /// The others' story characters refused here (this console's own copy of the entry stands,
+    /// the lower slot's): their world ids, until their despawn.
+    refused: BTreeSet<u32>,
     bad_runs: u32,
     shoved: bool,
     stats: Stats,
@@ -328,6 +329,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
                 continue;
             }
+            if coop.refused.contains(&id) {
+                continue;
+            }
             match known {
                 Some(known) => {
                     if known.owner != Owner::Remote(entity.owner) {
@@ -378,6 +382,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             coop.props.insert(prop.locator, PropOwner { owner: Owner::Remote(owner), claim: prop.claim, touched: 0, sent: None, runs, sampled: self.completed_frames, moving, waited });
             coop.prop_updates.push(prop);
         }
+        for id in &run.despawns {
+            coop.refused.remove(id);
+        }
         coop.despawns.extend(run.despawns.into_iter().filter(|id| coop.entities.get(id).is_some_and(|known| known.owner == Owner::Remote(owner))));
         coop.received_contacts.extend(run.contacts.into_iter().filter(|contact| coop.entities.get(&contact.id).is_some_and(|known| known.owner == Owner::Local)));
     }
@@ -415,6 +422,10 @@ impl<T, C> SelectedLiveSession<T, C> {
             .unwrap_or_default();
         let round_tick = self.campaign_round_tick();
         let mut coop = std::mem::take(&mut self.online.coop);
+        // M14: the challenge's character entries, for the story characters this console streams
+        // (their identities) and the others' it shows (the entries their puppets stand for).
+        let story_ids = self.career.as_ref().map(|career| crate::challenge::characters::story_identities(career.system.world())).unwrap_or_default();
+        let mut challenge = self.career.as_mut().map(|career| career.system.world_mut());
         let sent = self
             .inner
             .try_with_selected_queued_frame(|mut frame, ground, _| -> Result<Option<(Vec<u8>, usize)>, String> {
@@ -640,6 +651,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                         coop.spawns.remove(&id);
                         continue;
                     }
+                    // M14: another console's story character is offered to the challenge's
+                    // character manager first: the entry it stands for may hold this console's
+                    // own copy, and the lower slot keeps its own.
+                    let story = (spawn.state.kind == Kind::StoryCharacter).then_some(spawn.descriptor.story).flatten();
+                    if let (Some(identity), Some(challenge)) = (story, challenge.as_deref_mut())
+                        && !crate::challenge::characters::remote_story_offered(challenge, identity, spawn.owner, local_slot)
+                    {
+                        trace(format_args!("story character {id:08x} of slot {}: refused, this console's own copy of its entry stands (the lower slot's)", spawn.owner));
+                        coop.refused.insert(id);
+                        coop.spawns.remove(&id);
+                        continue;
+                    }
                     let loaded = recipes.load_living_world_model(world, cvars, spawn.descriptor.model_key).map_err(|e| format!("coop world: model load: {e:?}"))?;
                     if !loaded {
                         continue;
@@ -665,6 +688,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                     trace(format_args!("puppet {id:08x} of slot {owner} spawned as entity {entity:#x} (entity key {:016x}, model {:016x}, epoch {}) at {tick}",
                         spawn.descriptor.entity_key, spawn.descriptor.model_key, spawn.state.epoch));
                     coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, runs: 0, nearer: (0, 0), behind: 0 });
+                    if let (Some(identity), Some(challenge)) = (story, challenge.as_deref_mut()) {
+                        crate::challenge::characters::remote_story_spawned(challenge, identity, owner, entity, spawn.state.position);
+                    }
                     if spawn.promote {
                         coop.promotions.push(id);
                     }
@@ -698,9 +724,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
                 for (id, reason) in culls {
                     let Some(puppet) = coop.entities.get(&id).filter(|known| known.owner != Owner::Local) else { continue };
-                    let (entity, owner) = (puppet.entity, puppet.owner);
+                    let (entity, owner, kind) = (puppet.entity, puppet.owner, puppet.kind);
                     coop.entities.remove(&id);
                     recipes.cull_census_pedestrian(world, cvars, entity)?;
+                    if kind == Kind::StoryCharacter && let Some(challenge) = challenge.as_deref_mut() {
+                        crate::challenge::characters::remote_story_gone(challenge, entity);
+                    }
                     trace(format_args!("puppet {id:08x} of {owner:?}: culled at {tick}, {reason}"));
                 }
 
@@ -779,24 +808,23 @@ impl<T, C> SelectedLiveSession<T, C> {
                         if pedestrian.puppet.is_some() {
                             continue;
                         }
-                        // A pedestrian a challenge placed is every console's own (M5).
-                        if pedestrian.challenge_owner.is_some() {
-                            if coop.own.insert(id) {
-                                ownership::decide(Kind::StoryCharacter, id, None, ownership::owner(Kind::StoryCharacter, Owner::Local), "a challenge placed it: every console's own, not streamed");
-                            }
-                            continue;
-                        }
+                        // M14: a pedestrian a challenge placed (a story character) streams as
+                        // the others do, from the console whose tester box spawned it, wherever
+                        // the players are (a mission's character is wanted on every console),
+                        // and is never handed over by distance; until M14 it was every
+                        // console's own (open item 70).
+                        let story = pedestrian.challenge_owner.is_some();
                         let Some(core) = pedestrian.core.as_ref() else { continue };
                         let guard = pedestrian.security_guard.is_some();
                         let d2 = distance_squared(core.transform[3], centre);
-                        if d2 > STREAM_RADIUS * STREAM_RADIUS {
+                        if d2 > STREAM_RADIUS * STREAM_RADIUS && !story {
                             continue;
                         }
                         // The table entry of an owned pedestrian, made at its first sample.
                         let wid = *coop.locals.entry(id).or_insert_with(|| stream::world_id(local_slot, id));
-                        let kind = if guard { Kind::SecurityGuard } else { Kind::Pedestrian };
+                        let kind = if story { Kind::StoryCharacter } else if guard { Kind::SecurityGuard } else { Kind::Pedestrian };
                         let tracked = coop.entities.entry(wid).or_insert_with(|| {
-                            let reason = if guard { "this census spawned it; it chases this console's skater only" } else { "this census spawned it" };
+                            let reason = if story { "a challenge placed it here: streamed to the others, never handed over" } else if guard { "this census spawned it; it chases this console's skater only" } else { "this census spawned it" };
                             ownership::decide(kind, wid, None, ownership::owner(kind, Owner::Local), reason);
                             Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, runs: 0, nearer: (0, 0), behind: 0 }
                         });
@@ -805,7 +833,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let own_d2 = own_facts.map_or(d2, |at| distance_squared(position, at));
                         let nearest_peer = peers.iter().map(|&(slot, at)| (distance_squared(position, at), slot)).min_by(|a, b| a.0.total_cmp(&b.0));
                         match nearest_peer {
-                            Some((peer_d2, slot)) if peer_d2.sqrt() + HANDOFF_MARGIN < own_d2.sqrt() && peer_d2 <= STREAM_RADIUS * STREAM_RADIUS => {
+                            Some((peer_d2, slot)) if !story && peer_d2.sqrt() + HANDOFF_MARGIN < own_d2.sqrt() && peer_d2 <= STREAM_RADIUS * STREAM_RADIUS => {
                                 tracked.nearer = if tracked.nearer.1 == slot { (tracked.nearer.0 + 1, slot) } else { (1, slot) };
                             }
                             _ => tracked.nearer = (0, 0),
@@ -845,6 +873,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                                 model_key: core.model_key,
                                 recipe_id: core.recipe_id,
                                 colours: core.colour_indices,
+                                story: story_ids.get(&id).copied(),
                             }),
                         }));
                     }
@@ -866,7 +895,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
                             flags: entity_flags(pedestrian),
                             motion: pedestrian.state_out.state.min(255) as u8,
-                            descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices }),
+                            descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices, story: None }),
                         }));
                     }
                     coop.handoffs.retain(|_, left| *left > 0);
@@ -882,7 +911,6 @@ impl<T, C> SelectedLiveSession<T, C> {
                         trace(format_args!("contact on puppet {id:08x} of {:?}: force {force} direction {direction}, reported to its owner at {tick}", puppet.owner));
                     }
                     // Owned entities gone from the roster are despawned to the others.
-                    coop.own.retain(|id| present.contains(id));
                     let gone: Vec<(u32, u32)> = coop.entities.iter().filter(|(_, known)| known.owner == Owner::Local && !present.contains(&known.entity)).map(|(&wid, known)| (wid, known.entity)).collect();
                     for (wid, entity) in gone {
                         coop.entities.remove(&wid);

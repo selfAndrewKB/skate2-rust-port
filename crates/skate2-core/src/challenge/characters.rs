@@ -23,7 +23,7 @@ use super::{
     system::World,
 };
 use crate::grind_data_octree::OctreeBounds;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The attributes the manager reads.
 pub(crate) mod key {
@@ -430,6 +430,11 @@ pub struct CharacterManager {
     /// The spawns awaiting the session's answer: their tree index, and whether a spawned
     /// pedestrian clears `UseAlternateLocation` (no main challenge when it was placed).
     spawns: BTreeMap<u32, (u32, bool)>,
+    /// Co-op fork (M14): the puppets of other consoles' story characters standing for entries
+    /// here (pedestrian id to the owner's slot), and the pending spawns of this console's own
+    /// that yielded to a lower slot's copy while in flight (their tokens).
+    remote: BTreeMap<u32, u8>,
+    yielded: BTreeSet<u32>,
     pub tuning: Tuning,
     /// The session's living world.
     facts: Option<Box<dyn LivingWorldFacts>>,
@@ -1269,6 +1274,14 @@ pub fn spawn_answered(
     let Some((index, clear_alternate)) = world.characters.spawns.remove(&token) else {
         return;
     };
+    // Co-op fork (M14): a spawn that yielded to a lower slot's copy while in flight is culled.
+    if world.characters.yielded.remove(&token) {
+        if let Some((id, _)) = spawned {
+            crate::coop::trace(format_args!("story character of entry {index}: this console's spawn {id:#x} landed after it yielded to another console's: culled"));
+            op(world, LivingWorldOp::RequestExplicitCull(CharacterRef::Spawned(id)));
+        }
+        return;
+    }
     let Some(data) = world.characters.tree.entry_mut(index) else {
         return;
     };
@@ -1508,6 +1521,91 @@ pub fn receive_dreg_lw_schema(world: &mut World, recipe: u64) {
     for index in indices {
         release_spawn_data(world, index);
     }
+}
+
+/// Co-op fork (M14): this console's own spawned story characters by pedestrian id, each as
+/// its activity's key and character index: the identity a world run's descriptor carries, so
+/// the other consoles' character managers know which entry a puppet stands for.
+#[must_use]
+pub fn story_identities(world: &World) -> BTreeMap<u32, (u64, u16)> {
+    world
+        .characters
+        .characters
+        .iter()
+        .filter_map(|(&r, &index)| {
+            let CharacterRef::Spawned(id) = r else { return None };
+            if world.characters.remote.contains_key(&id) {
+                return None;
+            }
+            let data = world.characters.tree.entry(index)?;
+            let key = world.activities.activities.get(data.activity)?.key;
+            Some((id, (key, u16::try_from(data.character_index).ok()?)))
+        })
+        .collect()
+}
+
+/// The tree entry of a story identity another console sent.
+fn story_entry(world: &World, identity: (u64, u16)) -> Option<u32> {
+    let activity = world.activities.find(identity.0)?;
+    world.characters.entries().find(|(_, d)| d.activity == activity && d.character_index == i32::from(identity.1)).map(|(i, _)| i)
+}
+
+/// Co-op fork (M14): another console's story character offered to this one as a puppet.
+/// Taken unless this console spawned its own copy of the entry and sits at the lower slot:
+/// the tie rule (two testers reaching the entry at once) keeps the lower slot's copy, and the
+/// higher slot culls its own and takes the puppet. A spawn of this console's still in flight
+/// yields the same way (`spawn_answered` culls what lands).
+pub fn remote_story_offered(world: &mut World, identity: (u64, u16), owner: u8, local: u8) -> bool {
+    let Some(index) = story_entry(world, identity) else { return true };
+    let Some(data) = world.characters.tree.entry(index) else { return true };
+    match data.entity {
+        Some(CharacterRef::Spawned(id)) if !world.characters.remote.contains_key(&id) => {
+            if local < owner {
+                return false;
+            }
+            crate::coop::trace(format_args!("story character of entry {index}: this console's copy {id:#x} yields to slot {owner}'s (the lower slot keeps its own): culled"));
+            release_map_data(world, index);
+            op(world, LivingWorldOp::RequestExplicitCull(CharacterRef::Spawned(id)));
+            true
+        }
+        Some(CharacterRef::Pending(token)) => {
+            if local < owner {
+                return false;
+            }
+            world.characters.yielded.insert(token);
+            release_map_data(world, index);
+            true
+        }
+        _ => true,
+    }
+}
+
+/// Co-op fork (M14): another console's story character spawned here as a puppet stands for its
+/// entry: the entry holds it, so this console's tester does not spawn a second copy, and the
+/// challenge's culls and state flags reach the puppet as they reach its own.
+pub fn remote_story_spawned(world: &mut World, identity: (u64, u16), owner: u8, entity: u32, position: [f32; 3]) {
+    let Some(index) = story_entry(world, identity) else {
+        crate::coop::trace(format_args!("story character {identity:?} of slot {owner}: no entry here, a plain puppet"));
+        return;
+    };
+    let Some(data) = world.characters.tree.entry_mut(index) else { return };
+    data.entity = Some(CharacterRef::Spawned(entity));
+    data.line_test = -1;
+    data.spawn_position = [position[0], position[1], position[2], 1.0];
+    world.characters.characters.insert(CharacterRef::Spawned(entity), index);
+    world.characters.remote.insert(entity, owner);
+    crate::coop::trace(format_args!("story character of entry {index} ({:016x} #{}): slot {owner}'s puppet {entity:#x} stands for it here", identity.0, identity.1));
+}
+
+/// Co-op fork (M14): the puppet standing for an entry is gone (its owner despawned it or
+/// stopped streaming it): the entry is free again, and this console's tester may spawn its own.
+pub fn remote_story_gone(world: &mut World, entity: u32) {
+    if world.characters.remote.remove(&entity).is_none() {
+        return;
+    }
+    let Some(&index) = world.characters.characters.get(&CharacterRef::Spawned(entity)) else { return };
+    release_map_data(world, index);
+    crate::coop::trace(format_args!("story character of entry {index}: the puppet {entity:#x} is gone, the entry free again"));
 }
 
 /// `IsChallengeCharacter` (0x825a6760), which `LivingWorld::Manager::

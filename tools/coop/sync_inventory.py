@@ -31,7 +31,7 @@ CLASSES = {
     'rain_data': ('plumbing', 'spatial index item'),
     'model': ('identity', 'the descriptor\'s model key (M6)'),
     'entity_category_key': ('identity', 'from the entity key'),
-    'challenge_owner': ('local', 'a story character is every console\'s own (M5)'),
+    'challenge_owner': ('local', 'set on the spawner\'s copy; a story character is its spawner\'s, streamed as a pedestrian with its entry\'s identity in the descriptor (M14; every console\'s own M5 to M13)'),
     'hand_prop_attributes': ('local', 'hand props do not travel'),
     'hand_prop_usage': ('local', 'hand props do not travel'),
     'positioning_test_start_height': ('plumbing', 'spawn-time ground test'),
@@ -122,7 +122,7 @@ def main():
              '`living_world/pedestrians/living_world_pedestrian_entity.rs`; the classes are the reviewed part',
              '(a field the structs have and the script does not know fails the check). Front page:',
              '[README](../README.md). The audit that measures it: `tools/coop/sync_audit.py`.', '',
-             '## What travels (the world stream, format 3)', '']
+             '## What travels (the world stream, format 4)', '']
     for name, fields in wire.items():
         lines.append(f'- `{name}`: ' + ', '.join(f'`{f}`' for f in fields))
     lines += ['', '## A pedestrian\'s state (`PedestrianConstruction`)', '',

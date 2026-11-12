@@ -33,6 +33,9 @@ PRELOAD_AT, EXECUTE_AT, COMPLETE_AT = 600, 900, 1800
 # so an intro scene of any length plays out first (open item 51); CRAWL_WIN_AT names a round tick
 # instead (`4500`) or another delay (`running+600`).
 WIN_AT = os.environ.get('CRAWL_WIN_AT', 'running+300')
+# CRAWL_WIN_SEAT=1|2: the diagnostic win on that seat alone (M15: the joiner's completion must
+# carry under `Anyone`); unset, both seats win, as the crawl has run since M8.
+WIN_SEAT = os.environ.get('CRAWL_WIN_SEAT')
 WAIT_S, SETTLE_S, LOOP_S = int(os.environ.get('CRAWL_WAIT_S', 170)), 10, 30  # CRAWL_WAIT_S: a longer deadline for a mission with a long intro scene
 GLOBAL_FIELD = '122db7b0f026dbec'  # challenge_global_data.Global
 
@@ -78,9 +81,14 @@ def run_one(name, kind, keep):
     time.sleep(2)
     extra = ['SKATE2_DIAGNOSTIC_COOP_ANSWER=no', 'SKATE2_TRACE_COOP_CENSUS=1']  # the census dump feeds the offline audit per mission
     extra += os.environ.get('CRAWL_EXTRA', '').split()  # a probe's extra seat variables, e.g. SKATE2_TRACE_CAREER_NATIVES=1
+    seat_extra = {}
     if kind == 'main':
         # the assets load ahead of the execute, as the loading screen loads them in play (open item 47)
-        extra += [f'SKATE2_DIAGNOSTIC_COOP_PRELOAD={PRELOAD_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}']
+        extra += [f'SKATE2_DIAGNOSTIC_COOP_PRELOAD={PRELOAD_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}']
+        if WIN_SEAT:
+            seat_extra[f'SEAT_EXTRA_{WIN_SEAT}'] = f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}'
+        else:
+            extra.append(f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}')
         done = rf'career graph {re.escape(name)} @\d+: enter (?:challenge_cleanup|complete\b)|panicked|kicked|disconnected'  # `complete`: a challenge that completes on execute (film team)
     elif kind == 'location':
         extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={COMPLETE_AT}:{name}']
@@ -88,7 +96,7 @@ def run_one(name, kind, keep):
     else:
         extra += [f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={COMPLETE_AT}:{name}']
         done = 'diagnostic: complete challenge .*: true|panicked|kicked|disconnected'
-    env = {'SEAT_ONLINE_1': 'create:9', 'SEAT_ONLINE_2': 'join:9', 'CAPTURE_COUNT': '0', 'SEAT_EXTRA': ' '.join(extra)}
+    env = {'SEAT_ONLINE_1': 'create:9', 'SEAT_ONLINE_2': 'join:9', 'CAPTURE_COUNT': '0', 'SEAT_EXTRA': ' '.join(extra), **seat_extra}
     if keep:
         env['BENCH_KEEP'] = '1'
     bench('start', '2', env=env)

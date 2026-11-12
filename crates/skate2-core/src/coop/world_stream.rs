@@ -16,7 +16,7 @@
 
 use super::ownership::Kind;
 
-pub const FORMAT: u8 = 3;
+pub const FORMAT: u8 = 4;
 
 /// A world id names an entity across consoles: its first spawner's slot in the game (4 bits)
 /// over that console's local entity id (its type nibble and 24-bit counter); it stays through
@@ -52,6 +52,10 @@ pub struct Descriptor {
     pub model_key: u64,
     pub recipe_id: u64,
     pub colours: [u8; 2],
+    /// M14: a story character's entry in its challenge's character data (the activity's key
+    /// and the entry's character index), so the receiver's character manager knows which entry
+    /// the puppet stands for; `None` for the census's own.
+    pub story: Option<(u64, u16)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -209,6 +213,14 @@ fn write_entity(out: &mut Vec<u8>, entity: &EntityState) {
             out.extend_from_slice(&descriptor.model_key.to_le_bytes());
             out.extend_from_slice(&descriptor.recipe_id.to_le_bytes());
             out.extend_from_slice(&descriptor.colours);
+            match descriptor.story {
+                Some((activity, index)) => {
+                    out.push(1);
+                    out.extend_from_slice(&activity.to_le_bytes());
+                    out.extend_from_slice(&index.to_le_bytes());
+                }
+                None => out.push(0),
+            }
         }
         None => out.push(0),
     }
@@ -314,7 +326,16 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
                 let model_key = r.u64()?;
                 let recipe_id = r.u64()?;
                 let colours = [r.u8()?, r.u8()?];
-                Some(Descriptor { entity_key, model_key, recipe_id, colours })
+                let story = match r.u8()? {
+                    0 => None,
+                    1 => {
+                        let activity = r.u64()?;
+                        let index = u16::from_le_bytes([r.u8()?, r.u8()?]);
+                        Some((activity, index))
+                    }
+                    _ => return Err("world run story flag"),
+                };
+                Some(Descriptor { entity_key, model_key, recipe_id, colours, story })
             }
             _ => return Err("world run descriptor flag"),
         };
@@ -404,7 +425,7 @@ mod tests {
                     velocity: [1.25, 0., -0.5],
                     flags: flags::KNOCKED_DOWN | flags::COLLIDING | (2 << flags::DIRECTION_SHIFT),
                     motion: 8,
-                    descriptor: Some(Descriptor { entity_key: 0x1234, model_key: 0xabcd_ef01_2345_6789, recipe_id: 7, colours: [3, 250] }),
+                    descriptor: Some(Descriptor { entity_key: 0x1234, model_key: 0xabcd_ef01_2345_6789, recipe_id: 7, colours: [3, 250], story: None }),
                 },
                 EntityState {
                     id: world_id(0, 0x0200_0004),
@@ -418,6 +439,19 @@ mod tests {
                     motion: 0,
                     descriptor: None,
                 },
+                // M14: a story character, its descriptor naming the challenge's entry.
+                EntityState {
+                    id: world_id(1, 0x0200_0e71),
+                    kind: Kind::StoryCharacter,
+                    owner: 1,
+                    epoch: 0,
+                    position: [1301.5, 91.3, -469.9],
+                    yaw: 0.25,
+                    velocity: [0., 0., 0.],
+                    flags: 0,
+                    motion: 2,
+                    descriptor: Some(Descriptor { entity_key: 0x4e6e_5331_d54e_4f61, model_key: 9, recipe_id: 8, colours: [0, 0], story: Some((0xd013_3edf_cd5f_d171, 0)) }),
+                },
             ],
         }
     }
@@ -426,7 +460,7 @@ mod tests {
     fn a_run_round_trips_within_its_quantization() {
         let run = run();
         let (bytes, included) = encode(&run, 1024);
-        assert_eq!(included, 2);
+        assert_eq!(included, 3);
         let back = decode(&bytes).expect("decodes");
         assert_eq!(back.despawns, run.despawns);
         assert_eq!(back.contacts.len(), 1);
@@ -445,7 +479,8 @@ mod tests {
         for lane in 0..4 {
             assert!((a.rotation[lane] - b.rotation[lane]).abs() <= 1. / 32767. + 1e-6);
         }
-        assert_eq!(back.entities.len(), 2);
+        assert_eq!(back.entities.len(), 3);
+        assert_eq!(back.entities[2].descriptor.as_ref().and_then(|d| d.story), Some((0xd013_3edf_cd5f_d171, 0)), "the story identity travels (M14)");
         for (a, b) in back.entities.iter().zip(&run.entities) {
             assert_eq!((a.id, a.kind, a.owner, a.epoch, a.flags, a.motion, &a.descriptor), (b.id, b.kind, b.owner, b.epoch, b.flags, b.motion, &b.descriptor));
             for lane in 0..3 {

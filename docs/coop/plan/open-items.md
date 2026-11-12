@@ -80,9 +80,15 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     scene instanced no characters (`instanced 0 characters for this console's local player
     index Some(1)`), so its photographer is the challenge's own spawn at the photographer
     locator, 1,400 ticks (23 s) later (seat 2's line 47095, `33558129`). From then on each copy
-    walks its own waypoint and runs its own AI graph. Fix: M14, a story character owned and
-    streamed as the challenge AI skaters are (one owner, puppets elsewhere, the scene instancing
-    it for the owner).
+    walks its own waypoint and runs its own AI graph. **Fixed (2026-11-12, M14):** a story
+    character is its spawner's (the console whose tester box reached the entry first) and
+    streams as a pedestrian, wherever the players are, its descriptor naming the challenge's
+    entry (stream format 4); the other consoles hold the puppet in that entry and spawn no copy
+    of their own; two testers at once keep the lower slot's copy ([world](topics/world.md)).
+    Proof: `../bench/evidence/probe/2026-11-12-m14-story.md` (the photo mission: the joiner's
+    tester first, the host's puppet of it at the same spot and facing to the centimetre, no
+    second copy, the mission completing on both); the tie and the owner's despawn freeing the
+    entry are unexercised there. The intro scene's own characters stay each console's scene's.
 71. **The joiner's objective copy dies at the host's first bail** (the logs; the player saw
     the joiner unable to complete). Every console's scripts hear every human's skater messages
     from the lockstep frames with the message's `PlayerID` the campaign slot, and the shipped
@@ -115,8 +121,9 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     photographer `02000e71` was later also the host's census pedestrian `02000e71`
     (`Pedestrian 02000e71 None -> Remote(0)` on seat 2 at line 47892, a puppet of another
     entity), so the ownership table's entry for the story character read as the host's. Not
-    seen to break anything in this log; M14 names a story character by its owner as the owned
-    skaters are named.
+    seen to break anything in this log. **Fixed (2026-11-12, M14):** an owned story character
+    is named on the wire by its owner's slot as every streamed pedestrian is (`world_id`), and
+    the ownership table holds that name.
 74. The Hall of Meat manager tracked `PlayerID` 0's bails as the local skater's on every
     console (`hom::receive`, the single-player 0), so the joiner's own bails (slot 1) were never
     tracked there and the host's were. **Fixed (2026-11-12, M13):** the manager's player is the

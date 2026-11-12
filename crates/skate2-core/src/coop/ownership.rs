@@ -25,7 +25,9 @@ pub enum Kind {
     /// An ambient pedestrian of the census.
     Pedestrian = 0,
     /// A pedestrian a challenge placed (`challenge_owner` set): a story character, or in profile
-    /// free skate a no-skate-zone guard.
+    /// free skate a no-skate-zone guard. M14: streamed as a pedestrian by the console whose
+    /// tester box spawned it, never handed over by distance, its descriptor naming the
+    /// challenge's entry it stands for (open items 70, 73).
     StoryCharacter = 1,
     /// A security guard of the census (`security_guard` set): streamed as a pedestrian.
     SecurityGuard = 2,
@@ -35,11 +37,11 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The kinds the run's entity list carries (a story character never travels; a prop has
-    /// its own list).
+    /// The kinds the run's entity list carries (a prop has its own list).
     pub fn from_wire(kind: u8) -> Option<Self> {
         match kind {
             0 => Some(Self::Pedestrian),
+            1 => Some(Self::StoryCharacter),
             2 => Some(Self::SecurityGuard),
             _ => None,
         }
@@ -66,7 +68,7 @@ pub enum Rule {
 pub fn rule(kind: Kind) -> Rule {
     match kind {
         Kind::Pedestrian => Rule::Spawner,
-        Kind::StoryCharacter => Rule::EachConsole,
+        Kind::StoryCharacter => Rule::Spawner,
         Kind::SecurityGuard => Rule::Chasee,
         Kind::Prop => Rule::LastToucher,
     }
@@ -104,10 +106,10 @@ mod tests {
     fn the_table_names_every_kind() {
         assert_eq!(owner(Kind::Pedestrian, Owner::Remote(1)), Owner::Remote(1));
         assert_eq!(owner(Kind::SecurityGuard, Owner::Remote(1)), Owner::Remote(1));
-        assert_eq!(owner(Kind::StoryCharacter, Owner::Remote(1)), Owner::Local);
-        assert!(streamed(Kind::Pedestrian) && streamed(Kind::SecurityGuard) && !streamed(Kind::StoryCharacter));
+        assert_eq!(owner(Kind::StoryCharacter, Owner::Remote(1)), Owner::Remote(1), "its spawner's (M14)");
+        assert!(streamed(Kind::Pedestrian) && streamed(Kind::SecurityGuard) && streamed(Kind::StoryCharacter));
         assert_eq!(Kind::from_wire(0), Some(Kind::Pedestrian));
-        assert_eq!(Kind::from_wire(1), None, "a story character never travels");
+        assert_eq!(Kind::from_wire(1), Some(Kind::StoryCharacter), "a story character travels as its kind (M14)");
         assert_eq!(Kind::from_wire(2), Some(Kind::SecurityGuard), "a guard travels as its kind");
         assert!(claim_wins(None, 1, 1));
         assert!(claim_wins(Some((1, 0)), 2, 1));

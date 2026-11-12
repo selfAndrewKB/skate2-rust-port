@@ -357,6 +357,15 @@ end, the bench's win) stays the deciding console's own player's and travels as a
 now names its player on the wire (protocol 125). What is still one per activity: the graph's
 state and its `vars` (open item 76).
 
+**Story characters: the spawner's (2026-11-12, M14).** A pedestrian a challenge placed was
+every console's own (M5), so a mission's photographer or pro stood and walked differently on
+each screen (open item 70). Now the console whose tester box spawned it owns it for life and
+streams it as a pedestrian, wherever the players are, with the challenge entry it stands for in
+its descriptor (stream format 4); the other consoles hold the puppet in that entry, spawn no
+copy of their own, and apply the challenge's culls and flags to it. Two testers reaching an
+entry at once keep the lower slot's copy ([world](topics/world.md)). The intro scenes' own
+characters stay each console's scene's.
+
 **The AI skaters: one owner (2026-11-11, M10).** A campaign round's challenge AI skaters are
 one console's, the first player's (`CampaignWorld::ai_owner`): it simulates them as the career
 does; its facts carry their completed outputs at their slots (`Facts.owned`, protocol 123),
