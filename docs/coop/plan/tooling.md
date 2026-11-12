@@ -85,7 +85,11 @@ M10.1), `SKATE2_DIAGNOSTIC_COOP_NUDGE_ROUND` the same in round ticks, so two sea
 be timed against each other; `SKATE2_DIAGNOSTIC_COOP_LEAVE=<round tick>` makes the seat quit
 the game at that round tick, as a player would (M11: the AI owner's departure);
 every seat traces `net bytes at <tick>: frames, owned frames, world, facts, looks, other` every
-ten seconds (M17, the cumulative encoded bytes by channel) and `SKATE2_DIAGNOSTIC_DUMP_LOOK=<path>`
+ten seconds (M17, the cumulative encoded bytes by channel), `puppet jerk at <tick>` and `own
+pedestrians' jerk at <tick>` (M19: each tick's step against the tick before's, past 5 mm and
+along the ground, the puppets' and the console's own by one meter);
+`SKATE2_DIAGNOSTIC_PUPPET_BLEND=linear` drives the seat's puppets with the M19 probe's fourth-run
+linear fade instead of the smoothstep, for an A/B on one build and `SKATE2_DIAGNOSTIC_DUMP_LOOK=<path>`
 writes the player's look as sent, for its compression's measure;
 `SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND=<round tick>[,<tick>...]` makes the seat's skater wipe out at
 each round tick (a vehicle-collision request on the physics' wipeout ledger, M13: a bail's

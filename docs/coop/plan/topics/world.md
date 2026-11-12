@@ -246,13 +246,25 @@ relays a reference (`RecipeRef`), the receiver delivers its own copy as the look
 for one it never saw (`LookRequest`); the session sees `Recipe` as before. A pedestrian's hand
 prop (a cup, a paper, a briefcase: its `hand_props` collection key) rides the descriptor, sent
 at once when it changes (stream format 6), and the puppet takes the same prop through the
-hand-prop pass that spawns every pedestrian's pending prop, and throws it away when the owner's
-goes; what the pedestrian does with it (drink, read, throw) is its owner's graph state (M16).
-A puppet's position blends from where it stood at a sample's arrival to the sample carried on,
-over the cadence, as its facing already did: a sample the send-on-error rule sent was one the
-extrapolation missed by 5 cm or more, and the step was the lurch the player saw. The
-pedestrians stopping to greet or talk (`DoGreet`, `PedestrianDoStartConversation`, the graph's
-states) are the owner's held state on the puppet since M16.
+hand-prop pass that spawns every pedestrian's pending prop once the prop's model is resident
+here (it waits, traced once, until it is); a puppet lets its prop go on its owner's word alone
+(its own throws, a chance drop on avoiding, a throw at a bin, the trash plugin, a knockdown's,
+are held back and counted), and its held prop is kept from this console's distance cull (a
+puppet lives within its owner's stream radius, often past this census's cull radius) until it is
+let go; what the pedestrian does with it (drink, read, throw) is its owner's graph state (M16).
+**A puppet's motion has no pops.** At each sample the puppet moves from the path it was on
+(where it would be at the speed it was showing) to the sample's (its position carried on at its
+velocity) along a smoothstep over ten ticks, so neither its position nor its speed jumps; its
+facing turns over three; a gap past 2 m is taken at once; past the coast it holds where it
+stopped. The first M19 blend stood still on each arrival tick and caught up over the next three
+(the lurch the player saw); a linear fade of the gap took a change of speed in one tick. A
+switch measures the linear fade against it on one build (`SKATE2_DIAGNOSTIC_PUPPET_BLEND`), and
+the seat logs trace the puppets' jerk (a tick's step against the tick before's) next to the
+console's own pedestrians' by the same meter: on the M19 probe's final soak the puppets' ticks
+past 5 mm were 3.1 % and 4.4 % a seat, the own pedestrians' 18.5 % and 15.1 % (the original's
+own root motion), and the linear fade's 9.3 % and 10.2 % in the A/B. The pedestrians stopping to
+greet or talk (`DoGreet`, `PedestrianDoStartConversation`, the graph's states) are the owner's
+held state on the puppet since M16.
 
 ## History
 

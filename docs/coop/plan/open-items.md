@@ -87,8 +87,12 @@ Front page: [README](../README.md).
     screen and walking in place on the other; lurches in the walking puppets. **Fixed (M16 and
     M19):** the owner's graph state holds the puppet's (the greets and conversations are its
     states), the hand prop rides the descriptor and the puppet carries the same one, and the
-    position blends to each sample over the cadence instead of stepping. Proof:
-    `../bench/evidence/probe/2026-11-12-m18-looks-and-props.md`.
+    position moves to each sample's path along a smoothstep instead of stepping; a puppet's
+    prop goes on its owner's word alone and is kept from this console's distance cull while
+    held. Proof: `../bench/evidence/probe/2026-11-12-m18-looks-and-props.md` (nine soaks: the
+    first blend's stall found by review and simulated, the props' three causes of loss found
+    in the logs and fixed one by one, the blend's A/B with the seats swapped, the final soak
+    with the console's own pedestrians' jerk as the baseline).
 
 ## Play (2026-11-12, the player, M12 build 4be2feea)
 
@@ -172,9 +176,12 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     deflate and 22 % under lzma, 81 % under a zero-run RLE. **M18 (2026-11-12):** a look sent
     before goes by its hash (`OwnedRecipeRef`, eight bytes; protocol 126), resolved by the
     server and the receivers from the looks they hold, a never-seen one asked for
-    (`LookRequest`) [the probe's meters say what the looks cost now]. Not built: a compressor
-    for a look's first sending, and delta coding against acknowledged runs (item 33), which the
-    stream no longer needs for its budget.
+    (`LookRequest`). No outfit repeated in the probe's soaks (each look sent was a new one), so
+    the reference path is proved over the client and server cores in the net crate
+    (`a_look_sent_again_travels_by_hash_and_resolves_everywhere`: a 30 kB look sent again costs
+    under 2 kB of wire both ways), not yet on the bench. Not built: a compressor for a look's
+    first sending (deflate would make it 27 %), and delta coding against acknowledged runs
+    (item 33), which the stream no longer needs for its budget.
 76. **A script's state and vars are one per activity, not per player** (M13's residue): the
     graph's state (`challenge_running`, a restart state) and its `vars` table (bail counts,
     timers) are shared by both humans' events, so two humans bailing within one restart
@@ -186,6 +193,16 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     made before they joined) drives the first player's copy. Also the central message of a bail
     (`ID_CHALLENGE_CENTRAL_MESSAGE_OBJECTIVE_BAILED`) shows on every console for either
     human's bail, as the design's "everyone" kind has it; play may want it the bailer's alone.
+
+77. A puppet's hand prop waits for its model to be resident on this console: the first M19
+    soak saw one puppet on the joiner never get its prop in twelve seconds (the model not
+    loaded there while the owner's census had it). In the later soaks no puppet waited; how
+    the original loads a prop's model where none of this console's own pedestrians carries it
+    is unread.
+78. The console's own pedestrians step unevenly at the transform level (15 to 19 % of their
+    ticks change step by more than 5 mm, the M19 meter; the puppets 3 to 4 %): the original's
+    root motion, or its update cadence. Whether the eye sees it is play's to say; the puppets
+    are not made to copy it.
 
 ## Session ([topic](topics/session.md))
 
