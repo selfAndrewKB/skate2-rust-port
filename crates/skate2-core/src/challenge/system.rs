@@ -170,7 +170,7 @@ impl Event {
             Self::Challenge(message) => message.clone(),
             Self::TriggerCollision { enter, volume, player } => Message::new(
                 if *enter { "cMsgTriggerEnterCollision" } else { "cMsgTriggerExitCollision" },
-                vec![("VolumeID", Field::Number(crate::skate3::id_float(*volume))), ("PlayerID", Field::Number(*player as f32))],
+                vec![("VolumeID", Field::Number(crate::skate3::id_float(*volume))), ("PlayerID", Field::Number(*player as f32)), ("CoopSlot", Field::Number(*player as f32))],
             ),
             // BindAllMessageHandlersToLua (0x828e9..): these share the field-less
             // handler cMsgPresGameUnload_HandleMessage_LuaBinding (0x828cda38), whose

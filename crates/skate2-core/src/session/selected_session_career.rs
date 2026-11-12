@@ -154,7 +154,7 @@ pub(super) fn challenge_queue_event(message: crate::hermes_challenge_queue::Chal
         }
         ChallengePayload::Marker { set, player_id } => Message::new(
             if set { "cMsgSetMarker" } else { "cMsgUseMarker" },
-            vec![("PlayerID", Field::Number(player_id as f32))],
+            vec![("PlayerID", Field::Number(player_id as f32)), ("CoopSlot", Field::Number(player_id as f32))],
         ),
     };
     Event::Challenge(message)

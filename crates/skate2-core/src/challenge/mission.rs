@@ -269,8 +269,12 @@ fn unsigned(value: u32) -> Field {
     Field::Number(value as f32)
 }
 
+/// Co-op fork (M13): a skater's message also names its campaign slot as `CoopSlot`, the field
+/// the scripts' delivery reads to tell a human's message from an AI's (`PlayerID` is the
+/// scripts' index space, where an AI skater's 1 is also the joiner's slot).
 fn message(name: &str, frame: &MissionFrame, mut fields: Vec<(&'static str, Field)>) -> Event {
     fields.insert(0, ("PlayerID", number(frame.player)));
+    fields.push(("CoopSlot", number(frame.player)));
     Event::Challenge(Message::new(name, fields))
 }
 
@@ -365,6 +369,7 @@ impl MissionSystem {
                     ("TrickIndex", unsigned(trick.trick_index)),
                     ("TrickType", number(trick.trick_type)),
                     ("PlayerID", number(frame.player)),
+                    ("CoopSlot", number(frame.player)),
                     ("TrickScore", number(score)),
                     ("TrickReversed", number(i32::from(reversed))),
                     ("TrickEntry", number(i32::try_from(entry).unwrap_or(i32::MAX))),

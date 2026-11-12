@@ -1348,7 +1348,7 @@ fn evaluate_group(lua: &mut Lua<World>, world: &mut World, group: u32, triggers:
     if all_complete_except_points(world, group) && triggers.group_objective_complete && completed.is_empty() {
         let player = world.objectives.group_index(group).map_or(0, |gi| world.objectives.groups[gi].player);
         #[expect(clippy::cast_precision_loss, reason = "player id")]
-        let fields = vec![("ObjectiveGroup", Field::Pointer(handle)), ("PlayerID", Field::Number(player as f32))];
+        let fields = vec![("ObjectiveGroup", Field::Pointer(handle)), ("PlayerID", Field::Number(player as f32)), ("CoopSlot", Field::Number(player as f32))];
         world.send(Event::Challenge(Message::new("cMsgDidNotGetEnoughPoints", fields)));
     }
     completed
@@ -1989,7 +1989,7 @@ fn trigger_exit(world: &mut World, group: u32, volume: u64) {
             if Triggers::read(&db, key).fail_on_boundary_exit {
                 set_status(world, group, i, Status::Failed);
                 #[expect(clippy::cast_precision_loss, reason = "player id")]
-                let fields = vec![("ObjectiveGroup", Field::Pointer(handle)), ("PlayerID", Field::Number(player as f32))];
+                let fields = vec![("ObjectiveGroup", Field::Pointer(handle)), ("PlayerID", Field::Number(player as f32)), ("CoopSlot", Field::Number(player as f32))];
                 world.send(Event::Challenge(Message::new("cMsgLeftObjectiveScoringBoundary", fields)));
             } else {
                 set_status(world, group, i, Status::Enabled);

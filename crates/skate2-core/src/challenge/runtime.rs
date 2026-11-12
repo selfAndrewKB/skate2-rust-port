@@ -303,11 +303,14 @@ impl Delivery<'_> {
     }
 }
 
-/// Co-op fork (M13): the human a campaign message is about, when it is one: its `PlayerID` is
-/// a seat of the campaign (the AI skaters sit after the seats, `players::script_slot`).
+/// Co-op fork (M13): the human a campaign message is about, when it is one: a skater message
+/// names its campaign slot as `CoopSlot` (`mission::message`, the trigger and marker messages),
+/// and a slot among the seats is a human's. `PlayerID` cannot tell: it is the scripts' index
+/// space, where an AI skater's creation says 1 and the joiner's slot is 1 too (the M13
+/// regression's follow and demo waited for a competitor whose creation read as a human's).
 fn campaign_subject(world: &World, message: &Message) -> Option<i32> {
     let campaign = world.coop.as_ref()?;
-    let player = message.fields.as_ref()?.iter().find(|(name, _)| *name == "PlayerID").and_then(|(_, value)| match value {
+    let player = message.fields.as_ref()?.iter().find(|(name, _)| *name == "CoopSlot").and_then(|(_, value)| match value {
         #[expect(clippy::cast_possible_truncation, reason = "the message's int")]
         Field::Number(n) => Some(*n as i32),
         _ => None,
