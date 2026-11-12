@@ -45,6 +45,7 @@ pub mod objective_data;
 /// each console spawns its own where its own skater is (`characters.rs`, M5).
 pub(crate) fn tester_bases(world: &system::World) -> Vec<[f32; 3]> {
     if world.coop.is_some() && !world.player_states.is_empty() {
+        // The campaign's players' (the states are theirs alone, `player_states`' construction).
         world.player_states.iter().filter_map(|(_, state)| state.tester_base).collect()
     } else {
         world.player.tester_base.into_iter().collect()

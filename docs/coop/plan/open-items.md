@@ -217,6 +217,8 @@ Front page: [README](../README.md).
 53. The ambient AI skaters are each console's own: at the same two spots seat 1 spawned
     `ai_skater_06` and `sammy`, seat 2 `seb` and `ai_skater_06` (the probe's `ai:` lines). Not
     streamed, not in the inventory's counts; a player sees different skaters than the other.
+    They are no longer testers of the box tests (68) but still reach the scripts as AI players
+    (69).
 54. Fixed (2026-11-11): four location missions (`m_08_01_teleport_trainingfacility_in`/`_out`,
     `m_2a_01_goto`, `m_3a_01_goto`) carry an empty `MapStartLocation`; the execute no longer asks
     for a teleport to the empty name (the native lookup fails on it and moves nobody). The crawl
@@ -357,7 +359,32 @@ Front page: [README](../README.md).
     hull `ur_hotel_pool_drain` (its graph restarting at `initial`) once more than seat 1 after
     the win of `m_1a_03_tutorial_fliptricks` (at round tick 2057) and `m_6p_03_demo_pool_team_03`
     (1891), each time right after an `UnloadDynamicHull`; the missions' own state sequences and
-    the saves agree, and the M9 run of the same missions showed no extra reload. Cause unread:
-    the hull requests are the scripts' and the stream focus's, and seat 2 now follows a puppet
-    where a script switches the camera to the AI (M10), which neither of these missions does.
-    Where to read: seat 2's `career output: UnloadHull` after the win and what asked for it.
+    the saves agree, and the M9 run of the same missions showed no extra reload. **Read and
+    fixed (2026-11-11, M10.2):** `ur_hotel_pool_drain` is a location global, run while a
+    tester's box is in its bounds and terminated when every tester's box has left
+    (`perform_bbox_tests`); the testers were every state in `player_states`, built from every
+    frame of the tick, and since the AI day those frames carry this console's own ambient
+    skaters (each console's own, 53), so an ambient skater wandering into the hotel pool's
+    bounds on one seat ran the global there and leaving it terminated and reloaded the hull
+    there alone; the sewer film's hull `f_1a_13_ots_sh06_sewer` cycled the same way (three
+    times on seat 2 in the pool demo, never on seat 1). The original's box tests are the local
+    tester's, not any skater's. `player_states` now holds the campaign's players alone, so the
+    sign-up boxes, the location globals, the discovery volumes, the dynamic hulls and the Hall
+    of Meat check read the humans. Proof: `../bench/evidence/probe/2026-11-11-crawl-m10-2-probe.md`
+    (the two missions again: the location global's run and suspension traced at the same points
+    on both seats, two testers each time, no sewer hull on either seat, both missions passing),
+    then the nine-mission regression `2026-11-11-crawl-m10-2` [see the run note in missions].
+69. **Each console's ambient skaters reach its scripts as AI players** (2026-11-11, the item 68
+    probe): the frames carry this console's own ambient skaters at the slots after the humans,
+    and `online_round_ai_messages` posts `cMsgSkaterCreated`/`Destroyed` for every AI slot that
+    appears or goes, so seat 1's scripts heard "AI player 1, 2, 3" created at round ticks 945,
+    1005 and 1065 in `m_1a_03_tutorial_fliptricks` and seat 2's at 986, 1046 and 1106 (the
+    spawner's 60-tick cadence, each seat's own clock), with the respawns at different slots on
+    each seat (seat 1's slot 3 at 2058, seat 2's slot 4 at 2156); in the pool demo seat 1 had
+    three present at the round's first tick and seat 2 gained them at 26, 86 and 146. Both
+    missions pass, so these scripts do not read them; the follow family's wait for its pro's
+    creation reads the ordinal, which an ambient skater can hold (the AI day's count, 56),
+    and a script that counts AI skaters would count each console's own. The original posts the
+    same messages for its ambient skaters, so the messages are faithful; what differs is the
+    population. Not fixed: either the ambient skaters' messages stay off the scripts in a
+    campaign, or the ambient population becomes one console's as the challenge AI did (M10).

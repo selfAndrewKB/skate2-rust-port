@@ -396,6 +396,9 @@ pub(crate) fn perform_bbox_tests(world: &mut World) {
     for index in exited {
         let Some(activity) = world.activities.global_tree.entry(index) else { continue };
         if world.activities.graph(activity).running {
+            if world.coop.is_some() {
+                crate::coop::trace(format_args!("location global {}: every tester's box left it ({} testers at {:?}): terminated", world.activities.activities[activity].name, bases.len(), bases.first()));
+            }
             terminate_mission(world, activity);
             world.activities.add_to_pending_reset(activity);
         }
@@ -403,6 +406,9 @@ pub(crate) fn perform_bbox_tests(world: &mut World) {
     for &index in &current {
         let Some(activity) = world.activities.global_tree.entry(index) else { continue };
         if !are_global_challenges_suspended(world) && !world.activities.graph(activity).running && ENABLE_GLOBAL_TRIGGERS {
+            if world.coop.is_some() {
+                crate::coop::trace(format_args!("location global {}: a tester's box is in it ({} testers at {:?}): run", world.activities.activities[activity].name, bases.len(), bases.first()));
+            }
             run_global_activity(world, activity);
         }
     }

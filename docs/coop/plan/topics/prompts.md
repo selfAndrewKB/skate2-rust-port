@@ -21,7 +21,10 @@ acts and mirrored on the others through notes on the facts. Front page:
 - **The box tests read every player.** Sign-up boxes, global activities, discovery volumes,
   dynamic hulls and story-character boxes test every player's tester from the facts, alike on
   every console, so a box any player stands in counts; a Hall of Meat bail of any player
-  withholds the sign-up as the local one did.
+  withholds the sign-up as the local one did. The players alone (M10.2): the AI skaters' and
+  each console's own ambient skaters' frames travel with the tick's frames but are no tester
+  (an ambient skater wandering into a location global's bounds on one seat ran it there and
+  reloaded its hull there alone, open item 68).
 - **What M3 proved** (`../bench/evidence/2026-11-10-m3-*.log`): after the opening tutorial
   completed on both seats (round tick 3512), both stood in the `m_1a_03_tutorial_fliptricks`
   box; seat 2's D-pad press was applied on both at tick 5701 and opened the poster on both

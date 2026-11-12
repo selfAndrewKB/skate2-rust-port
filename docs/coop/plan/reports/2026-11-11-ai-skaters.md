@@ -173,6 +173,27 @@ S.K.A.T.E. and the follow on the tagged build (`../bench/evidence/2026-11-11-cra
 [see the run note in missions]. What stays: a car's or a pedestrian's push claims nothing
 (67).
 
+## Late: the hub's hull (M10.2)
+
+Open item 68, seat 2 reloading the hub's hull once more than seat 1 after two wins, read on the
+M10 run's kept logs: `ur_hotel_pool_drain` is a location global, run while a tester's box is in
+its bounds and terminated when every tester's box has left, and the testers were every state
+in `player_states`, built from every frame of the tick, which since the AI day carry this
+console's own ambient skaters. An ambient skater wandering into the pool's bounds on one seat
+ran the global there, and its leaving terminated it and reloaded the hull there alone; the
+sewer film's hull cycled the same way, three times on seat 2 in the pool demo and never on
+seat 1. The original's box tests are the local tester's. `player_states` now holds the
+campaign's players alone, so every box test, the Hall of Meat check and the objectives' lookups
+read the humans, and the location globals' run and termination are traced. Proof
+(`../bench/evidence/probe/2026-11-11-crawl-m10-2-probe.md`): the two missions again, the
+global's run and suspension at the same points on both seats with two testers each time, no
+sewer hull on either seat, both missions passing. The same traces named the "AI skaters" whose
+creation ticks had differed between the seats: each console's own ambient skaters, posted to
+the scripts as AI players at that console's own ticks and slots (open item 69); the owned
+challenge AI's creation stays the same tick everywhere (no owned slot was streamed in either
+mission). The regression of the nine missions on this build: `2026-11-11-crawl-m10-2` [see the
+run note in missions].
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

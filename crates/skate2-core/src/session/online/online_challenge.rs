@@ -163,8 +163,9 @@ struct PlayerFacts {
     /// The run and tick the player waits at a sync point from, standing still at those facts.
     syncing: Option<(u32, u32)>,
     /// Co-op fork (M10): the coders of the challenge AI skaters the player owns, by their slot,
-    /// each decoded as the player codes it.
+    /// each decoded as the player codes it; the slots its last facts carried, for the trace.
     owned_coders: BTreeMap<u8, FactsCoder>,
+    owned_slots: Vec<u8>,
 }
 
 /// One tick of a player's facts: its frame, its notes, and (M10) the frames of the challenge
@@ -190,7 +191,7 @@ struct LocalTickFacts {
 impl PlayerFacts {
     /// The facts of a player in a round of `scope`, decoded as the player codes them.
     fn new(scope: FactsScope) -> Self {
-        Self { coder: FactsCoder::new(scope), frames: BTreeMap::new(), left: false, syncing: None, owned_coders: BTreeMap::new() }
+        Self { coder: FactsCoder::new(scope), frames: BTreeMap::new(), left: false, syncing: None, owned_coders: BTreeMap::new(), owned_slots: Vec::new() }
     }
 }
 
@@ -254,6 +255,8 @@ pub(super) struct Round {
     /// the AI slots whose frames the last tick carried (for `cMsgSkaterCreated`/`Destroyed`).
     owned_coders: BTreeMap<u8, FactsCoder>,
     ai_present: BTreeSet<i32>,
+    /// The slots the last produced facts carried, for the trace.
+    owned_slots: Vec<u8>,
     /// The local skater's last whole frame, for the ticks it sends no facts for.
     own: Option<MissionFrame>,
     others: BTreeMap<u64, PlayerFacts>,
@@ -375,6 +378,7 @@ impl Round {
             local_frames: BTreeMap::new(),
             owned_coders: BTreeMap::new(),
             ai_present: BTreeSet::new(),
+            owned_slots: Vec::new(),
             own: None,
             others: BTreeMap::new(),
             refilling: false,
@@ -1391,6 +1395,11 @@ impl<T, C> SelectedLiveSession<T, C> {
                         Err(e) => trace(format_args!("{user_id:016x}: facts of tick {tick}, owned slot {slot}: {e}")),
                     }
                 }
+                let slots: Vec<u8> = owned.iter().map(|(slot, _)| *slot).collect();
+                if slots != facts.owned_slots {
+                    trace(format_args!("{user_id:016x}: facts of tick {tick} (stint {stint}) carry the owned AI slots {slots:?} (before: {:?})", facts.owned_slots));
+                    facts.owned_slots = slots;
+                }
                 facts.frames.insert((stint, tick), TickFacts { frame, notes, owned: owned_frames });
                 while facts.frames.len() > KEPT_FACTS {
                     facts.frames.pop_last();
@@ -2055,6 +2064,11 @@ impl<T, C> SelectedLiveSession<T, C> {
             owned_shared.push(frame);
         }
         let owned_bytes: usize = owned.iter().map(|(_, data)| data.len()).sum();
+        let slots: Vec<u8> = owned.iter().map(|(slot, _)| *slot).collect();
+        if slots != round.owned_slots {
+            trace(format_args!("facts of tick {tick} produced (processed {}) carry the owned AI slots {slots:?} (before: {:?})", round.processed, round.owned_slots));
+            round.owned_slots = slots;
+        }
         round.local_frames.insert(tick, LocalTickFacts { shared, whole: own, notes: notes.clone(), owned: owned_shared });
         round.produced += 1;
         if round.produced % 300 == 0 {

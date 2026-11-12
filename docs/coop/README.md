@@ -6,10 +6,12 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.12.1-prop-contest`**
-(2026-11-11): M10.1, a puppet prop follows its owner's samples (it had taken the first of each
-claim and no other since M5: the player's railing standing on one screen), and a touch does not
-take a prop its owner is still moving ([world](plan/topics/world.md)). Before it,
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.12.2-testers`**
+(2026-11-11): M10.2, the box tests read the campaign's players alone (an ambient skater had
+run and reloaded a location global's hull on one seat, open item 68), and M10.1, a puppet prop
+follows its owner's samples (it had taken the first of each claim and no other since M5: the
+player's railing standing on one screen) while a touch does not take a prop its owner is still
+moving ([world](plan/topics/world.md)). Before them,
 `coop-v0.12.0-owned-ai` (2026-11-11): M10, the AI skaters are one console's: the first
 player's facts carry its challenge AI skaters' outputs, every console's scripts read one AI
 run, the other consoles show puppets of its replay frames
@@ -50,7 +52,7 @@ Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.12.1` lobby build: the AI missions with two people, the one pro now on
+Play on the `coop-v0.12.2` lobby build: the AI missions with two people, the one pro now on
 both screens, and a S.K.A.T.E. or contest, where both consoles read the same leader and the
 first human to win ends it for both; a rail both skaters lean on, which should stay one rail. The AI day's report says what changed and what it
 measured, its evening section the owned AI:

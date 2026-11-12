@@ -3133,9 +3133,17 @@ impl<T, C> SelectedLiveSession<T, C> {
         // An online freeskate activity's objectives each read their own player's state, from
         // every player's facts alike on every console (PC port: the original read each skater's
         // own output).
+        // In a campaign the players alone (M10.1): the frames also carry the challenge AI
+        // skaters' (M10, every console's alike) and this console's own ambient skaters' (each
+        // console's own), and the box tests, the Hall of Meat check and the objectives' lookups
+        // are the players'. The original's box tests are the local tester's, not any skater's
+        // (open item 68: a location global entered and left by an ambient skater on one seat
+        // reloaded the hotel pool's hull there alone).
+        let players = system.world().coop.as_ref().map(|campaign| campaign.players.clone());
         system.world_mut().player_states = if per_player {
             frames
                 .iter()
+                .filter(|frame| players.as_ref().is_none_or(|players| players.contains(&frame.player)))
                 .map(|frame| (frame.player, mission::player_state(frame, pairs(previous.get(&frame.player).map_or(&[][..], Vec::as_slice)))))
                 .collect()
         } else {
