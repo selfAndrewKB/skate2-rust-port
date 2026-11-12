@@ -36,6 +36,13 @@ use std::sync::Arc;
 const STREAM_RADIUS: f32 = 80.;
 /// A descriptor goes with an entity's first run and again every this many of its runs.
 const DESCRIBE_EVERY: u32 = 20;
+/// M17: an owned pedestrian's sample goes out when the receiver's extrapolation of the last
+/// one (its position carried on at its velocity) would be off by more than this, or its facing
+/// by more than `SEND_YAW`, or its flags, motion or graph state changed; else only every
+/// `KEEPALIVE_RUNS` runs.
+const SEND_POSITION: f32 = 0.05;
+const SEND_YAW: f32 = 2.0_f32 * std::f32::consts::PI / 180.;
+const KEEPALIVE_RUNS: u32 = 20;
 /// A puppet whose owner has not streamed it for this many ticks is culled.
 const STALE_TICKS: u32 = 180;
 /// A despawn is announced in this many runs, as runs are not acknowledged.
@@ -68,6 +75,22 @@ struct Tracked {
     nearer: (u32, u8),
     /// How many samples in a row this puppet has been beyond the position tolerance.
     behind: u32,
+    /// M17: the last sample sent of an owned pedestrian, and the tick it went out, for the
+    /// send-on-error rule.
+    sent: Option<Sent>,
+}
+
+/// M17: what the last sample sent said, and when.
+#[derive(Clone, Copy, Debug)]
+struct Sent {
+    tick: u32,
+    position: [f32; 3],
+    yaw: f32,
+    velocity: [f32; 3],
+    flags: u8,
+    motion: u8,
+    graph: u16,
+    runs: u32,
 }
 
 #[derive(Debug)]
@@ -118,6 +141,8 @@ struct Stats {
     refused: u32,
     /// Records received and ignored for an epoch older than the table's.
     stale: u32,
+    /// M17: samples the send-on-error rule withheld.
+    withheld: u64,
     since: u32,
 }
 
@@ -498,8 +523,19 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         let Some(drive) = pedestrian.puppet.as_mut() else { continue };
                         drive.arrive(stream::transform(sample.position, sample.yaw), sample.velocity, sample.flags);
+                        // M16: the owner's graph state holds this puppet's graph.
+                        if !drive.held_failed {
+                            drive.graph = (sample.graph != crate::generated_action_load::NULL_INDEX).then_some(sample.graph);
+                        }
                         puppet.updated = tick;
                         let knocked = sample.flags & flags::KNOCKED_DOWN != 0;
+                        // M16: a standing hit the owner took plays here from its flags, as a
+                        // knockdown does; this console predicts neither (a puppet's hit is
+                        // reported and the owner's word plays, one round trip later).
+                        if sample.flags & flags::STANDING_HIT != 0 && !knocked && !pedestrian.collision.as_ref().is_some_and(|collision| collision.colliding) {
+                            let direction = direction_of(sample.flags);
+                            pedestrian.record_accepted_full_collision(CollisionForce::Standing, direction, cvars)?;
+                        }
                         if knocked && !puppet.knocked_down {
                             puppet.knocked_down = true;
                             if puppet.awaiting.take().is_some() {
@@ -687,7 +723,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     ownership::decide(kind, id, None, Owner::Remote(owner), "its census spawned it");
                     trace(format_args!("puppet {id:08x} of slot {owner} spawned as entity {entity:#x} (entity key {:016x}, model {:016x}, epoch {}) at {tick}",
                         spawn.descriptor.entity_key, spawn.descriptor.model_key, spawn.state.epoch));
-                    coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, runs: 0, nearer: (0, 0), behind: 0 });
+                    coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, runs: 0, nearer: (0, 0), behind: 0, sent: None });
                     if let (Some(identity), Some(challenge)) = (story, challenge.as_deref_mut()) {
                         crate::challenge::characters::remote_story_spawned(challenge, identity, owner, entity, spawn.state.position);
                     }
@@ -752,11 +788,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                     if let Some((d2, id, entity)) = nearest {
                         coop.shoved = true;
                         let pedestrian = roster.get_mut(entity).expect("listed");
-                        pedestrian.record_accepted_full_collision(CollisionForce::Knockdown, CollisionDirection::Front, cvars)?;
+                        // M16: as a skater's hit, the contact alone goes to the owner; nothing
+                        // plays here until the owner's flags and graph state say so.
                         if let Some(drive) = pedestrian.puppet.as_mut() {
                             drive.pending_contact = Some((CollisionForce::Knockdown as u32 as u8, CollisionDirection::Front as u32 as u8, [0., 0., 6.], [0., 0., 0.]));
                         }
-                        trace(format_args!("diagnostic: shoved puppet {id:08x} at {:.1} m: knockdown predicted here at {tick}, contact to its owner", d2.sqrt()));
+                        trace(format_args!("diagnostic: shoved puppet {id:08x} at {:.1} m: contact to its owner at {tick}, its word awaited", d2.sqrt()));
                     } else if tick == at {
                         trace(format_args!("diagnostic: no puppet to shove at {tick}"));
                     }
@@ -826,7 +863,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let tracked = coop.entities.entry(wid).or_insert_with(|| {
                             let reason = if story { "a challenge placed it here: streamed to the others, never handed over" } else if guard { "this census spawned it; it chases this console's skater only" } else { "this census spawned it" };
                             ownership::decide(kind, wid, None, ownership::owner(kind, Owner::Local), reason);
-                            Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, runs: 0, nearer: (0, 0), behind: 0 }
+                            Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, runs: 0, nearer: (0, 0), behind: 0, sent: None }
                         });
                         // The handoff rule: a peer nearer by the margin for a second takes it.
                         let position = core.transform[3];
@@ -858,6 +895,37 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let Some(core) = pedestrian.core.as_ref() else { continue };
                         let entity_flags = entity_flags(pedestrian);
                         let describe = tracked.runs % DESCRIBE_EVERY == 0;
+                        // M17: the send-on-error rule. The receiver carries the last sample on
+                        // at its velocity (`PuppetDrive::step`), so a sample that says the same
+                        // is not sent; a change of flags, motion or graph state, a position or
+                        // facing the extrapolation misses, a descriptor due or the keepalive is.
+                        let position = [core.transform[3][0], core.transform[3][1], core.transform[3][2]];
+                        let yaw = stream::yaw_of(&core.transform);
+                        let velocity = [core.velocity[0], core.velocity[1], core.velocity[2]];
+                        let motion = pedestrian.state_out.state.min(255) as u8;
+                        let graph = pedestrian.graph.current;
+                        let due = match tracked.sent {
+                            None => true,
+                            Some(last) => {
+                                let dt = tick.saturating_sub(last.tick) as f32 / 60.;
+                                let predicted = [last.position[0] + last.velocity[0] * dt, last.position[1] + last.velocity[1] * dt, last.position[2] + last.velocity[2] * dt];
+                                let off = (0..3).map(|lane| (position[lane] - predicted[lane]).powi(2)).sum::<f32>().sqrt();
+                                let turned = (yaw - last.yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+                                describe
+                                    || tracked.runs.wrapping_sub(last.runs) >= KEEPALIVE_RUNS
+                                    || off > SEND_POSITION
+                                    || turned.abs() > SEND_YAW
+                                    || last.flags != entity_flags
+                                    || last.motion != motion
+                                    || last.graph != graph
+                            }
+                        };
+                        if !due {
+                            tracked.runs += 1;
+                            coop.stats.withheld += 1;
+                            continue;
+                        }
+                        tracked.sent = Some(Sent { tick, position, yaw, velocity, flags: entity_flags, motion, graph, runs: tracked.runs });
                         owned.push((d2, EntityState {
                             id: wid,
                             kind,
@@ -868,6 +936,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
                             flags: entity_flags,
                             motion: pedestrian.state_out.state.min(255) as u8,
+                            graph: pedestrian.graph.current,
                             descriptor: describe.then(|| Descriptor {
                                 entity_key: core.entity_key,
                                 model_key: core.model_key,
@@ -895,6 +964,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
                             flags: entity_flags(pedestrian),
                             motion: pedestrian.state_out.state.min(255) as u8,
+                            graph: pedestrian.graph.current,
                             descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices, story: None }),
                         }));
                     }
@@ -958,6 +1028,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                         tracked.runs += 1;
                     }
                 }
+                // M17: a sample the budget cut was not sent: the rule sends it next run.
+                for entity in &run.entities[included..] {
+                    if let Some(tracked) = coop.entities.get_mut(&entity.id).filter(|known| known.owner == Owner::Local) {
+                        tracked.sent = None;
+                    }
+                }
                 if included < run.entities.len() {
                     trace(format_args!("world run at {tick}: {} of {} owned pedestrians fit {MAX_WORLD} bytes", included, run.entities.len()));
                 }
@@ -975,6 +1051,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         coop.props.values().filter(|prop| prop.owner == Owner::Local).count(), coop.props.len(),
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.refused, stats.stale
                     ));
+                    trace(format_args!("world stream at {tick}: {} samples withheld by the send-on-error rule (M17)", stats.withheld));
                     let audit = &stats.audit;
                     if audit.samples > 0 {
                         trace(format_args!(
@@ -993,6 +1070,13 @@ impl<T, C> SelectedLiveSession<T, C> {
             && let Some(client) = self.online.client.as_ref()
         {
             client.send_world(tick, bytes);
+        }
+        // M17: the bytes sent by channel, cumulative, every measure window.
+        if tick % MEASURE_TICKS == 0
+            && let Some(client) = self.online.client.as_ref()
+        {
+            let b = client.channel_bytes();
+            trace(format_args!("net bytes at {tick}: frames {}, owned frames {}, world {}, facts {}, looks {}, other {} (cumulative, encoded messages)", b.frames, b.owned_frames, b.world, b.facts, b.looks, b.other));
         }
         Ok(())
     }

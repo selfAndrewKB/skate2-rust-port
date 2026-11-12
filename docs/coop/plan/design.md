@@ -357,6 +357,12 @@ end, the bench's win) stays the deciding console's own player's and travels as a
 now names its player on the wire (protocol 125). What is still one per activity: the graph's
 state and its `vars` (open item 76).
 
+**Puppets play their owner's state (2026-11-12, M16).** A pedestrian's animation is the
+owner's AI graph state, streamed in every sample and held on the puppet's graph every tick,
+with the behaviours beginning and ending as the owner's do; a hit by the local skater is a
+contact to the owner, never a prediction, and the owner's flags and state play it back one
+round trip later ([world](topics/world.md)). The facing turns over the stream's cadence.
+
 **Story characters: the spawner's (2026-11-12, M14).** A pedestrian a challenge placed was
 every console's own (M5), so a mission's photographer or pro stood and walked differently on
 each screen (open item 70). Now the console whose tester box spawned it owns it for life and

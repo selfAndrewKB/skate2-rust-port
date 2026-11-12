@@ -204,6 +204,36 @@ own and sent 0.7-1.6 KB/s. Logs: `../bench/evidence/2026-11-10-m1-seat-{1,2}.log
 items](../open-items.md) 1); delta coding; cars; migration; the population rule for a shared
 region (M6); a guard's chase of a remote skater (a remote skater has no actor to chase).
 
+**Puppets play their owner's state (2026-11-12, M16).** Until M16 a puppet's animation was
+its intents from the owner's velocity (walk, run, stand) and its own graph only while it
+collided, and a hit by the local skater was predicted here (a knockdown played at once and was
+stood up again if the owner's flags never confirmed it: 63 corrections against 38
+confirmations on one seat of the field test). Now every sample carries the state the owner's
+AI graph is in (`EntityState::graph`, stream format 5, two bytes), and the puppet's graph is
+held at that state every tick (`PedestrianGraph::update_delegate_held`: the exited and entered
+states' behaviours end and begin as on the owner, without a transition or its hooks), so what
+the owner plays, the puppet plays: a startle, a stumble, a knockdown's ragdoll direction, a
+photographer's pose. A state the puppet cannot enter here (a behaviour wanting what a puppet
+has not) is traced once and that puppet keeps the M6 gate. A hit by the local skater is no
+longer predicted: the contact goes to the owner, and the owner's flags (knocked down, or a
+standing hit with its direction) and state play it back here one round trip later. The facing
+turns to each sample's over the cadence (three ticks) instead of snapping and holding.
+
+**The stream sends on error, and every channel is metered (2026-11-12, M17).** An owned
+pedestrian's sample went out every run (every third tick) whatever it said: about 27 bytes a
+sample, 570 B/s a pedestrian, 6 kB/s a seat in the field test (open item 75). Now the owner
+sends a pedestrian's sample only when the receiver's extrapolation of the last one (its
+position carried on at its velocity, `PuppetDrive::step`) would be off by more than 5 cm or
+its facing by more than 2°, or its flags, motion or graph state changed, or a descriptor is
+due, or 20 runs have passed (the keepalive, one second); the puppet coasts at its velocity
+for 72 ticks before it stands, past the keepalive. A sample the run's byte budget cut goes
+next run. The stream trace counts the samples withheld. Every channel's bytes are counted
+where the messages are encoded (`skate2_net::client::ChannelBytes`: the player's frames, the
+owned skaters' frames, the world runs, the facts, the looks, the rest) and traced every ten
+seconds as `net bytes at <tick>`, so the ledger names what each costs. Not built here: delta
+coding against acknowledged runs (open item 33) and the looks' compression (item 75), which
+wait on the measure of this build.
+
 ## History
 
 - 2026-11-10 M5: the table grew by story characters, guards and props; the stream by the

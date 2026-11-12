@@ -73,15 +73,15 @@ CLASSES = {
     'state_out': ('streamed', 'state (the speech/audio event) travels as motion; the receiver does not apply it'),
     'collision_info': ('streamed', 'force and direction travel in flags'),
     'navigation_modifiers': ('local', 'navigation'),
-    'animation': ('derived', 'the motion graph plays the derived intents; clip phase is each console\'s own'),
+    'animation': ('derived', 'the motion graph plays the derived intents and the held graph\'s behaviours (M16); clip phase is each console\'s own'),
     'nav_rig': ('local', 'navigation'),
-    'collision': ('derived', 'colliding and required_to_begin_colliding set from the streamed KNOCKED_DOWN/COLLIDING flags'),
+    'collision': ('derived', 'colliding and required_to_begin_colliding set from the streamed KNOCKED_DOWN, STANDING_HIT and COLLIDING flags; nothing predicted on a puppet since M16'),
     'post_adjust': ('local', 'pose adjust'),
     'head_tracking': ('local', 'head tracking looks at the local skater'),
     'spatial_adjust': ('local', 'pose adjust'),
-    'graph': ('local', 'the AI graph behaviour: a puppet runs its own only while colliding (M6); the behaviour does not travel (open item 34)'),
+    'graph': ('streamed', 'the owner\'s current state travels (EntityState::graph, format 5) and a puppet\'s graph is held at it every tick (M16); its own selection only without one'),
     'ai_bindings': ('plumbing', 'graph bindings'),
-    'behaviours': ('local', 'active graph behaviours; do not travel (open item 34)'),
+    'behaviours': ('derived', 'begun and ended by the held graph as the owner\'s are (M16)'),
     'puppet': ('derived', 'the receiver\'s drive: the owner\'s last sample'),
 }
 
@@ -122,7 +122,7 @@ def main():
              '`living_world/pedestrians/living_world_pedestrian_entity.rs`; the classes are the reviewed part',
              '(a field the structs have and the script does not know fails the check). Front page:',
              '[README](../README.md). The audit that measures it: `tools/coop/sync_audit.py`.', '',
-             '## What travels (the world stream, format 4)', '']
+             '## What travels (the world stream, format 5)', '']
     for name, fields in wire.items():
         lines.append(f'- `{name}`: ' + ', '.join(f'`{f}`' for f in fields))
     lines += ['', '## A pedestrian\'s state (`PedestrianConstruction`)', '',

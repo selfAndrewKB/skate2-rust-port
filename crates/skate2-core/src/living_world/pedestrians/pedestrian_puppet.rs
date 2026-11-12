@@ -6,8 +6,13 @@
 
 use crate::living_world_rain::geometry::Transform;
 
-/// How many ticks a puppet carries on at its last velocity before it stands where it is.
-const COAST_TICKS: u32 = 30;
+/// How many ticks a puppet carries on at its last velocity before it stands where it is: past
+/// the owner's keepalive (M17: 20 runs of 3 ticks), since a sample that would say the same is
+/// not sent.
+const COAST_TICKS: u32 = 72;
+/// Over how many ticks a puppet turns to a sample's facing (the stream's cadence), instead of
+/// snapping to it and holding it (M16).
+const YAW_SLEW_TICKS: u32 = 3;
 
 #[derive(Clone, Debug)]
 pub(crate) struct PuppetDrive {
@@ -26,19 +31,39 @@ pub(crate) struct PuppetDrive {
     /// `End`, which clears the knocked-down flag and releases the collision's intent packet)
     /// runs. Without it a puppet stayed knocked down for good (2026-11-11).
     pub(crate) was_colliding: bool,
+    /// M16: the state the owner's AI graph is in, from its last sample, which this puppet's
+    /// graph is held at (`PedestrianGraph::update_delegate_held`); `None` before the first
+    /// sample, or once a held update failed here (`held_failed`: the old gate from then on).
+    pub(crate) graph: Option<u16>,
+    pub(crate) held_failed: bool,
+    /// M16: the facing turned to over the stream's cadence: the yaw the last sample arrived at
+    /// and the sample's own.
+    yaw_from: f32,
+    yaw_to: f32,
 }
 
 impl PuppetDrive {
     pub(crate) fn new(target: Transform) -> Self {
-        Self { target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None, was_colliding: false }
+        let yaw = crate::coop::world_stream::yaw_of(&target);
+        Self { target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false, yaw_from: yaw, yaw_to: yaw }
     }
 
     /// The owner's next sample.
     pub(crate) fn arrive(&mut self, target: Transform, velocity: [f32; 3], flags: u8) {
+        self.yaw_from = self.yaw();
+        self.yaw_to = crate::coop::world_stream::yaw_of(&target);
         self.target = target;
         self.velocity = [velocity[0], velocity[1], velocity[2], 0.];
         self.age = 0;
         self.flags = flags;
+    }
+
+    /// The facing this tick: from the last sample's reached facing toward the new sample's,
+    /// over the stream's cadence, the shorter way round.
+    fn yaw(&self) -> f32 {
+        let t = (self.age.min(YAW_SLEW_TICKS) as f32) / YAW_SLEW_TICKS as f32;
+        let turn = (self.yaw_to - self.yaw_from + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+        self.yaw_from + turn * t
     }
 
     /// The velocity the puppet's animation walks at: the owner's last, or none once it has
@@ -63,7 +88,11 @@ impl PuppetDrive {
                 target[3][lane] += self.velocity[lane] * t;
             }
         }
+        // M16: the facing turns over the cadence rather than snapping (the audit's 3 to 6 % of
+        // samples beyond 5° were the held facing of a turning owner).
+        let yaw = self.yaw();
         self.age = self.age.saturating_add(1);
-        target
+        let turned = crate::coop::world_stream::transform([target[3][0], target[3][1], target[3][2]], yaw);
+        [turned[0], turned[1], turned[2], target[3]]
     }
 }

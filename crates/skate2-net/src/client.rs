@@ -9,6 +9,7 @@ use crate::transport::{self, Endpoint, kind, read_header};
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -57,10 +58,30 @@ enum State {
     Closed,
 }
 
+/// Co-op fork (M17): the bytes this client has sent, by channel (the messages' encoded sizes,
+/// before the transport's framing), so the bench can name what each costs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ChannelBytes {
+    /// The player's own replay frames.
+    pub frames: u64,
+    /// The owned skaters' replay frames (the challenge AI's, the ambient skaters').
+    pub owned_frames: u64,
+    /// The world runs (pedestrians, props, contacts).
+    pub world: u64,
+    /// The facts of the lockstep.
+    pub facts: u64,
+    /// The looks (the player's recipe, the owned skaters' recipes).
+    pub looks: u64,
+    /// Every other reliable message.
+    pub other: u64,
+}
+
 /// The client's logic over datagrams.
 #[derive(Debug)]
 pub struct ClientCore {
     state: State,
+    /// Co-op fork (M17): the bytes sent by channel, read by the session through [`Client::channel_bytes`].
+    meter: Arc<Mutex<ChannelBytes>>,
     build: Build,
     hello: ClientMessage,
     events: Vec<ClientEvent>,
@@ -88,6 +109,7 @@ impl ClientCore {
         };
         Self {
             state,
+            meter: Arc::default(),
             build,
             hello: ClientMessage::Hello { nickname: nickname.to_owned(), game_version: game_version.to_owned(), player_id },
             events,
@@ -140,10 +162,28 @@ impl ClientCore {
         self.state = State::Closed;
     }
 
+    /// Co-op fork (M17): the meter the bytes sent are counted on, shared with the session.
+    pub fn set_meter(&mut self, meter: Arc<Mutex<ChannelBytes>>) {
+        self.meter = meter;
+    }
+
+    fn count(&self, channel: impl FnOnce(&mut ChannelBytes) -> &mut u64, bytes: usize) {
+        if let Ok(mut meter) = self.meter.lock() {
+            *channel(&mut meter) += bytes as u64;
+        }
+    }
+
     /// Queues a message for reliable delivery.
     pub fn send(&mut self, message: &ClientMessage) {
         if let State::Connected { endpoint } = &mut self.state {
-            endpoint.send_reliable(&message.encode());
+            let encoded = message.encode();
+            endpoint.send_reliable(&encoded);
+            let bytes = encoded.len();
+            match message {
+                ClientMessage::Facts { .. } => self.count(|m| &mut m.facts, bytes),
+                ClientMessage::Recipe(_) | ClientMessage::OwnedRecipe { .. } => self.count(|m| &mut m.looks, bytes),
+                _ => self.count(|m| &mut m.other, bytes),
+            }
         }
     }
 
@@ -153,12 +193,14 @@ impl ClientCore {
             && let Some(run) = self.own_frames.encode(frames)
         {
             let message = ClientMessage::Frames(run).encode();
+            let bytes = message.len();
             // A run coded whole (no acknowledged baseline yet) may not fit a datagram.
             if message.len() > transport::MAX_UNRELIABLE {
                 endpoint.send_reliable(&message);
             } else {
                 endpoint.send_unreliable(message);
             }
+            self.count(|m| &mut m.frames, bytes);
         }
     }
 
@@ -170,11 +212,13 @@ impl ClientCore {
             && let Some(run) = self.owned_frames.entry(slot).or_default().encode(frames)
         {
             let message = ClientMessage::OwnedFrames { slot, run }.encode();
+            let bytes = message.len();
             if message.len() > transport::MAX_UNRELIABLE {
                 endpoint.send_reliable(&message);
             } else {
                 endpoint.send_unreliable(message);
             }
+            self.count(|m| &mut m.owned_frames, bytes);
         }
     }
 
@@ -182,7 +226,10 @@ impl ClientCore {
     /// past [`protocol::MAX_WORLD`] is cut there by the encoding.
     pub fn send_world(&mut self, tick: u32, data: Vec<u8>) {
         if let State::Connected { endpoint } = &mut self.state {
-            endpoint.send_unreliable(ClientMessage::World { tick, data }.encode());
+            let encoded = ClientMessage::World { tick, data }.encode();
+            let bytes = encoded.len();
+            endpoint.send_unreliable(encoded);
+            self.count(|m| &mut m.world, bytes);
         }
     }
 
@@ -387,6 +434,8 @@ pub struct Client {
     commands: Sender<Command>,
     events: Receiver<ClientEvent>,
     thread: Option<JoinHandle<()>>,
+    /// Co-op fork (M17): the bytes sent by channel.
+    meter: Arc<Mutex<ChannelBytes>>,
 }
 
 impl Client {
@@ -398,15 +447,23 @@ impl Client {
         let server = server.to_owned();
         let nickname = nickname.to_owned();
         let game_version = game_version.to_owned();
+        let meter = Arc::new(Mutex::new(ChannelBytes::default()));
+        let thread_meter = Arc::clone(&meter);
         let thread = std::thread::Builder::new()
             .name("online".into())
             .spawn(move || {
-                if let Err(error) = run_client(&server, &nickname, &game_version, player_id, &command_queue, &event_queue) {
+                if let Err(error) = run_client(&server, &nickname, &game_version, player_id, &command_queue, &event_queue, thread_meter) {
                     let _ = event_queue.send(ClientEvent::Disconnected(Disconnect::Network(error)));
                 }
             })
             .ok();
-        Self { commands, events, thread }
+        Self { commands, events, thread, meter }
+    }
+
+    /// Co-op fork (M17): the bytes sent so far, by channel.
+    #[must_use]
+    pub fn channel_bytes(&self) -> ChannelBytes {
+        self.meter.lock().map(|meter| *meter).unwrap_or_default()
     }
 
     pub fn send(&self, message: ClientMessage) {
@@ -524,7 +581,7 @@ impl Impairment {
     }
 }
 
-fn run_client(server: &str, nickname: &str, game_version: &str, player_id: u64, commands: &Receiver<Command>, events: &Sender<ClientEvent>) -> Result<(), String> {
+fn run_client(server: &str, nickname: &str, game_version: &str, player_id: u64, commands: &Receiver<Command>, events: &Sender<ClientEvent>, meter: Arc<Mutex<ChannelBytes>>) -> Result<(), String> {
     let addr = resolve(server)?;
     let socket = UdpSocket::bind(("0.0.0.0", 0)).map_err(|error| error.to_string())?;
     socket.connect(addr).map_err(|error| error.to_string())?;
@@ -534,6 +591,7 @@ fn run_client(server: &str, nickname: &str, game_version: &str, player_id: u64, 
         .map_or(0x5eed, |time| u64::from(time.subsec_nanos()) ^ time.as_secs().rotate_left(32))
         | 1;
     let mut core = ClientCore::new(nonce, nickname, game_version, player_id, Build::current(), Instant::now());
+    core.set_meter(meter);
     let mut impairment = Impairment::from_env(nonce);
     let mut buffer = [0_u8; 2048];
     let mut loading: Option<Instant> = None;

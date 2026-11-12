@@ -50,7 +50,25 @@ impl super::SelectedRecipeFrame<'_> {
                     let colliding_now = crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref());
                     let was_colliding = entity.puppet.as_mut().map(|drive| std::mem::replace(&mut drive.was_colliding, colliding_now));
                     let own_graph = entity.puppet.is_none() || colliding_now || was_colliding == Some(true);
-                    if entity.ai_bindings.is_some() && own_graph { entity.update_ai_graph(target.dt, frame)?; }
+                    // M16: a puppet's graph is held at its owner's state every tick, so it plays
+                    // what its owner plays; a held update that fails here (a state this console
+                    // cannot enter) is traced once and the puppet falls back to the M6 gate.
+                    let held = entity.puppet.as_ref().filter(|drive| !drive.held_failed).and_then(|drive| drive.graph);
+                    if entity.ai_bindings.is_some() {
+                        match held {
+                            Some(state) => {
+                                if let Err(error) = entity.update_ai_graph_as(target.dt, frame, state) {
+                                    crate::coop::trace(format_args!("puppet entity {:#x}: its graph cannot be held at its owner's state {state}: {error}; its own gate from now on", entity.id));
+                                    if let Some(drive) = entity.puppet.as_mut() {
+                                        drive.held_failed = true;
+                                        drive.graph = None;
+                                    }
+                                }
+                            }
+                            None if own_graph => entity.update_ai_graph(target.dt, frame)?,
+                            None => {}
+                        }
+                    }
                     // Pedestrian.UpdateState82e6eaf0 clears tAnimData+68,
                     // exactly cPedAnimData.MotionGraphInput.IntentsValid.
                     entity.animation.as_mut().ok_or("pedestrian state animation absent")?

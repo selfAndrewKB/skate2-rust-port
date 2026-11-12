@@ -350,11 +350,15 @@ impl crate::living_world_pedestrian_entity::PedestrianConstruction {
             if self.state.as_ref().unwrap().flags[1] & 0x10 != 0 { return Ok(()); }
             CollisionForce::Standing
         };
-        // Co-op fork: a puppet's hit is this console's prediction; its owner gets the contact
-        // and its state comes back in the world stream.
+        // Co-op fork: a puppet's hit goes to its owner as a contact, and the owner's word (its
+        // flags and its graph's state in the world stream) plays here. M16: nothing is predicted
+        // here any more; until M16 the knockdown played at once and was stood up again when the
+        // owner's flags never confirmed it (63 corrections against 38 confirmations in the
+        // field test).
         if let Some(puppet) = self.puppet.as_mut() {
             puppet.pending_contact = Some((force as u32 as u8, direction as u32 as u8,
                 [velocity[0], velocity[1], velocity[2]], [omega[0], omega[1], omega[2]]));
+            return Ok(());
         }
         self.record_accepted_full_collision(force, direction, cvars)
     }

@@ -1719,6 +1719,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                 match remote_skater::encode_character(&frame) {
                     Ok(data) => {
                         trace(format_args!("sending our character ({} bytes)", data.len()));
+                        // M17's measure: the look's bytes to a file, to weigh its compression.
+                        if let Ok(path) = std::env::var("SKATE2_DIAGNOSTIC_DUMP_LOOK") {
+                            trace(format_args!("look written to {path}: {:?}", std::fs::write(&path, &data).map(|()| data.len())));
+                        }
                         game.own_rig = Some((Arc::clone(&frame.rig), frame.palette.skinning().lod_level));
                         if let Some(client) = &self.online.client {
                             client.send(ClientMessage::Recipe(data));

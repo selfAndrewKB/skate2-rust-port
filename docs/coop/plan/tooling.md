@@ -84,6 +84,9 @@ skater (its claim and stream follow, or the touch waits while another seat is mo
 M10.1), `SKATE2_DIAGNOSTIC_COOP_NUDGE_ROUND` the same in round ticks, so two seats' nudges can
 be timed against each other; `SKATE2_DIAGNOSTIC_COOP_LEAVE=<round tick>` makes the seat quit
 the game at that round tick, as a player would (M11: the AI owner's departure);
+every seat traces `net bytes at <tick>: frames, owned frames, world, facts, looks, other` every
+ten seconds (M17, the cumulative encoded bytes by channel) and `SKATE2_DIAGNOSTIC_DUMP_LOOK=<path>`
+writes the player's look as sent, for its compression's measure;
 `SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND=<round tick>[,<tick>...]` makes the seat's skater wipe out at
 each round tick (a vehicle-collision request on the physics' wipeout ledger, M13: a bail's
 effect on each player's copy); `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>` scans the security guard areas

@@ -16,7 +16,7 @@
 
 use super::ownership::Kind;
 
-pub const FORMAT: u8 = 4;
+pub const FORMAT: u8 = 5;
 
 /// A world id names an entity across consoles: its first spawner's slot in the game (4 bits)
 /// over that console's local entity id (its type nibble and 24-bit counter); it stays through
@@ -74,6 +74,9 @@ pub struct EntityState {
     pub flags: u8,
     /// The owner's motion state (`PedStateOut::state`), for a puppet's animation later.
     pub motion: u8,
+    /// M16: the state the owner's AI graph is in (`PedestrianGraph::current`, `NULL_INDEX` for
+    /// none), which a puppet's graph is held at.
+    pub graph: u16,
     pub descriptor: Option<Descriptor>,
 }
 
@@ -201,6 +204,7 @@ fn write_entity(out: &mut Vec<u8>, entity: &EntityState) {
     varint(out, u64::from(entity.epoch));
     out.push(entity.flags);
     out.push(entity.motion);
+    out.extend_from_slice(&entity.graph.to_le_bytes());
     write_vector(out, entity.position, POSITION_SCALE, i64::from(i32::MAX));
     let turns = entity.yaw / std::f32::consts::TAU;
     let yaw = ((turns - turns.floor()) * 65536.).round() as u32 & 0xffff;
@@ -316,6 +320,7 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
         let epoch = r.varint()? as u32;
         let flags = r.u8()?;
         let motion = r.u8()?;
+        let graph = u16::from_le_bytes([r.u8()?, r.u8()?]);
         let position = read_vector(&mut r, POSITION_SCALE)?;
         let yaw = (r.varint()? & 0xffff) as f32 / 65536. * std::f32::consts::TAU;
         let velocity = read_vector(&mut r, VELOCITY_SCALE)?;
@@ -339,7 +344,7 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
             }
             _ => return Err("world run descriptor flag"),
         };
-        run.entities.push(EntityState { id, kind, owner, epoch, position, yaw, velocity, flags, motion, descriptor });
+        run.entities.push(EntityState { id, kind, owner, epoch, position, yaw, velocity, flags, motion, graph, descriptor });
     }
     if r.at != bytes.len() {
         return Err("world run has trailing bytes");
@@ -425,6 +430,7 @@ mod tests {
                     velocity: [1.25, 0., -0.5],
                     flags: flags::KNOCKED_DOWN | flags::COLLIDING | (2 << flags::DIRECTION_SHIFT),
                     motion: 8,
+                    graph: 41,
                     descriptor: Some(Descriptor { entity_key: 0x1234, model_key: 0xabcd_ef01_2345_6789, recipe_id: 7, colours: [3, 250], story: None }),
                 },
                 EntityState {
@@ -437,6 +443,7 @@ mod tests {
                     velocity: [0., 0., 0.],
                     flags: 0,
                     motion: 0,
+                    graph: 65535,
                     descriptor: None,
                 },
                 // M14: a story character, its descriptor naming the challenge's entry.
@@ -450,6 +457,7 @@ mod tests {
                     velocity: [0., 0., 0.],
                     flags: 0,
                     motion: 2,
+                    graph: 3,
                     descriptor: Some(Descriptor { entity_key: 0x4e6e_5331_d54e_4f61, model_key: 9, recipe_id: 8, colours: [0, 0], story: Some((0xd013_3edf_cd5f_d171, 0)) }),
                 },
             ],
@@ -482,7 +490,7 @@ mod tests {
         assert_eq!(back.entities.len(), 3);
         assert_eq!(back.entities[2].descriptor.as_ref().and_then(|d| d.story), Some((0xd013_3edf_cd5f_d171, 0)), "the story identity travels (M14)");
         for (a, b) in back.entities.iter().zip(&run.entities) {
-            assert_eq!((a.id, a.kind, a.owner, a.epoch, a.flags, a.motion, &a.descriptor), (b.id, b.kind, b.owner, b.epoch, b.flags, b.motion, &b.descriptor));
+            assert_eq!((a.id, a.kind, a.owner, a.epoch, a.flags, a.motion, a.graph, &a.descriptor), (b.id, b.kind, b.owner, b.epoch, b.flags, b.motion, b.graph, &b.descriptor));
             for lane in 0..3 {
                 assert!((a.position[lane] - b.position[lane]).abs() <= 1. / 256., "{:?} vs {:?}", a.position, b.position);
                 assert!((a.velocity[lane] - b.velocity[lane]).abs() <= 1. / 64.);
@@ -557,7 +565,7 @@ mod tests {
         let (with, _) = encode(&WorldRun { entities: vec![run.entities[0].clone()], ..Default::default() }, 1024);
         let (without, _) = encode(&WorldRun { entities: vec![run.entities[1].clone()], ..Default::default() }, 1024);
         // The budget arithmetic in docs/coop/bench.md rests on these.
-        assert!(with.len() <= 58, "{} bytes with a descriptor", with.len());
-        assert!(without.len() <= 30, "{} bytes without", without.len());
+        assert!(with.len() <= 61, "{} bytes with a descriptor", with.len());
+        assert!(without.len() <= 32, "{} bytes without", without.len());
     }
 }

@@ -2,7 +2,7 @@
 //! concrete backend operations; this owner never invents successful behaviors.
 use crate::{
     generated_action_load::{NULL_INDEX, runtime::ActionUpdateError as Error},
-    generated_graph_selection::{Graph, Mask},
+    generated_graph_selection::{Graph, Mask, Selected},
     pedestrian_graph_data as data,
 };
 use std::collections::BTreeMap;
@@ -172,6 +172,50 @@ impl PedestrianGraph {
             behaviours:&data::BEHAVIOURS,active_capacity:20,
         }, |mask,expression,c|expressions::evaluate(mask,expression,c))
     }
+    /// Co-op fork (M16): the delegate's update with the state its owner's graph is in instead
+    /// of a selection of this console's own: a puppet enters and leaves the states its owner
+    /// does (the behaviours' `Begin` and `End` run here as there), without a transition and its
+    /// hooks, so its startle, stumble, knockdown and pose are the owner's and not a reading of
+    /// its own perception, which a puppet has none of.
+    pub(crate) fn update_delegate_held(&mut self, delegate: AiDelegate, dt: f32,
+        instances: &mut PedestrianGraphBehaviours, backend: &mut impl PedestrianGraphBackend, state: u16,
+    ) -> Result<(), Error> {
+        use marquee_data::{marquee, photographer};
+        match delegate {
+            AiDelegate::Pedestrian => self.update_held::<9>(dt, instances, backend, &GeneratedDeclarations {
+                states: &data::STATES, transitions: &data::TRANSITIONS, indices: &data::INDICES,
+                behaviours: &data::BEHAVIOURS, active_capacity: 20 }, state),
+            AiDelegate::BigBlack => self.update_held::<7>(dt, instances, backend,
+                &GeneratedDeclarations { states: &big_black_data::big_black::STATES,
+                    transitions: &big_black_data::big_black::TRANSITIONS,
+                    indices: &big_black_data::big_black::INDICES,
+                    behaviours: &big_black_data::big_black::BEHAVIOURS, active_capacity: 16 }, state),
+            AiDelegate::Marquee => self.update_held::<3>(dt, instances, backend,
+                &GeneratedDeclarations { states: &marquee::STATES, transitions: &marquee::TRANSITIONS,
+                    indices: &marquee::INDICES, behaviours: &marquee::BEHAVIOURS, active_capacity: 4 }, state),
+            AiDelegate::Photographer => self.update_held::<3>(dt, instances, backend,
+                &GeneratedDeclarations { states: &photographer::STATES,
+                    transitions: &photographer::TRANSITIONS, indices: &photographer::INDICES,
+                    behaviours: &photographer::BEHAVIOURS, active_capacity: 6 }, state),
+        }
+    }
+    fn update_held<const DEPTH: usize>(&mut self, dt: f32, instances: &mut PedestrianGraphBehaviours,
+        backend: &mut impl PedestrianGraphBackend, declarations: &GeneratedDeclarations, state: u16,
+    ) -> Result<(), Error> {
+        if usize::from(state) >= declarations.states.len() { return Err(Error::InvalidState(state)); }
+        self.delta_time = dt;
+        let graph = Graph::<DEPTH> { states: declarations.states, transitions: declarations.transitions,
+            indices: declarations.indices, current: self.current };
+        let selected = Selected { state, transition: NULL_INDEX };
+        // A first held state has no current to leave from: the graph's root is the ancestor
+        // every state shares, so the entered set is the state's whole ancestry.
+        let (exited, entered) = if self.current == NULL_INDEX {
+            (Vec::new(), graph.ancestors(state)?)
+        } else {
+            graph.changes(&selected)?
+        };
+        self.apply_selection::<DEPTH>(dt, instances, backend, declarations, &selected, exited, entered)
+    }
     pub(crate) fn update_declarations<const DEPTH:usize>(&mut self, dt:f32,
         instances:&mut PedestrianGraphBehaviours, backend:&mut impl PedestrianGraphBackend,
         declarations:&GeneratedDeclarations,
@@ -185,6 +229,16 @@ impl PedestrianGraph {
                 backend.condition(self, mask, condition, state)))?;
         if selected.state == NULL_INDEX { return Err(Error::NoSelectedState); }
         let (exited, entered) = graph.changes(&selected)?;
+        self.apply_selection::<DEPTH>(dt, instances, backend, declarations, &selected, exited, entered)
+    }
+    /// The selection applied: the exited states' behaviours ended, the transition's hooks, the
+    /// entered states' behaviours begun, the current state's update (`update_declarations`'s
+    /// second half, shared with the held update).
+    #[expect(clippy::too_many_arguments, reason = "the selection's parts")]
+    fn apply_selection<const DEPTH: usize>(&mut self, dt: f32,
+        instances: &mut PedestrianGraphBehaviours, backend: &mut impl PedestrianGraphBackend,
+        declarations: &GeneratedDeclarations, selected: &Selected, exited: Vec<u16>, entered: Vec<u16>,
+    ) -> Result<(), Error> {
         for time in self.times.values_mut() { *time += dt; }
         self.last = self.current;
         self.current = selected.state;
