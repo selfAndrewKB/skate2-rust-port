@@ -6,7 +6,7 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.16.0-story-characters`**
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.16.1-joiner-wins`**
 (2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
 puppets to the others, the owned skaters' names carrying their owner (protocol 124), each
 console spawning its share of the allowance (open item 53); M11.2, a car's or a pedestrian's

@@ -128,8 +128,13 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     against the host's 250 (it stood in its start volume), and the crawl completes copies by
     the diagnostic, never by a skater in a volume. The two players' trigger events name
     different volume ids for the mission (`4ea7103e38706` and `4ea6c03e38706`); the objective
-    arms on the attribute's scoring boundary id. M15's probe: the joiner teleported into the
-    zone, its copy expected `Enabled -> Active` on both seats, for each objective kind.
+    arms on the attribute's scoring boundary id. **Answered (2026-11-12, M13 and M15):** the
+    M13 probe's seat 2, teleported into the Burnette photo zone, armed its copy on both seats
+    (the same volume id as the host's that time); M15's crawl gave the diagnostic win to the
+    joiner's seat alone (`CRAWL_WIN_SEAT=2`) in the six `Anyone` missions of the regression
+    set, and every one completed on both seats from the joiner's notes
+    (`../bench/evidence/probe/2026-11-12-m15-joiner-wins.md`). What a joiner's own trick in a
+    photo zone does on the host remains play's to judge (the bench does no tricks).
 73. A story character's pedestrian id is drawn from the same counter as the census's, and the
     world stream names an owned pedestrian by its owner's slot and local id: seat 2's
     photographer `02000e71` was later also the host's census pedestrian `02000e71`
