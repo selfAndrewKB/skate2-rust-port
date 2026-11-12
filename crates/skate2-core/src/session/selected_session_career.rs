@@ -4053,6 +4053,16 @@ impl<T, C> SelectedLiveSession<T, C> {
         if on_board { self.teleport_local_player(transform) } else { self.online_sync_teleport(transform) }.is_ok()
     }
 
+    /// Co-op fork (M13), diagnostics: the local skater made to wipe out, so the bench proves
+    /// what a bail does to the scripts without steering a skater into anything: its deck is
+    /// shot out from under it sideways before the next solve (the deck's acceleration is the
+    /// bail; an upward launch of 18 m/s landed clean). A request on the physics' wipeout ledger
+    /// from here is cleared by the next system-logic stage before the state selection reads
+    /// it, so the cause must be physical.
+    pub fn diagnostic_bail_local_player(&mut self) -> bool {
+        self.diagnostic_set_board_velocity([30.0, 2.0, 0.0])
+    }
+
     /// Diagnostics: the first skater's deck body given `velocity` before the solve.
     pub fn diagnostic_set_board_velocity(&mut self, velocity: [f32; 3]) -> bool {
         let Some(world) = self.inner.world.as_ref() else { return false };

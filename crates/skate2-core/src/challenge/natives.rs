@@ -575,21 +575,31 @@ fn challenge_save_set_other(lua: &mut Lua<World>, world: &mut World, call: &Nati
 
 // ---- Objectives -----------------------------------------------------------
 
-fn objective_group(world: &World, value: &Value) -> Option<u32> {
-    world.pointers.object(value, ObjectKind::ObjectiveGroup)
+/// The round tick a campaign's scripts run at (0 outside one).
+fn round_tick(world: &World) -> u32 {
+    world.online.as_ref().map_or(0, |online| online.tick)
 }
 
-/// Co-op fork (M9): in a campaign a script's forced outcome on its group is its own player's
-/// decision and travels as a note (`coop::outcomes`): the group's activity key and its ordinal
-/// among that player's groups of the activity, or `None` outside a campaign or for a group the
+/// The group a script's value names. Co-op fork (M13): while a graph handles a human's event,
+/// that human's copy of it (`objectives::subject_copy`).
+fn objective_group(world: &World, value: &Value) -> Option<u32> {
+    world.pointers.object(value, ObjectKind::ObjectiveGroup).map(|group| super::objectives::subject_copy(world, group))
+}
+
+/// Co-op fork (M9): in a campaign a script's forced outcome on its group is a player's
+/// decision and travels as a note (`coop::outcomes`): the group's activity key, its ordinal
+/// among that player's groups of the activity and the player (M13: the human whose event the
+/// graph handles, else the script's own), or `None` outside a campaign or for a group the
 /// world does not hold.
-fn own_outcome_group(world: &World, value: &Value) -> Option<(u64, u8)> {
+fn own_outcome_group(world: &World, value: &Value) -> Option<(u64, u8, i32)> {
     world.coop.as_ref()?;
     let group = objective_group(world, value)?;
     let gi = world.objectives.group_index(group)?;
     let g = &world.objectives.groups[gi];
     let ordinal = world.objectives.groups.iter().filter(|x| x.activity == g.activity && x.player == g.player).position(|x| x.id == g.id)?;
-    Some((world.activities.activities[g.activity].key, u8::try_from(ordinal).ok()?))
+    // The subject's copy was resolved above when a human's event is handled; outside one the
+    // held group is the first player's and the decision this console's own (M9).
+    Some((world.activities.activities[g.activity].key, u8::try_from(ordinal).ok()?, super::objectives::subject_player(world)))
 }
 
 /// Co-op fork, the ledger's "everyone" kind: the groups a script's group operation applies to.
@@ -869,8 +879,15 @@ fn objectives_set_evaluation_status(_: &mut Lua<World>, world: &mut World, call:
 /// `Objectives.FailAllObjectiveStatus(group)` (`0x82d4d410`): every objective failed
 /// (`cChallengeObjectiveGroup::FailAllObjectiveStatus` `0x82d4c8a8`).
 fn objectives_fail_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some((key, ordinal)) = own_outcome_group(world, call.arg(0)) {
-        world.coop_outcomes.push(crate::coop::outcomes::Outcome::ObjectivesFailed { activity: key, group: ordinal });
+    // M13: a decision in reaction to a human's event applies here and now on every console
+    // (the group natives already name that human's copy); one outside any travels as a note.
+    if let Some((key, ordinal, player)) = own_outcome_group(world, call.arg(0)) {
+        let outcome = crate::coop::outcomes::Outcome::ObjectivesFailed { activity: key, group: ordinal, player };
+        if world.event_player.is_some() {
+            super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
+        } else {
+            world.coop_outcomes.push(outcome);
+        }
         return none();
     }
     for group in objective_groups(world, call.arg(0)) {
@@ -884,9 +901,14 @@ fn objectives_fail_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall)
 
 /// `Objectives.ForceObjectiveComplete(group, index)` (`0x82d51740`).
 fn objectives_force_complete(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
-    if let Some((key, ordinal)) = own_outcome_group(world, call.arg(0)) {
+    if let Some((key, ordinal, player)) = own_outcome_group(world, call.arg(0)) {
         if let Ok(index) = u8::try_from(get_int(call, 1)) {
-            world.coop_outcomes.push(crate::coop::outcomes::Outcome::ObjectiveComplete { activity: key, group: ordinal, index });
+            let outcome = crate::coop::outcomes::Outcome::ObjectiveComplete { activity: key, group: ordinal, index, player };
+            if world.event_player.is_some() {
+                super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
+            } else {
+                world.coop_outcomes.push(outcome);
+            }
         }
         return none();
     }
@@ -915,7 +937,13 @@ fn challenge_lose(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) ->
         let key = world.activities.activities[activity].key;
         // Co-op fork (M9): this player's loss travels as a note; the rules end the mission.
         if world.coop.is_some() {
-            world.coop_outcomes.push(crate::coop::outcomes::Outcome::Lost { activity: key, result: 1 });
+            let player = super::objectives::subject_player(world);
+            let outcome = crate::coop::outcomes::Outcome::Lost { activity: key, result: 1, player };
+            if world.event_player.is_some() {
+                super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
+            } else {
+                world.coop_outcomes.push(outcome);
+            }
             return none();
         }
         signpost::end_challenge_unwon(world, key, 1);
@@ -1244,13 +1272,14 @@ fn effects_reset(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R 
 /// (`0x82db3c20`): owned by the running activity.
 fn timer_add_countdown(_: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     let owner = world.closure;
-    Ok(vec![int(world.timers.add(TimerKind::CountDown, get_float(call, 0), owner))])
+    // Co-op fork (M13): a timer a human's event starts fires under that human.
+    Ok(vec![int(world.timers.add_for(TimerKind::CountDown, get_float(call, 0), owner, world.event_player))])
 }
 
 /// `ChallengeTimer.AddCountupTimer()` (`0x82db3cc8`).
 fn timer_add_countup(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
     let owner = world.closure;
-    Ok(vec![int(world.timers.add(TimerKind::CountUp, 0.0, owner))])
+    Ok(vec![int(world.timers.add_for(TimerKind::CountUp, 0.0, owner, world.event_player))])
 }
 
 /// `ChallengeTimer.Remove*Timer(id)` (`0x82daa3f8`).
@@ -1307,7 +1336,13 @@ fn challenge_complete(lua: &mut Lua<World>, world: &mut World, call: &NativeCall
         let complete = copies.iter().filter(|g| g.objectives.iter().all(|o| o.state == super::objectives::Status::Complete)).count();
         if !copies.is_empty() && complete < rule.threshold(copies.len()) {
             let key = world.activities.activities[a].key;
-            world.coop_outcomes.push(crate::coop::outcomes::Outcome::Won { activity: key, process });
+            let player = super::objectives::subject_player(world);
+            let outcome = crate::coop::outcomes::Outcome::Won { activity: key, process, player };
+            if world.event_player.is_some() {
+                super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
+            } else {
+                world.coop_outcomes.push(outcome);
+            }
             return none();
         }
     }

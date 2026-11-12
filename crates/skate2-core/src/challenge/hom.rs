@@ -181,7 +181,8 @@ pub(crate) fn receive(world: &mut World, event: &Event) {
             _ => None,
         })
     });
-    if world.hom.game_type_flags != 4 || player != Some(0) {
+    // Co-op fork (M13): the local skater is the campaign's own slot (1 on a joiner), not 0.
+    if world.hom.game_type_flags != 4 || player != Some(super::players::network_local_player(world)) {
         return;
     }
     if message.kind == super::keys::hash32("cMsgWipeout") {

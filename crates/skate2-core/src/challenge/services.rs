@@ -272,7 +272,7 @@ pub(crate) fn game_unload(world: &mut World) {
 /// OnTimerExpired8289d198. Reemit painter notifications even when their
 /// cached keys have not changed: the service globals just resumed.
 pub(crate) fn receive(world: &mut World, event: &Event) {
-    let Event::TimerExpired { timer } = event else { return };
+    let Event::TimerExpired { timer, .. } = event else { return };
     if *timer == world.services.security_timer_id { deactivate_security(world); }
     else if *timer == world.services.security_time_out_warning_timer_id {
         world.send(Event::Challenge(Message::new("cMsgServiceAboutToEnd", vec![("ServiceKey", Field::Key(0))])));

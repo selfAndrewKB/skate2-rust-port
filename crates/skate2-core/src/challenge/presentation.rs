@@ -537,7 +537,7 @@ fn atol(s: &str) -> i32 {
 pub fn receive(world: &mut World, event: &Event) {
     let Some(active) = world.presentation.active else { return };
     match event {
-        Event::TimerExpired { timer } => {
+        Event::TimerExpired { timer, .. } => {
             if *timer == world.presentation.timer {
                 world.presentation.timer = 0;
                 play_next(world, active);

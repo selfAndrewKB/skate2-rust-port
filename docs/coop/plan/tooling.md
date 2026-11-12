@@ -83,7 +83,10 @@ the nearest prop within 30 m a velocity at each tick and counts it as touched by
 skater (its claim and stream follow, or the touch waits while another seat is moving it,
 M10.1), `SKATE2_DIAGNOSTIC_COOP_NUDGE_ROUND` the same in round ticks, so two seats' nudges can
 be timed against each other; `SKATE2_DIAGNOSTIC_COOP_LEAVE=<round tick>` makes the seat quit
-the game at that round tick, as a player would (M11: the AI owner's departure); `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>` scans the security guard areas
+the game at that round tick, as a player would (M11: the AI owner's departure);
+`SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND=<round tick>[,<tick>...]` makes the seat's skater wipe out at
+each round tick (a vehicle-collision request on the physics' wipeout ledger, M13: a bail's
+effect on each player's copy); `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>` scans the security guard areas
 within 1500 m of the skater and traces the nearest point of each (the bench's way into a
 chase).
 The career's own `SKATE2_DIAGNOSTIC_CAREER_*` switches run only under the career demo, not on a

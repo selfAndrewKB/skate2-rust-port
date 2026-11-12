@@ -590,6 +590,31 @@ pub fn add_points_objective(world: &mut World, group: u32, requirement: u32) {
     activate_objectives(world, group);
 }
 
+/// Co-op fork (M13): the copy of a held group a script's operation means. While a graph
+/// handles a human's event (`World::event_player`, set as the message is delivered), that
+/// human's copy of the same activity at the same ordinal among its player's groups; otherwise
+/// the group itself (the first player's, which the script holds). So a bail, a trigger or a
+/// trick of either human drives that human's copy on every console alike, and the other
+/// human's attempt is untouched.
+pub(crate) fn subject_copy(world: &World, group: u32) -> u32 {
+    let (Some(_), Some(player)) = (world.coop.as_ref(), world.event_player) else { return group };
+    let Some(gi) = world.objectives.group_index(group) else { return group };
+    let g = &world.objectives.groups[gi];
+    if g.player == player {
+        return group;
+    }
+    let ordinal = world.objectives.groups.iter().filter(|x| x.activity == g.activity && x.player == g.player).position(|x| x.id == g.id);
+    ordinal
+        .and_then(|ordinal| world.objectives.groups.iter().filter(|x| x.activity == g.activity && x.player == player).nth(ordinal))
+        .map_or(group, |x| x.id)
+}
+
+/// Co-op fork (M13): the player a script's decision is about: the human whose event the graph
+/// handles, else this console's own.
+pub(crate) fn subject_player(world: &World) -> i32 {
+    world.event_player.unwrap_or_else(|| super::players::network_local_player(world))
+}
+
 fn group_mut(world: &mut World, group: u32) -> Option<&mut ObjectiveGroup> {
     let i = world.objectives.group_index(group)?;
     Some(&mut world.objectives.groups[i])

@@ -66,6 +66,79 @@ Front page: [README](../README.md).
     puppet's own graph has no moods since M5). All three are M6's first targets: the puppet
     spawned with the owner's recipe, its animation from the owner's motion state and flags.
 
+## Play (2026-11-12, the player, M12 build 4be2feea)
+
+The player's field test on the lobby (muted, the waterfront, then `m_2d_01_photo_tm_burnette`,
+"A Little Help Here", from its sign-up by the host): the seat logs are kept as
+`../bench/evidence/probe/2026-11-12-field-test-seat-{1,2}.log` (the round `1639400822`, the
+mission's graph from seat 1's line 43582 and seat 2's 46693).
+
+70. **The photographer stands in two places** (the player, in play). A story character is
+    every console's own (`ownership::Kind::StoryCharacter` is `Rule::EachConsole`, M5). The
+    host's photographer is the intro scene's: the scene instanced him for player 0 (seat 1's
+    line 43605, `spawned as pedestrian 33557996`, at the scene's tick 936383). The joiner's
+    scene instanced no characters (`instanced 0 characters for this console's local player
+    index Some(1)`), so its photographer is the challenge's own spawn at the photographer
+    locator, 1,400 ticks (23 s) later (seat 2's line 47095, `33558129`). From then on each copy
+    walks its own waypoint and runs its own AI graph. Fix: M14, a story character owned and
+    streamed as the challenge AI skaters are (one owner, puppets elsewhere, the scene instancing
+    it for the owner).
+71. **The joiner's objective copy dies at the host's first bail** (the logs; the player saw
+    the joiner unable to complete). Every console's scripts hear every human's skater messages
+    from the lockstep frames with the message's `PlayerID` the campaign slot, and the shipped
+    handlers compare it with `vars.LocalPlayerID`, which `Online.GetLocalPlayerID` answers as
+    0 on every console (item 48): so the host's events are "the player's" to the joiner's
+    scripts and the joiner's own are nobody's. On the host's bail seat 2's script failed its
+    group too (`HoM start player=Some(0)` then `ObjectivesFailed ... decided here` on seat 2),
+    the note carried only the group's ordinal, and the receiver resolved it against the
+    sending console's player: the joiner's copy. Seven times the joiner's `ObjectivesFailed`
+    landed exactly 502 ticks (the lockstep lead) after the host's (ticks 937566/938068,
+    938650/939152, ...), and the restart flow re-armed the host's copy alone (the script holds
+    the first player's group), so from tick 938068 to the mission's end at 956707 the joiner
+    had no live objective, and the restart at 958635 re-made the host's copies alone. **Fixed
+    (2026-11-12, M13):** a human's skater message reaches the graphs as player 0's, and while
+    a graph handles it the group natives act on that human's copy (`World::event_player`,
+    `objectives::subject_copy`), the state changes and timers it starts carry that human, and
+    a forced outcome in reaction to it is applied where it is made, at the event's tick, on
+    every console (a note of it landed a lockstep lead after the restart timer); a decision
+    outside any human's event travels as a note naming its player (protocol 125). Proof:
+    `../bench/evidence/probe/2026-11-12-m13-bail.md`.
+72. Whether the joiner's copy of a photo objective arms when the joiner skates into the zone
+    is unproven: in the field test seat 2's skater made one trigger event in the whole mission
+    against the host's 250 (it stood in its start volume), and the crawl completes copies by
+    the diagnostic, never by a skater in a volume. The two players' trigger events name
+    different volume ids for the mission (`4ea7103e38706` and `4ea6c03e38706`); the objective
+    arms on the attribute's scoring boundary id. M15's probe: the joiner teleported into the
+    zone, its copy expected `Enabled -> Active` on both seats, for each objective kind.
+73. A story character's pedestrian id is drawn from the same counter as the census's, and the
+    world stream names an owned pedestrian by its owner's slot and local id: seat 2's
+    photographer `02000e71` was later also the host's census pedestrian `02000e71`
+    (`Pedestrian 02000e71 None -> Remote(0)` on seat 2 at line 47892, a puppet of another
+    entity), so the ownership table's entry for the story character read as the host's. Not
+    seen to break anything in this log; M14 names a story character by its owner as the owned
+    skaters are named.
+74. The Hall of Meat manager tracked `PlayerID` 0's bails as the local skater's on every
+    console (`hom::receive`, the single-player 0), so the joiner's own bails (slot 1) were never
+    tracked there and the host's were. **Fixed (2026-11-12, M13):** the manager's player is the
+    campaign's own slot.
+75. The field test's bandwidth, from the stream traces of 4.9 hours: the world stream 6.0 and
+    6.2 kB/s a seat on average, 7.2 and 9.9 kB/s at the peak; 27 B a pedestrian sample at 20 Hz
+    (about 570 B/s a streamed pedestrian); a skater's look 31 kB each, 318 sent (9.9 MB), one
+    at every ambient respawn; the skater frames and the facts uncounted. Items 2 and 33 stand;
+    M17 builds the delta coding, the send-on-error cadence, the looks by hash and a meter on
+    every channel.
+76. **A script's state and vars are one per activity, not per player** (M13's residue): the
+    graph's state (`challenge_running`, a restart state) and its `vars` table (bail counts,
+    timers) are shared by both humans' events, so two humans bailing within one restart
+    interleave in the one state machine. A skater message names the subject, and the state
+    changes and timers a handler of it starts carry it (the bail's restart runs from a timer:
+    without that, the M13 probe's run 4 saw the joiner's bail reset the host's copy and leave
+    the joiner's failed); a handler reached by none of those (a scene's end, a HUD press) acts
+    on the held group, the first player's copy; a human with no copy of the activity (one
+    made before they joined) drives the first player's copy. Also the central message of a bail
+    (`ID_CHALLENGE_CENTRAL_MESSAGE_OBJECTIVE_BAILED`) shows on every console for either
+    human's bail, as the design's "everyone" kind has it; play may want it the bailer's alone.
+
 ## Session ([topic](topics/session.md))
 
 7. Two primed saves continue at the same spot with the same look; the bench teleports the seats

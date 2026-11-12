@@ -1875,6 +1875,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                             crate::coop::trace(format_args!("prompt {answer:?} answered here: queued for the next facts"));
                         }
                         for outcome in decided {
+                            // M13: every console's scripts decide alike on a human's event; the
+                            // note is that human's console's to send.
+                            if outcome.player() >= 0 && outcome.player() != local {
+                                crate::coop::trace(format_args!("outcome {outcome:?} decided here for player {}: its own console's note carries it", outcome.player()));
+                                continue;
+                            }
                             let (kind, activity, value) = outcome.to_wire();
                             round.queue_outcome(kind, activity, value);
                             crate::coop::trace(format_args!("outcome {outcome:?} decided here: queued for the next facts"));

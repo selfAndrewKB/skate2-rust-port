@@ -119,7 +119,8 @@ pub enum Event {
     /// speech id.
     SpeechEnded { character: i32, id: i32 },
     /// `cMsgTimerExpired`.
-    TimerExpired { timer: i32 },
+    /// Co-op fork (M13): `subject` is the human whose event started the timer, if one did.
+    TimerExpired { timer: i32, subject: Option<i32> },
     /// `cMsgFMVFinishedPlaying`.
     FmvFinishedPlaying,
     /// `cMsgNISComplete` (`NISManager::EndNIS` `0x828a3200`):
@@ -133,7 +134,8 @@ pub enum Event {
     Challenge(Message),
     /// `cEventChangeState` (`0x828b5a30`): its destructor, run by the flush,
     /// enters the named state of a state graph.
-    ChangeState { graph: usize, state: u32 },
+    /// Co-op fork (M13): `subject` is the human whose event queued the change, if one did.
+    ChangeState { graph: usize, state: u32, subject: Option<i32> },
     /// `cMsgTriggerEnterCollision`/`cMsgTriggerExitCollision` from
     /// `cTriggerVolumeMessageGroup::Update` (`0x82e24020`), once with the
     /// trigger's global id and once with its local id.
@@ -161,7 +163,7 @@ impl Event {
                 Message::new("cMsgNISChallengeNotify", vec![("NotificationID", Field::Number(*notification as f32))])
             }
             Self::HudContinue => Message::new("cMsgHUDContinue", Vec::new()),
-            Self::TimerExpired { timer } => Message::new("cMsgTimerExpired", vec![("TimerID", Field::Number(*timer as f32))]),
+            Self::TimerExpired { timer, .. } => Message::new("cMsgTimerExpired", vec![("TimerID", Field::Number(*timer as f32))]),
             Self::FmvFinishedPlaying => Message::new("cMsgFMVFinishedPlaying", vec![("FileName", Field::Nil)]),
             // cMsgSpeechEnded_BuildMessageTable 0x828b85e8 pushes nil for Character.
             Self::SpeechEnded { id, .. } => Message::new("cMsgSpeechEnded", vec![("Character", Field::Nil), ("id", Field::Number(*id as f32))]),
@@ -447,6 +449,10 @@ pub struct World {
     pub attached: HashSet<u64>,
     /// `ILuaStateHolder::SetClosureData`: the activity whose handler runs.
     pub closure: Option<usize>,
+    /// Co-op fork (M13): the human (campaign slot) whose skater event a graph is handling,
+    /// while it is: the scripts hear every human's event as player 0's, and the group natives
+    /// act on that human's copy of the objectives (`objectives::subject_copy`).
+    pub event_player: Option<i32>,
     pub pointers: Pointers,
     pub hud: HudManager,
     /// The `objective` HUD component (`ObjectiveHUD`).
@@ -834,6 +840,7 @@ impl ChallengeSystem {
                 post_office: PostOffice::default(),
                 attached: HashSet::new(),
                 closure: None,
+                event_player: None,
                 pointers: Pointers::default(),
                 hud: HudManager::default(),
                 objective_hud: ObjectiveHudComponent::default(),
@@ -1322,7 +1329,7 @@ impl ChallengeSystem {
             let count = targets.len();
             for (ordinal, index) in targets {
                 if let (Ok(group), Ok(index)) = (u8::try_from(ordinal), u8::try_from(index)) {
-                    self.world.coop_outcomes.push(crate::coop::outcomes::Outcome::ObjectiveComplete { activity: key, group, index });
+                    self.world.coop_outcomes.push(crate::coop::outcomes::Outcome::ObjectiveComplete { activity: key, group, index, player: local });
                 }
             }
             return count;
@@ -1347,10 +1354,22 @@ impl ChallengeSystem {
     /// the player's own terms counts toward the activity's rule, which settles the mission once
     /// (`Rule::completes`, `Rule::fails`) as the script's `CompleteChallenge` or `LoseChallenge`
     /// would have on every console at once.
-    pub fn apply_coop_outcome(&mut self, player: i32, outcome: crate::coop::outcomes::Outcome, tick: u32) {
+    pub fn apply_coop_outcome(&mut self, sender: i32, outcome: crate::coop::outcomes::Outcome, tick: u32) {
+        apply_coop_outcome_to(&mut self.world, sender, outcome, tick);
+    }
+}
+
+/// [`ChallengeSystem::apply_coop_outcome`] on a world: a note's arrival, or (M13) a script's
+/// decision in reaction to a human's event applied where it is made, at the event's tick,
+/// since every console's script hears the lockstep event at that tick and decides alike (a
+/// note of it would land a lockstep lead later, after the restart the same handler's timer
+/// starts: the M13 probe's run 5).
+pub fn apply_coop_outcome_to(world: &mut World, sender: i32, outcome: crate::coop::outcomes::Outcome, tick: u32) {
+    {
         use crate::coop::outcomes::Outcome;
-        let world = &mut self.world;
         let key = outcome.activity();
+        // M13: the note names its player; a note without one is the sender's.
+        let player = if outcome.player() >= 0 { outcome.player() } else { sender };
         let Some(activity) = world.activities.find(key) else {
             crate::coop::trace(format_args!("outcome {outcome:?} from player {player} at tick {tick}: no activity {key:#018x}"));
             return;
@@ -1368,7 +1387,7 @@ impl ChallengeSystem {
             .map(|g| (g.id, g.objectives.len()));
         let humans = world.coop.as_ref().map_or(1, |campaign| campaign.players.len());
         let rule = super::coop_rule(world, activity).map(|(rule, _, name)| (rule, name));
-        crate::coop::trace(format_args!("outcome {outcome:?} from player {player} applied at tick {tick}: group {group:?}, rule {rule:?}"));
+        crate::coop::trace(format_args!("outcome {outcome:?} from player {sender} applied at tick {tick} to player {player}: group {group:?}, rule {rule:?}"));
         match outcome {
             Outcome::ObjectiveComplete { index, .. } => {
                 if let Some((id, _)) = group {
@@ -1416,7 +1435,9 @@ impl ChallengeSystem {
             }
         }
     }
+}
 
+impl ChallengeSystem {
     /// [`MarkerRules`] for the current challenge state.
     #[must_use]
     pub fn session_marker_rules(&self) -> MarkerRules {
@@ -1721,8 +1742,8 @@ impl ChallengeSystem {
         loop {
             self.deliver_terminations();
             let Some(event) = self.world.queue.pop_front() else { break };
-            if let Event::ChangeState { graph, state } = event {
-                runtime::change_state_event(&mut self.challenge, &mut self.world, graph, state);
+            if let Event::ChangeState { graph, state, subject } = event {
+                runtime::change_state_event(&mut self.challenge, &mut self.world, graph, state, subject);
                 continue;
             }
             // Sk8ChallengeSystem's own handler, which its constructor registers.
@@ -1743,7 +1764,15 @@ impl ChallengeSystem {
             audio_handlers::receive(&mut self.world, &event);
             services::receive(&mut self.world, &event);
             if let Some(message) = event.lua_message() {
+                // Co-op fork (M13): a timer fires under the subject its start had.
+                let subject = match &event {
+                    Event::TimerExpired { subject, .. } => *subject,
+                    _ => None,
+                };
+                let previous = self.world.event_player;
+                self.world.event_player = subject.or(previous);
                 runtime::route_message(&mut self.challenge, &mut self.world, &message);
+                self.world.event_player = previous;
             }
         }
         // Native cLuaStateManager::CreateState (0x82aae998, call at

@@ -20,6 +20,9 @@ pub struct Timer {
     pub paused: bool,
     expired: bool,
     owner: Option<usize>,
+    /// Co-op fork (M13): the human whose event started the timer, if one did; its expiry is
+    /// delivered under that subject, so a bail's restart timer resets the bailer's copy.
+    subject: Option<i32>,
 }
 
 #[derive(Debug, Default)]
@@ -36,9 +39,15 @@ impl TimerManager {
     /// stored as 60 Hz ticks (`(int)(t * 60)`).
     #[expect(clippy::cast_possible_truncation, reason = "(int)(float)")]
     pub fn add(&mut self, kind: TimerKind, seconds: f32, owner: Option<usize>) -> i32 {
+        self.add_for(kind, seconds, owner, None)
+    }
+
+    /// `add`, with the subject the timer's expiry is delivered under (co-op fork, M13).
+    #[expect(clippy::cast_possible_truncation, reason = "(int)(float)")]
+    pub fn add_for(&mut self, kind: TimerKind, seconds: f32, owner: Option<usize>, subject: Option<i32>) -> i32 {
         self.next_id += 1;
         let ticks = (seconds * 60.0) as i32;
-        self.timers.insert(self.next_id, Timer { ticks, kind, paused: false, expired: false, owner });
+        self.timers.insert(self.next_id, Timer { ticks, kind, paused: false, expired: false, owner, subject });
         self.next_id
     }
 
@@ -100,7 +109,7 @@ pub fn update(world: &mut World) {
         }
         match timer.kind {
             TimerKind::CountDown if timer.ticks <= 0 => {
-                expired.push(id);
+                expired.push((id, timer.subject));
                 timer.expired = true;
             }
             TimerKind::CountUp if timer.ticks == i32::MAX => timer.expired = true,
@@ -116,7 +125,7 @@ pub fn update(world: &mut World) {
         }
         true
     });
-    for id in expired {
-        world.send(Event::TimerExpired { timer: id });
+    for (id, subject) in expired {
+        world.send(Event::TimerExpired { timer: id, subject });
     }
 }

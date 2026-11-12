@@ -49,6 +49,16 @@ fn diagnostic_leave_tick() -> Option<u32> {
     *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_LEAVE").ok().and_then(|tick| tick.parse().ok()))
 }
 
+/// `SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND=<tick>[,<tick>...]` (M13): at each round tick the local
+/// skater wipes out (`diagnostic_bail_local_player`), so the bench proves a bail's effect on
+/// each player's copy of the objectives.
+fn diagnostic_bail_ticks() -> &'static [u32] {
+    static TICKS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+    TICKS.get_or_init(|| {
+        std::env::var("SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND").ok().map_or_else(Vec::new, |ticks| ticks.split(',').filter_map(|tick| tick.trim().parse().ok()).collect())
+    })
+}
+
 fn diagnostic_completes() -> &'static [(u32, Option<i32>)] {
     static SPEC: std::sync::OnceLock<Vec<(u32, Option<i32>)>> = std::sync::OnceLock::new();
     SPEC.get_or_init(|| {
@@ -368,6 +378,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         if diagnostic_leave_tick() == Some(tick) {
             trace(format_args!("diagnostic: leaving the game at round tick {tick}"));
             self.online_leave_game();
+        }
+        if diagnostic_bail_ticks().contains(&tick) {
+            trace(format_args!("diagnostic: bail at round tick {tick}: {}", self.diagnostic_bail_local_player()));
         }
         for &(at, player) in diagnostic_completes() {
             if at == tick

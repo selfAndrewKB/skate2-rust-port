@@ -182,7 +182,7 @@ pub fn run(world: &mut World, graph: usize) {
     if let Some(current) = g.current {
         register_state(world, graph, current);
     } else {
-        world.send(Event::ChangeState { graph, state: hash32("initial") });
+        world.send(Event::ChangeState { graph, state: hash32("initial"), subject: None });
     }
 }
 
@@ -208,13 +208,17 @@ fn clear_vars(lua: &mut Lua<World>, world: &mut World, graph: usize) {
     world.activities.graph_mut(graph).vars_in_vm = false;
 }
 
-/// `cEventChangeState` delivery (its destructor, `0x828b5a50`).
-pub fn change_state_event(lua: &mut Lua<World>, world: &mut World, graph: usize, state_hash: u32) {
+/// `cEventChangeState` delivery (its destructor, `0x828b5a50`). Co-op fork (M13): the exit and
+/// enter handlers run under the subject the change was queued with.
+pub fn change_state_event(lua: &mut Lua<World>, world: &mut World, graph: usize, state_hash: u32, subject: Option<i32>) {
     if state_hash == 0 || graph >= world.activities.activities.len() {
         return;
     }
     let state = world.activities.graph(graph).state_by_hash(state_hash);
+    let previous = world.event_player;
+    world.event_player = subject.or(previous);
     enter_state(lua, world, graph, state);
+    world.event_player = previous;
 }
 
 /// `cStateGraph::EnterState` (`0x82ce67a8`).
@@ -299,12 +303,45 @@ impl Delivery<'_> {
     }
 }
 
+/// Co-op fork (M13): the human a campaign message is about, when it is one: its `PlayerID` is
+/// a seat of the campaign (the AI skaters sit after the seats, `players::script_slot`).
+fn campaign_subject(world: &World, message: &Message) -> Option<i32> {
+    let campaign = world.coop.as_ref()?;
+    let player = message.fields.as_ref()?.iter().find(|(name, _)| *name == "PlayerID").and_then(|(_, value)| match value {
+        #[expect(clippy::cast_possible_truncation, reason = "the message's int")]
+        Field::Number(n) => Some(*n as i32),
+        _ => None,
+    })?;
+    usize::try_from(player).ok().filter(|&slot| slot < campaign.seats).map(|_| player)
+}
+
+/// Co-op fork (M13): a human's message as a campaign's scripts hear it. The scripts see
+/// themselves as player 0 and no other human by number (open items 48, 56), so every human's
+/// skater event reaches the graphs as player 0's, and while a graph handles it the group
+/// natives act on that human's copy of the objectives (`World::event_player`,
+/// `objectives::subject_copy`) and a forced outcome is that human's (`coop::outcomes`). An
+/// AI's message and one without a player are untouched.
+fn as_the_scripts_hear(message: &Message) -> Message {
+    let fields = message
+        .fields
+        .as_ref()
+        .map(|fields| fields.iter().map(|(name, value)| if *name == "PlayerID" { (*name, Field::Number(0.0)) } else { (*name, value.clone()) }).collect());
+    Message { kind: message.kind, fields }
+}
+
 /// `cStateGraph::HandleLocalMessage` (`0x82ce4e38`): deliver to one graph
 /// with the activity as closure data.
 pub fn handle_local_message(lua: &mut Lua<World>, world: &mut World, graph: usize, message: &Message) {
-    let mut delivery = Delivery { message, table: None, table_reference: None };
+    let named = campaign_subject(world, message);
+    let heard = named.map(|_| as_the_scripts_hear(message));
+    let mut delivery = Delivery { message: heard.as_ref().unwrap_or(message), table: None, table_reference: None };
     world.closure = Some(graph);
+    // A message naming no player (a state's exit or enter) is delivered under the subject in
+    // force: the human whose event caused the state change.
+    let previous = world.event_player;
+    world.event_player = named.or(previous);
     handle_message(lua, world, graph, &mut delivery);
+    world.event_player = previous;
     world.closure = None;
     delivery.finish(lua);
 }
@@ -315,11 +352,16 @@ pub fn route_message(lua: &mut Lua<World>, world: &mut World, message: &Message)
     if graphs.is_empty() {
         return;
     }
-    let mut delivery = Delivery { message, table: None, table_reference: None };
+    let named = campaign_subject(world, message);
+    let heard = named.map(|_| as_the_scripts_hear(message));
+    let mut delivery = Delivery { message: heard.as_ref().unwrap_or(message), table: None, table_reference: None };
+    let previous = world.event_player;
+    world.event_player = named.or(previous);
     for graph in graphs {
         world.closure = Some(graph);
         handle_message(lua, world, graph, &mut delivery);
     }
+    world.event_player = previous;
     world.closure = None;
     delivery.finish(lua);
 }
@@ -488,6 +530,8 @@ fn change_state_from_script(lua: &mut Lua<World>, world: &mut World, call: &Nati
         _ => return Err(lua.error("ChangeState: missing state graph")),
     };
     let hash = hash32(&String::from_utf8_lossy(&name));
-    world.send(Event::ChangeState { graph, state: hash });
+    // Co-op fork (M13): the state change carries the human whose event caused it, so the new
+    // state's enter handler acts on that human's copy of the objectives.
+    world.send(Event::ChangeState { graph, state: hash, subject: world.event_player });
     Ok(Vec::new())
 }

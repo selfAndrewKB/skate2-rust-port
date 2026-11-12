@@ -187,7 +187,7 @@ pub(crate) fn receive(world: &mut World, event: &Event) {
                 }
             }
         }
-        Event::TimerExpired { timer } if timer == world.ots_discovery.disallow_timer => {
+        Event::TimerExpired { timer, .. } if timer == world.ots_discovery.disallow_timer => {
             world.ots_discovery.allow_sign_up = true;
             world.ots_discovery.disallow_timer = 0;
         }

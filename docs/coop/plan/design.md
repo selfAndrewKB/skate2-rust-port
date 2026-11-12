@@ -337,6 +337,26 @@ shared is the AI's run itself: two consoles' copies of one pro skate their own p
 streamed, owned AI skater remains the alternative if play finds the copies' difference
 matters.
 
+**A script's decision names its player (2026-11-12, M13).** The scripts are single-player: a
+handler compares a skater message's `PlayerID` with `vars.LocalPlayerID`, which is 0 on every
+console (the scripts see themselves as player 0 and no other human by number, open items 48,
+56). Every console's scripts hear every human's skater messages from the lockstep frames, so
+with the slot as the `PlayerID` the host's events were "the player's" to the joiner's scripts
+and the joiner's own were nobody's, and a note carried no player (the receiver took the
+sender's), so the host's bail failed the joiner's copy (open item 71). Now a human's skater
+message reaches the graphs as player 0's, and while a graph handles it the group natives act
+on that human's copy of the objectives (`World::event_player`, `objectives::subject_copy`:
+the same ordinal among that player's groups), so a bail, a trigger or a trick of either human
+drives that human's copy on every console alike, and a forced outcome in reaction to it is
+applied where it is made, at the event's tick, on every console (every console's script hears
+the lockstep event then and decides alike; a note of it landed a lockstep lead later, after
+the restart the same handler's timer had started, the probe's run 5). The state changes and
+timers a handler of a human's event starts carry that human, so a bail's restart (a timer)
+resets the bailer's copy. A decision made outside any human's event (the AI's run, a scene's
+end, the bench's win) stays the deciding console's own player's and travels as a note that
+now names its player on the wire (protocol 125). What is still one per activity: the graph's
+state and its `vars` (open item 76).
+
 **The AI skaters: one owner (2026-11-11, M10).** A campaign round's challenge AI skaters are
 one console's, the first player's (`CampaignWorld::ai_owner`): it simulates them as the career
 does; its facts carry their completed outputs at their slots (`Facts.owned`, protocol 123),

@@ -74,6 +74,35 @@ lobby and by `SKATE2_COOP_RULES`. Front page: [README](../../README.md). Design:
 **M5 gave the `Security` and `Service` kinds their world:** a chase is any player's (the
 facts), a service bought by anyone is everyone's ([prompts](prompts.md), [world](world.md)).
 
+## The subject of a script's decision (2026-11-12, M13)
+
+- **A human's event drives that human's copy.** The scripts hear every human's skater message
+  as player 0's (`runtime::as_the_scripts_hear`), and while a graph handles it the held group
+  resolves to that human's copy (`objectives::subject_copy`), so `FailAllObjectiveStatus`,
+  `ForceObjectiveComplete`, the resets and activations of a bail's restart act on the bailer's
+  copy on every console alike, and the other human's attempt is untouched. Before M13 the
+  host's events were the joiner's scripts' "player" and the joiner's own were nobody's, so the
+  host's bail failed the joiner's copy and nothing re-armed it (open item 71, the field test).
+- **A decision on a human's event applies at once, everywhere.** Every console's script hears
+  the lockstep event at the same tick and decides alike, so the forced outcome is applied
+  where it is made, at that tick (`apply_coop_outcome_to`); the probe's run 5 showed why a
+  note cannot carry it: the note landed a lockstep lead later (120 ticks on the host), after
+  the restart timer the same handler started had re-armed the copy, which the late failure
+  then killed. A decision outside any human's event (the AI's run, the bench's win) travels
+  as a note that names its player (`coop::outcomes`, protocol 125), applied to that player's
+  copy at the note's tick, the sender's when it names none.
+- **The Hall of Meat manager's player** is the campaign's own slot (item 74), so a joiner's
+  bails are tracked on the joiner.
+- Proof: `../bench/evidence/probe/2026-11-12-m13-bail.md` (the photo mission, each seat
+  wiping out at a round tick: its own copy failed and re-armed, the other's untouched).
+- **State changes and timers carry the subject.** A `ChangeState` and a timer started while a
+  human's event is handled are delivered under that human (`Event::ChangeState.subject`,
+  `Timer.subject`), so the restart a bail's handler schedules resets the bailer's copy. The
+  probe's run 4, before this, saw the joiner's bail reset the host's copy (its completed points
+  objective to Disabled) and leave the joiner's copy failed.
+- Residue (item 76): the graph's state and `vars` are one per activity; a handler reached by
+  no skater message, state change or timer of a human's acts on the first player's copy.
+
 ## History
 
 - 2026-11-10 M7: the kinds applied; the families named (open item 11 retired). The first
