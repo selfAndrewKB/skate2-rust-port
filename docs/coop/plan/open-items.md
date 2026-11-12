@@ -310,16 +310,37 @@ Front page: [README](../README.md).
     marks (`prompts_applied`, `outcomes_applied` in `Round`, never reset for a slot). Seen in the
     M9 review, not on the bench. The fix is to reset a slot's marks when that player's stint
     changes.
-64. `CampaignWorld.players` never shrinks when a player leaves, so after a departure a rule's
-    count of copies (`Everyone`'s completion, `Anyone`'s failure, the won and lost notes') is
-    one more than the players left and can never be met. Pre-existing in the objective copies
-    (`siblings.len()`), noted in the M9 review; the leave handling is where to shrink it.
-65. The challenge AI skaters' owner is the first player (`CampaignWorld::ai_owner`, M10) and
-    never changes: when that player leaves the round, its AI skaters' facts and frames stop,
-    the other consoles' scripts see the AI's slot destroyed (its last frame) and the mission
-    has no AI until the round restarts with the owner back (M8's reload). A handoff to the next
-    player (the owner's AI state is not streamed, so the new owner would spawn the AI afresh
-    at its last streamed position) is the design's next step if play reaches it.
+64. Fixed (2026-11-11, M11): `CampaignWorld.players` never shrank when a player left, so a
+    rule's count of copies (`Everyone`'s completion, `Anyone`'s failure, the won and lost
+    notes') was one more than the players left and could never be met. The leave handling
+    (`online_player_disconnected`) now removes the leaver from `players`; the rules count the
+    objective copies of the players still in the round (`present_siblings`), and the won notes
+    count the players left. The slot space does not shrink with them: `CampaignWorld.seats`, the
+    round's seat count, is the humans' and the AI skaters' boundary everywhere `players.len()`
+    had been. Proof: the hand-off probe (65), seat 2 alone after seat 1 left, "1 of 2 seats
+    left"; the nine-mission regression `2026-11-11-crawl-m11` [see the run note in missions].
+65. **Fixed (2026-11-11, M11): the AI skaters' hand-off.** The owner was the first player and
+    never changed: when it left, its AI skaters' facts and frames stopped, the other consoles'
+    scripts saw the slots destroyed and the mission had no AI. Now the owner is the lowest
+    player still in the round (`ai_owner` over the shrinking `players`, 64), decided at the
+    tick every console delivers the leave. Until the next owner's facts carry the AI, the
+    round keeps the leaver's last owned frames in the tick's frames (`Round.ai_handoff`, at
+    most `AI_HANDOFF_GRACE` = 600 ticks, then the slots end), so no console's scripts see a
+    destruction. The new owner spawns the skaters afresh from the spawn commands it had dropped
+    as the old owner's (`SessionAi.streamed_spawns`, kept by slot while streamed), each at the
+    last frame the old owner's facts carried (its path and behaviour start over), drops their
+    puppets, and from its next facts carries their frames and streams their bodies; every other
+    console keeps its puppets for the new stream (the same slot ids, their receivers already
+    dropped at the leave). `SKATE2_DIAGNOSTIC_COOP_LEAVE=<round tick>` makes a seat quit.
+    Proof (`../bench/evidence/probe/2026-11-11-m11-handoff.md`, build 44c1c62a): the S.K.A.T.E.
+    with seat 1 quitting at round tick 2700; seat 2 delivered the leave at 2821 with two pros
+    standing, owned them from 2822, spawned Koston and Carroll at their last frames, carried
+    them in its facts the same tick (its lead gone with the other player), sent their looks,
+    and played four more rounds with the camera switching to each leader; the scripts heard no
+    creation or destruction across the hand-off. What a new owner starts over is the AI's
+    routine (a leader mid-trick begins its run again); a script's camera switch to the AI in
+    the ticks between the take-over and the actor's build would find no actor (the M10 first
+    build's stop), not seen here. Not yet played by the player.
 66. An owned AI skater's puppet is silent: no audio record travels with its frames (the
     remote players' do), so the pro's wheels and landings sound only on the owner's console.
     The owner's `controller_audio` record is the thing to carry, as the player's own

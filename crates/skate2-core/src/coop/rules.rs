@@ -238,7 +238,11 @@ impl RuleTable {
 #[derive(Clone, Debug)]
 pub struct CampaignWorld {
     pub rules: RuleTable,
+    /// The players still in the round, by challenge index (M11: a leaver goes, open item 64).
     pub players: Vec<i32>,
+    /// The round's seats: the humans' slots are `0..seats`, the AI skaters' follow (the slot
+    /// space does not shrink when a player leaves).
+    pub seats: usize,
     /// M9: the players whose scripts won an activity on their own terms (challenge key, player)
     /// and lost one (key, player, result), from the outcome notes; the activities the rules have
     /// settled from them, so a second note settles nothing again.
@@ -257,6 +261,15 @@ impl CampaignWorld {
     #[must_use]
     pub fn ai_owner(&self) -> i32 {
         self.players.iter().copied().min().unwrap_or(0)
+    }
+
+    /// M11 (open items 64, 65): a player left the round. The rules count the players left; the
+    /// AI skaters' owner, if it was the leaver, is the next player, returned.
+    pub fn remove_player(&mut self, player: i32) -> Option<i32> {
+        let before = self.ai_owner();
+        self.players.retain(|&present| present != player);
+        let after = self.ai_owner();
+        (after != before).then_some(after)
     }
 }
 
@@ -464,6 +477,16 @@ mod tests {
         assert_eq!(table.rule_for(1, "other", 34), Rule::Everyone);
         assert_eq!(table.rule_for(1, "other", 35), Rule::Anyone);
         assert_ne!(table.hash(), RuleTable::builtin().hash());
+    }
+
+    #[test]
+    fn a_leave_moves_the_ai_owner_to_the_lowest_player_left() {
+        let mut campaign = CampaignWorld { rules: RuleTable::builtin(), players: vec![0, 1, 2], seats: 3, won: Vec::new(), lost: Vec::new(), decided: Vec::new(), chase_on: false };
+        assert_eq!(campaign.ai_owner(), 0);
+        assert_eq!(campaign.remove_player(2), None, "a non-owner's leave moves nothing");
+        assert_eq!(campaign.remove_player(0), Some(1), "the owner's leave hands the AI to the lowest player left");
+        assert_eq!((campaign.players.clone(), campaign.seats), (vec![1], 3), "the seats keep the slot space");
+        assert_eq!(campaign.remove_player(0), None, "a leave delivered twice moves nothing");
     }
 
     #[test]

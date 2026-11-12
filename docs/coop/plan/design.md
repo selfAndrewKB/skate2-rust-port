@@ -316,7 +316,9 @@ each console's own at first (the original's challenge AI is offline-only), their
 the scripts' per-player frames on that console alone; since M10 they are the first player's and
 their frames travel with its facts (§7 below). The ambient skaters stay each console's own (53)
 and, since M10.3, out of the scripts' frames altogether: on every console the scripts read the
-humans and the one AI run, and nothing that differs between consoles (69).
+humans and the one AI run, and nothing that differs between consoles (69). When the owner
+leaves, the next player owns them (M11: the AI stands at its last frames until the new owner's
+facts carry it, then starts its routine over, [ai-skaters](topics/ai-skaters.md)).
 
 **The competing kinds: outcomes as notes (2026-11-11, M9).** Each console plays a S.K.A.T.E.,
 jam or contest against its own AI, and a script that reads its AI's run decides for its own

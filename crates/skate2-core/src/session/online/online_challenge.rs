@@ -22,6 +22,11 @@ use crate::players_backend_settings::PlayersBackendSettings;
 use super::super::career::HeldPresentation;
 use skate2_net::protocol::{ClientMessage, FactsNotes, GameResult, MAX_PLAYERS, MAX_PRESENTED, Phase, PlayerStats, Presented, reset};
 use std::collections::{BTreeMap, BTreeSet};
+
+/// Co-op fork (M11): how long the challenge AI skaters stand at their leaving owner's last
+/// frames before the next owner's facts must carry them (its lead over the lockstep is about
+/// 120 ticks, and its spawns may wait on a character's scene).
+const AI_HANDOFF_GRACE: u32 = 600;
 use std::sync::{Arc, Mutex};
 
 /// Challenge ticks one simulation tick may run while catching up with the other players.
@@ -299,6 +304,10 @@ pub(super) struct Round {
     facts_sent: (u32, usize),
     /// Players whose `cMsgPlayerDisconnected` went to the challenge.
     disconnected: Vec<i32>,
+    /// Co-op fork (M11): a player who owned challenge AI skaters left at this tick (and its
+    /// index): its skaters stand at its last frames until another player's facts carry them,
+    /// `AI_HANDOFF_GRACE` ticks at most (open item 65).
+    ai_handoff: Option<(u32, usize)>,
     /// `mMyGameResult`.
     result: Option<GameResult>,
     stance: Arc<Mutex<[bool; MAX_PLAYERS]>>,
@@ -399,6 +408,7 @@ impl Round {
             leaving: BTreeSet::new(),
             facts_sent: (0, 0),
             disconnected: Vec::new(),
+            ai_handoff: None,
             result: None,
             stance,
             unpinned: None,
@@ -713,6 +723,10 @@ impl Round {
                 self.standing_owned[index] = owned;
             } else if facts.left {
                 disconnects.push(player);
+                if !self.standing_owned[index].is_empty() && self.ai_handoff.is_none() {
+                    trace(format_args!("player {player} left at tick {tick} with {} owned AI skaters: they stand at its last frames until the next owner's facts carry them, {AI_HANDOFF_GRACE} ticks at most", self.standing_owned[index].len()));
+                    self.ai_handoff = Some((tick, index));
+                }
             } else if facts.syncing.is_some_and(|(at, from)| at == stint && from <= tick) {
                 frames.push(self.standing_frame(index));
                 frames.extend(self.standing_owned[index].iter().cloned());
@@ -794,6 +808,21 @@ impl Round {
             }
         }
         self.disconnected.extend(&disconnects);
+        if let Some((since, from)) = self.ai_handoff {
+            let seats = self.players.len();
+            let carried = frames.iter().any(|frame| usize::try_from(frame.player).is_ok_and(|slot| slot >= seats));
+            if carried {
+                trace(format_args!("the next owner's facts carry the AI skaters at tick {tick}: player {from}'s last frames of them go"));
+                self.ai_handoff = None;
+                self.standing_owned[from].clear();
+            } else if tick.saturating_sub(since) > AI_HANDOFF_GRACE {
+                trace(format_args!("no player's facts carried the AI skaters in {AI_HANDOFF_GRACE} ticks after player {from} left: destroyed at tick {tick}"));
+                self.ai_handoff = None;
+                self.standing_owned[from].clear();
+            } else {
+                frames.extend(self.standing_owned[from].iter().cloned());
+            }
+        }
         frames.sort_by_key(|frame| frame.player);
         if let Ok(mut stance) = self.stance.lock() {
             for frame in &frames {
@@ -1183,6 +1212,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         world.coop = Some(crate::coop::rules::CampaignWorld {
             rules,
             players: (0..i32::try_from(count).unwrap_or(0)).collect(),
+            seats: count,
             won: Vec::new(),
             lost: Vec::new(),
             decided: Vec::new(),
@@ -1877,11 +1907,17 @@ impl<T, C> SelectedLiveSession<T, C> {
                         self.trace_online_inputs(&frames);
                     }
                     let local = self.online.round.as_ref().map_or(0, |round| round.local);
+                    let mut new_owner = None;
                     if let Some(career) = self.career.as_mut() {
                         for player in disconnects {
                             trace(format_args!("player {player} disconnected from the challenge"));
-                            career.online_player_disconnected(player);
+                            if let Some(owner) = career.online_player_disconnected(player) {
+                                new_owner = Some(owner);
+                            }
                         }
+                    }
+                    if let Some(owner) = new_owner {
+                        self.online_ai_owner_changed(owner);
                     }
                     let lead = self.online.round.as_ref().filter(|round| round.local_contributes()).map_or(0, |round| round.produced.saturating_sub(round.processed));
                     let tick = self.online.round.as_ref().map_or(0, |round| round.processed);
@@ -1928,7 +1964,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     // This console's own ambient skaters (each console's own, open item 53) stay
                     // out of the scripts' frames (M10.3, open item 69): their creation reached
                     // the scripts as AI players at each console's own ticks and slots.
-                    if let Some(humans) = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.players.len()) {
+                    if let Some(humans) = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.seats) {
                         let ambient = self.career_ai_skaters(humans, false).count();
                         if let Some(round) = self.online.round.as_mut().filter(|round| round.ambient_seen != ambient) {
                             round.ambient_seen = ambient;
@@ -2030,15 +2066,52 @@ impl<T, C> SelectedLiveSession<T, C> {
         if let Some(ai) = self.inner.ai.as_mut() {
             ai.streamed_challenge_ai = false;
             ai.campaign = false;
+            ai.streamed_spawns.clear();
         }
         self.online_drop_owned_puppets();
+    }
+
+    /// Co-op fork (M11, open item 65): the challenge AI skaters' owner left the round and the
+    /// next player owns them, at the tick every console delivers the leave. The new owner
+    /// spawns them afresh from the spawn commands it had dropped as the old owner's, each at
+    /// the last frame the old owner's facts carried (its path and behaviour start over), drops
+    /// their puppets, and from its next facts carries their frames and streams their bodies as
+    /// the old owner did; every other console keeps its puppets for the new stream.
+    fn online_ai_owner_changed(&mut self, new_owner: i32) {
+        let Some(round) = self.online.round.as_ref() else { return };
+        let (local, tick) = (round.local, round.processed);
+        let standing: Vec<MissionFrame> = round.ai_handoff.map(|(_, from)| round.standing_owned[from].clone()).unwrap_or_default();
+        let mine = new_owner == local;
+        crate::coop::trace(format_args!("campaign AI skaters: their owner left; owned by player {new_owner}{} from tick {tick}", if mine { " (this console)" } else { "; puppets here" }));
+        if !mine {
+            return;
+        }
+        let Some(ai) = self.inner.ai.as_mut() else { return };
+        ai.streamed_challenge_ai = false;
+        let spawns = std::mem::take(&mut ai.streamed_spawns);
+        let mut taken = Vec::with_capacity(spawns.len());
+        for (slot, command) in spawns {
+            let crate::ai::skater_manager::AmbientCommand::Spawn { slot, client_type, recipe, mut transform, profile_name } = command else { continue };
+            let last = standing.iter().find(|frame| usize::try_from(frame.player) == Ok(slot)).map(|frame| frame.position);
+            if let Some(position) = last {
+                transform[3] = [position[0], position[1], position[2], 1.0];
+            }
+            crate::coop::trace(format_args!("owned AI skater at slot {slot} (recipe {recipe:#018x}): this console takes it over at tick {tick}, spawned {}", last.map_or_else(|| "at its spawn".to_owned(), |position| format!("at its last frame {position:?}"))));
+            ai.deferred.push(crate::ai::skater_manager::AmbientCommand::Spawn { slot, client_type, recipe, transform, profile_name });
+            taken.push(slot);
+        }
+        for slot in taken {
+            if let Ok(slot) = i32::try_from(slot) {
+                self.online_drop_owned_puppet(slot);
+            }
+        }
     }
 
     /// The local skater's completed output of this tick, as the round's next facts; with it
     /// (M10) the frames of the challenge AI skaters this console owns, at their slots.
     fn produce_online_facts(&mut self) -> Result<(), SelectedLiveError> {
         let frames = self.career_mission_frames()?;
-        let owned_frames = match self.career.as_ref().and_then(|career| career.system.world().coop.as_ref().map(|campaign| (campaign.players.len(), crate::challenge::players::owns_challenge_ai(career.system.world())))) {
+        let owned_frames = match self.career.as_ref().and_then(|career| career.system.world().coop.as_ref().map(|campaign| (campaign.seats, crate::challenge::players::owns_challenge_ai(career.system.world())))) {
             Some((humans, true)) => self.career_ai_skater_frames(humans, true)?,
             _ => Vec::new(),
         };

@@ -82,13 +82,16 @@ pub(crate) struct SessionAi {
     pub(crate) scenes: AiSceneLoads,
     /// Spawns whose character is still loading: `SkaterManager::SpawnAi`'s PlayerLoader
     /// builds the skater once it has loaded.
-    deferred: Vec<AmbientCommand>,
+    pub(crate) deferred: Vec<AmbientCommand>,
     /// The path packages being read, oldest first.
     pub(crate) path_packages: Vec<PathPackageLoad>,
     /// Co-op fork (M10): a campaign round runs and another console owns its challenge AI
     /// skaters: a challenge spawn takes its row and its slot here, and no actor (the owner's
     /// frames drive a puppet and its facts reach the scripts).
     pub(crate) streamed_challenge_ai: bool,
+    /// Co-op fork (M11): the challenge spawns dropped here as another console's, by slot, so
+    /// this console can take the skaters over when their owner leaves (open item 65).
+    pub(crate) streamed_spawns: std::collections::BTreeMap<usize, AmbientCommand>,
     /// Co-op fork (M10): a campaign round runs: a challenge AI skater is one console's and
     /// its end is an unspawn on every console (no conversion to an ambient skater, which is
     /// each console's own and would leave the slot alive on the owner alone).
@@ -205,6 +208,7 @@ impl SessionAi {
             deferred: Vec::new(),
             path_packages: Vec::new(),
             streamed_challenge_ai: false,
+            streamed_spawns: std::collections::BTreeMap::new(),
             campaign: false,
         })
     }
@@ -680,6 +684,9 @@ impl<T, C> SelectedSession<T, C> {
                             self.try_destroy_later_skaters(vec![skater])?;
                         }
                         crate::coop::trace(format_args!("challenge AI at slot {slot} (recipe {recipe:#018x}) is its owner's: no actor here"));
+                        if let Some(ai) = self.ai.as_mut() {
+                            ai.streamed_spawns.insert(slot, AmbientCommand::Spawn { slot, client_type, recipe, transform, profile_name });
+                        }
                         continue;
                     }
                     if let Some(ai) = self.ai.as_mut()
@@ -727,6 +734,7 @@ impl<T, C> SelectedSession<T, C> {
                     }
                     if let Some(ai) = self.ai.as_mut() {
                         ai.deferred.retain(|command| !matches!(command, AmbientCommand::Spawn { slot: spawn, .. } if *spawn == slot));
+                        ai.streamed_spawns.remove(&slot);
                     }
                     let player = u32::try_from(slot).map_err(|e| error("unspawn slot", e))?;
                     // UnspawnAISkater already removed the backend row when it posted this

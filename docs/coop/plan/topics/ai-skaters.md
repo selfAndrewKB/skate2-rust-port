@@ -42,6 +42,21 @@ and the index space settled: [the AI day](../reports/2026-11-11-ai-skaters.md),
   there (`try_teleport_ai_player` false, the controller map empty at the slot), and the owner's
   frames bring the outcome.
 
+## The hand-off (2026-11-11, M11)
+
+- **The owner is the lowest player still in the round.** `CampaignWorld.players` shrinks by a
+  leaver at the tick every console delivers the leave (open item 64), so `ai_owner` moves to
+  the next player on every console at once; `CampaignWorld.seats` keeps the slot boundary.
+- **The AI stands through the hand-off.** The round keeps the leaver's last owned frames in
+  the tick's frames until the next owner's facts carry the AI slots, 600 ticks at most
+  (`Round.ai_handoff`); no console's scripts see a destruction.
+- **The new owner spawns them afresh.** Every console kept the spawn commands it dropped as
+  the old owner's (`SessionAi.streamed_spawns`); the new owner replays them at the standing
+  frames' positions, drops its puppets of those slots, and from its next facts carries their
+  frames and streams their bodies as the old owner did. The AI's routine starts over. Proof:
+  `../bench/evidence/probe/2026-11-11-m11-handoff.md` (seat 1 quitting at round tick 2700 of
+  the S.K.A.T.E.; seat 2 owned the pros from 2822 and played four more rounds).
+
 ## Not shared, recorded
 
 - The AI's sound on the non-owner (no audio record travels with an owned frame).

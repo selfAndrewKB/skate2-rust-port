@@ -209,6 +209,24 @@ facts of tick 2133 on both seats and the pro's creation posted at 2134 on both, 
 now read in the facts themselves; all three in step. The nine-mission regression on this build:
 `2026-11-11-crawl-m10-3` [see the run note in missions].
 
+## Last: the AI's hand-off (M11)
+
+Open item 65: the AI skaters' owner was the first player and never changed, so its leaving
+ended the AI for everyone. Now the owner is the lowest player still in the round, which shrinks
+by a leaver at the tick every console delivers the leave (item 64 with it: the rules count the
+players left, and a new `seats` keeps the slot boundary). Until the next owner's facts carry
+the AI, the round keeps the leaver's last owned frames in the tick's frames, 600 ticks at most,
+so no scripts see a destruction; the new owner replays the spawn commands it had dropped as the
+old owner's, each at the last frame's position, drops its puppets and streams the skaters as
+the old owner did. A bench switch makes a seat quit at a round tick. Proof
+(`../bench/evidence/probe/2026-11-11-m11-handoff.md`): the S.K.A.T.E. with seat 1 quitting at
+round tick 2700; seat 2 delivered the leave at 2821 with the two pros standing, owned them from
+2822, spawned Koston and Carroll at their last frames, carried them in its own facts the same
+tick, sent their looks, and played four more rounds with the camera switching to each leader;
+the scripts heard no creation or destruction across the hand-off. The AI's routine starts over
+on the new owner. The nine-mission regression on this build: `2026-11-11-crawl-m11` [see the
+run note in missions].
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

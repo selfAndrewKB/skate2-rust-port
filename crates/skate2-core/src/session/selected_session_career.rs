@@ -1627,16 +1627,23 @@ impl CareerSession {
 
     /// `cMsgPlayerDisconnected` for a player of the online challenge, and its row marked
     /// disconnected (`HandlePlayerLeave` 0x8276aa70).
-    pub(super) fn online_player_disconnected(&mut self, player: i32) {
+    /// Co-op fork (M11, open items 64 and 65): the campaign's players shrink by the leaver, so
+    /// the rules count those left; the AI skaters' new owner, when the leaver was it, is returned.
+    pub(super) fn online_player_disconnected(&mut self, player: i32) -> Option<i32> {
         let world = self.system.world_mut();
         if let Some(online) = world.online.as_mut()
             && let Some(row) = usize::try_from(player).ok().and_then(|player| online.disconnected.get_mut(player))
         {
             *row = true;
         }
+        let new_owner = world.coop.as_mut().and_then(|campaign| campaign.remove_player(player));
+        if let Some(campaign) = world.coop.as_ref() {
+            crate::coop::trace(format_args!("player {player} left the campaign: {} of {} seats left, the AI skaters owned by player {}", campaign.players.len(), campaign.seats, campaign.ai_owner()));
+        }
         #[expect(clippy::cast_precision_loss, reason = "the message's (float) field")]
         let index = player as f32;
         self.system.post(Event::Challenge(Message::new("cMsgPlayerDisconnected", vec![("PlayerIndex", crate::challenge::system::Field::Number(index))])));
+        new_owner
     }
 
     /// The Party Play back end's selection.
@@ -3743,7 +3750,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// console's own, seated after the humans, so their requests are carried out here as well.
     fn online_skater_requests(&self, requests: Vec<SkaterRequest>, local: i32) -> Vec<SkaterRequest> {
         let actor = self.inner.bound_input.as_ref().and_then(|input| i32::try_from(input.player_index()).ok()).unwrap_or(0);
-        let humans = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.players.len());
+        let humans = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.seats);
         let ai_here = |player: i32| humans.is_some_and(|humans| usize::try_from(player).is_ok_and(|player| player >= humans));
         requests
             .into_iter()

@@ -76,7 +76,7 @@ pub(crate) fn script_slot(world: &World, player: i32) -> i32 {
         // The campaign's own slot, not `world.local_player`: that one follows the camera
         // (`SwitchCamera`, a reposition with the camera) to an AI.
         Some(_) if player == 0 => network_local_player(world),
-        Some(campaign) if player > 0 => i32::try_from(campaign.players.len()).unwrap_or(1) - 1 + player,
+        Some(campaign) if player > 0 => i32::try_from(campaign.seats).unwrap_or(1) - 1 + player,
         _ => player,
     }
 }
@@ -95,7 +95,7 @@ pub(crate) fn owns_challenge_ai(world: &World) -> bool {
 /// here: a campaign's AI slot (after the humans) on a console that is not the owner.
 pub(crate) fn streamed_ai_slot(world: &World, slot: i32) -> bool {
     match world.coop.as_ref() {
-        Some(campaign) => !owns_challenge_ai(world) && slot >= i32::try_from(campaign.players.len()).unwrap_or(1),
+        Some(campaign) => !owns_challenge_ai(world) && slot >= i32::try_from(campaign.seats).unwrap_or(1),
         None => false,
     }
 }
@@ -106,7 +106,7 @@ pub(crate) fn script_index(world: &World, slot: i32) -> i32 {
     match world.coop.as_ref() {
         Some(_) if slot == network_local_player(world) => 0,
         Some(campaign) => {
-            let humans = i32::try_from(campaign.players.len()).unwrap_or(1);
+            let humans = i32::try_from(campaign.seats).unwrap_or(1);
             if slot >= humans { slot - humans + 1 } else { NO_SCRIPT_INDEX }
         }
         None => slot,
@@ -171,7 +171,7 @@ fn get_num_human_skaters(_: &mut Lua<World>, world: &mut World, _: &NativeCall) 
 fn get_skater_count(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
     if let Some(campaign) = world.coop.as_ref() {
         // Co-op fork: the scripts' view is the career's: one human and this console's AI rows.
-        let humans = i32::try_from(campaign.players.len()).unwrap_or(1);
+        let humans = i32::try_from(campaign.seats).unwrap_or(1);
         let ai = (humans..9).filter(|&slot| crate::ai::skater_manager::player_type::is_ai(player_type(world, slot).cast_unsigned())).count();
         return Ok(vec![int(1 + i32::try_from(ai).unwrap_or(0))]);
     }

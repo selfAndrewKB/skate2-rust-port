@@ -1756,7 +1756,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // Co-op fork (M10): the challenge AI skaters this console owns in a campaign go out as
         // its own skater does: their look once per actor, their frames in runs of the same
         // cadence, each under the AI's slot in the round.
-        let owned_ai = match self.career.as_ref().map(|career| career.system.world()).and_then(|world| world.coop.as_ref().map(|campaign| (campaign.players.len(), crate::challenge::players::owns_challenge_ai(world)))) {
+        let owned_ai = match self.career.as_ref().map(|career| career.system.world()).and_then(|world| world.coop.as_ref().map(|campaign| (campaign.seats, crate::challenge::players::owns_challenge_ai(world)))) {
             Some((humans, true)) => owned_ai_net_frames(&mut self.inner, humans, tick, watched || ends_at(tick, interval), &vault, &game.owned_sent)?,
             _ => Vec::new(),
         };
@@ -1951,6 +1951,18 @@ impl<T, C> SelectedLiveSession<T, C> {
         if let Some(remote) = u8::try_from(slot).ok().and_then(|slot| self.online.game.as_mut()?.remotes.get_mut(&owned::skater_id(slot))) {
             crate::coop::trace(format_args!("owned AI skater at slot {slot}: its puppet hides"));
             remote.hide();
+        }
+    }
+
+    /// Co-op fork (M11): this console takes an owned AI skater over: its puppet goes, its actor
+    /// comes (the hand-off, open item 65).
+    pub(super) fn online_drop_owned_puppet(&mut self, slot: i32) {
+        let Ok(slot) = u8::try_from(slot) else { return };
+        self.online.owned_runs.remove(&slot);
+        self.online.owned_teleported.remove(&slot);
+        if let Some(game) = self.online.game.as_mut() {
+            game.remotes.remove(&owned::skater_id(slot));
+            game.owned_sent.remove(&slot);
         }
     }
 

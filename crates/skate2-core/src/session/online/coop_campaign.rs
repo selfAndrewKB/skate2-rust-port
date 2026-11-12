@@ -42,6 +42,13 @@ fn diagnostic_triggers() -> Option<(u32, f32)> {
 /// objective of every group of the main challenge is completed as its script would complete it,
 /// the same tick on every console: the bench's way past the steps a teleport cannot prove (an
 /// ollie, a duck, a prop), after the ones it can.
+/// `SKATE2_DIAGNOSTIC_COOP_LEAVE=<round tick>`: this seat leaves the online game at that round
+/// tick, as a player quitting would (M11: the bench's way to an AI owner's departure).
+fn diagnostic_leave_tick() -> Option<u32> {
+    static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_LEAVE").ok().and_then(|tick| tick.parse().ok()))
+}
+
 fn diagnostic_completes() -> &'static [(u32, Option<i32>)] {
     static SPEC: std::sync::OnceLock<Vec<(u32, Option<i32>)>> = std::sync::OnceLock::new();
     SPEC.get_or_init(|| {
@@ -357,6 +364,10 @@ impl<T, C> SelectedLiveSession<T, C> {
             if at == tick {
                 trace(format_args!("diagnostic: teleport to {position:?} at round tick {tick}: {}", self.diagnostic_teleport_local_player(position)));
             }
+        }
+        if diagnostic_leave_tick() == Some(tick) {
+            trace(format_args!("diagnostic: leaving the game at round tick {tick}"));
+            self.online_leave_game();
         }
         for &(at, player) in diagnostic_completes() {
             if at == tick

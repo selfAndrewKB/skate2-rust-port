@@ -681,11 +681,17 @@ fn objective_message(world: &mut World, class_name: &str, handle: usize, index: 
 /// the activation from the first copy to activate, the completion from the last under `Everyone`
 /// (the first otherwise). Every copy's groups hold the same events, so whichever copy's plays,
 /// the console sees it once; with one copy, or outside a campaign, every status plays.
+/// Co-op fork (M11, open item 64): an activity's objective copies of the players still in the
+/// round; a leaver's copy counts for nothing under the rules.
+fn present_siblings(world: &World, activity: usize) -> Vec<&ObjectiveGroup> {
+    world.objectives.groups.iter().filter(|x| x.activity == activity && world.coop.as_ref().is_none_or(|campaign| campaign.players.contains(&x.player))).collect()
+}
+
 fn presentation_plays(world: &World, group: u32, index: usize, status: Status) -> bool {
     let Some(gi) = world.objectives.group_index(group) else { return true };
     let g = &world.objectives.groups[gi];
     let Some((rule, _, name)) = super::coop_rule(world, g.activity) else { return true };
-    let siblings: Vec<&ObjectiveGroup> = world.objectives.groups.iter().filter(|x| x.activity == g.activity).collect();
+    let siblings = present_siblings(world, g.activity);
     if siblings.len() < 2 {
         return true;
     }
@@ -722,7 +728,7 @@ fn feedback_plays(world: &World, group: u32) -> bool {
 fn script_hears(world: &World, class_name: &str, handle: usize, index: usize) -> Option<usize> {
     let Some(g) = world.objectives.groups.iter().find(|g| g.handle == handle) else { return Some(handle) };
     let Some((rule, _, name)) = super::coop_rule(world, g.activity) else { return Some(handle) };
-    let siblings: Vec<&ObjectiveGroup> = world.objectives.groups.iter().filter(|x| x.activity == g.activity).collect();
+    let siblings = present_siblings(world, g.activity);
     if siblings.len() < 2 {
         return Some(handle);
     }
@@ -1335,7 +1341,7 @@ fn on_objective_completed(world: &mut World, group: u32, completed: &[usize]) {
         let player = g.player;
         let (handle, send) = match super::coop_rule(world, activity) {
             Some((rule, _, name)) => {
-                let siblings: Vec<&ObjectiveGroup> = world.objectives.groups.iter().filter(|x| x.activity == activity).collect();
+                let siblings = present_siblings(world, activity);
                 let first = siblings.iter().min_by_key(|x| x.player).map_or(g.handle, |x| x.handle);
                 let complete_players: Vec<i32> = siblings.iter().filter(|x| x.objectives.iter().all(|o| o.state == Status::Complete)).map(|x| x.player).collect();
                 let all = complete_players.len() == siblings.len();
