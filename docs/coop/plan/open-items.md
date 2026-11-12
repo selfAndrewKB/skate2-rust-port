@@ -217,8 +217,8 @@ Front page: [README](../README.md).
 53. The ambient AI skaters are each console's own: at the same two spots seat 1 spawned
     `ai_skater_06` and `sammy`, seat 2 `seb` and `ai_skater_06` (the probe's `ai:` lines). Not
     streamed, not in the inventory's counts; a player sees different skaters than the other.
-    They are no longer testers of the box tests (68) but still reach the scripts as AI players
-    (69).
+    They are no longer testers of the box tests (68) nor frames of the scripts' (69): the
+    scripts read the humans and the owned challenge AI alone.
 54. Fixed (2026-11-11): four location missions (`m_08_01_teleport_trainingfacility_in`/`_out`,
     `m_2a_01_goto`, `m_3a_01_goto`) carry an empty `MapStartLocation`; the execute no longer asks
     for a teleport to the empty name (the native lookup fails on it and moves nobody). The crawl
@@ -386,5 +386,14 @@ Front page: [README](../README.md).
     creation reads the ordinal, which an ambient skater can hold (the AI day's count, 56),
     and a script that counts AI skaters would count each console's own. The original posts the
     same messages for its ambient skaters, so the messages are faithful; what differs is the
-    population. Not fixed: either the ambient skaters' messages stay off the scripts in a
-    campaign, or the ambient population becomes one console's as the challenge AI did (M10).
+    population. **Fixed (2026-11-11, M10.3):** in a campaign this console's ambient skaters are
+    no frame of the scripts' at all: the round's frames are the humans' and the owned challenge
+    AI's, so on every console the scripts read the same skaters, and an ambient skater's
+    creation, position and tricks reach no script; the ambient count is traced per console
+    instead. Proof: `../bench/evidence/probe/2026-11-11-crawl-m10-3-probe.md` (the flip-tricks
+    tutorial with no AI creation on either seat where each had heard three, the pool demo, and
+    the S.K.A.T.E. with the owned slots in the facts of tick 2133 on both seats and the pro's
+    creation at 2134 on both), then the nine-mission regression `2026-11-11-crawl-m10-3` [see
+    the run note in missions]. What a script could still see of an ambient skater is through
+    the AI natives by slot (pins, speech, repositions) if a mission addressed a slot an ambient
+    skater holds on one console; none of the crawled missions does.

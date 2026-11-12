@@ -194,6 +194,21 @@ challenge AI's creation stays the same tick everywhere (no owned slot was stream
 mission). The regression of the nine missions on this build: `2026-11-11-crawl-m10-2` [see the
 run note in missions].
 
+## Later still: the ambient skaters out of the scripts (M10.3)
+
+Open item 69, found by the hull probe: each console's own ambient skaters were frames of the
+scripts' in a campaign, so their creation and destruction reached the scripts as AI players at
+each console's own ticks and slots (three per seat in the flip-tricks tutorial, 945/1005/1065
+on one seat and 986/1046/1106 on the other, their respawns at different slots), and a script
+that counted or addressed AI players by ordinal could have read an ambient skater on one
+console and the pro on the other. The round's frames are now the humans' and the owned
+challenge AI's alone; the ambient population is counted in a trace. Proof
+(`../bench/evidence/probe/2026-11-11-crawl-m10-3-probe.md`): the flip-tricks tutorial with no
+AI creation on either seat, the pool demo, and the S.K.A.T.E. with the owned slots read in the
+facts of tick 2133 on both seats and the pro's creation posted at 2134 on both, the M10 claim
+now read in the facts themselves; all three in step. The nine-mission regression on this build:
+`2026-11-11-crawl-m10-3` [see the run note in missions].
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

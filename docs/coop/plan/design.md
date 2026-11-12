@@ -311,10 +311,12 @@ simulation's slot, 0 to this console's skater, an AI's ordinal `k` to slot `N - 
 N humans, the same slot on every console. The other humans have no script index: what a script
 learns of them comes through the rules and the facts. Decided on the bench: the shipped scripts
 count their AI three ways (a literal, the local player plus one, every index but their own), and
-only this view serves all three ([open items](open-items.md) 56). Each console runs its own
-challenge AI skaters (the original's challenge AI is offline-only); their frames join the
-scripts' per-player frames on that console alone, so an AI's path is each console's own, like the
-ambient skaters' (53).
+only this view serves all three ([open items](open-items.md) 56). The challenge AI skaters were
+each console's own at first (the original's challenge AI is offline-only), their frames joining
+the scripts' per-player frames on that console alone; since M10 they are the first player's and
+their frames travel with its facts (§7 below). The ambient skaters stay each console's own (53)
+and, since M10.3, out of the scripts' frames altogether: on every console the scripts read the
+humans and the one AI run, and nothing that differs between consoles (69).
 
 **The competing kinds: outcomes as notes (2026-11-11, M9).** Each console plays a S.K.A.T.E.,
 jam or contest against its own AI, and a script that reads its AI's run decides for its own

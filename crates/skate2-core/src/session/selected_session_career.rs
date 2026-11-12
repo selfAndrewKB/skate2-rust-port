@@ -2592,17 +2592,22 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Co-op fork (open item 45, M10): this console's AI skaters' completed outputs at the slots
     /// after a campaign round's humans: with `challenge` the challenge AI skaters it owns, whose
     /// frames ride its facts to every console; without it the ambient skaters, each console's
-    /// own, which join its frames alone.
+    /// own, which are no frame of the scripts' (M10.3) and are counted for the trace alone.
     pub(super) fn career_ai_skater_frames(&self, humans: usize, challenge: bool) -> Result<Vec<MissionFrame>, SelectedLiveError> {
         let mut frames = Vec::with_capacity(self.inner.ai_skaters.len());
-        for skater in self.inner.ai_skaters.iter().filter(|skater| usize::try_from(skater.player_index()).is_ok_and(|slot| slot >= humans)) {
-            let slot = i32::try_from(skater.player_index()).map_err(error)?;
-            let is_challenge = self.inner.ai.as_ref().and_then(|ai| ai.client_type(slot)) == Some(crate::ai::actor::AiClientType::Challenge);
-            if is_challenge == challenge {
-                frames.push(self.mission_frame_of(&skater.actor, -1)?);
-            }
+        for skater in self.career_ai_skaters(humans, challenge) {
+            frames.push(self.mission_frame_of(&skater.actor, -1)?);
         }
         Ok(frames)
+    }
+
+    /// The AI skaters seated after a campaign round's humans, the challenge ones or the ambient.
+    pub(super) fn career_ai_skaters(&self, humans: usize, challenge: bool) -> impl Iterator<Item = &crate::selected_session_boot_owner::party_skaters::PartySkater> {
+        self.inner.ai_skaters.iter().filter(move |skater| {
+            let slot = skater.player_index();
+            let is_challenge = i32::try_from(slot).ok().and_then(|slot| self.inner.ai.as_ref().and_then(|ai| ai.client_type(slot))) == Some(crate::ai::actor::AiClientType::Challenge);
+            usize::try_from(slot).is_ok_and(|slot| slot >= humans) && is_challenge == challenge
+        })
     }
 
     /// One skater's completed output as the challenge system reads it, local when its index is

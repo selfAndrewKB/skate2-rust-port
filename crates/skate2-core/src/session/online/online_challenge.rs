@@ -257,6 +257,8 @@ pub(super) struct Round {
     ai_present: BTreeSet<i32>,
     /// The slots the last produced facts carried, for the trace.
     owned_slots: Vec<u8>,
+    /// This console's ambient skaters last counted, for the trace (they are no frame of the scripts').
+    ambient_seen: usize,
     /// The local skater's last whole frame, for the ticks it sends no facts for.
     own: Option<MissionFrame>,
     others: BTreeMap<u64, PlayerFacts>,
@@ -379,6 +381,7 @@ impl Round {
             owned_coders: BTreeMap::new(),
             ai_present: BTreeSet::new(),
             owned_slots: Vec::new(),
+            ambient_seen: 0,
             own: None,
             others: BTreeMap::new(),
             refilling: false,
@@ -1919,13 +1922,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                     }
                     // Co-op fork (open item 45, M10): the owned challenge AI skaters' frames came
-                    // with their owner's facts; this console's ambient skaters join its frames
-                    // alone. An AI slot's first and last frame are its creation and destruction
-                    // to the scripts, the same tick on every console.
-                    let mut frames = frames;
+                    // with their owner's facts, so the scripts of every console read the humans
+                    // and one AI run and nothing else. An AI slot's first and last frame are its
+                    // creation and destruction to the scripts, the same tick on every console.
+                    // This console's own ambient skaters (each console's own, open item 53) stay
+                    // out of the scripts' frames (M10.3, open item 69): their creation reached
+                    // the scripts as AI players at each console's own ticks and slots.
                     if let Some(humans) = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.players.len()) {
-                        frames.extend(self.career_ai_skater_frames(humans, false)?);
-                        frames.sort_by_key(|frame| frame.player);
+                        let ambient = self.career_ai_skaters(humans, false).count();
+                        if let Some(round) = self.online.round.as_mut().filter(|round| round.ambient_seen != ambient) {
+                            round.ambient_seen = ambient;
+                            crate::coop::trace(format_args!("{ambient} ambient skaters here at tick {tick}: each console's own, out of the scripts' frames"));
+                        }
                         self.online_round_ai_messages(&frames, humans, tick);
                     }
                     self.career_step(Some((frames, local, own)))?;

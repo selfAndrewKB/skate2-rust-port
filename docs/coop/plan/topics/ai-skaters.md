@@ -21,13 +21,15 @@ and the index space settled: [the AI day](../reports/2026-11-11-ai-skaters.md),
   by its own `FactsCoder` against its previous tick, as the player's own frame is); every
   console's round delivers them with the owner's frame at that tick (`Round::next_tick`), so the
   scripts of every console read one AI run: the same trick landed, the same letter, the same
-  tick. Each console's ambient skaters still join its own frames alone (open item 53).
+  tick. Each console's ambient skaters are each console's own (open item 53) and, since M10.3,
+  out of the scripts' frames altogether.
 - **Creation and destruction are the frames'.** An AI slot's first frame in a tick's frames is
   `cMsgSkaterCreated` to the scripts, its last `cMsgSkaterDestroyed`, with the AI's ordinal as
   the scripts number it (`online_round_ai_messages`), the same tick on every console, the
-  owner's included; the local challenge queue's skater messages are dropped in a campaign. The
-  same messages go out for each console's own ambient skaters, at that console's own ticks and
-  slots (open item 69); none of these skaters is a tester of the box tests (68).
+  owner's included; the local challenge queue's skater messages are dropped in a campaign. Each
+  console's own ambient skaters are no frame of the scripts' in a campaign (M10.3, open item
+  69: their creation had reached the scripts as AI players at each console's own ticks and
+  slots), and no skater but the humans is a tester of the box tests (68).
 - **The body is a puppet.** The owner sends each AI skater's look once per actor
   (`OwnedRecipe`, kept by the server for joiners) and its replay frames in runs of the cadence
   its own skater's take (`OwnedFrames`, relayed as `RemoteFrames` under the marked slot
