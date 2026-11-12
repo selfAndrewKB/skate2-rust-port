@@ -51,7 +51,17 @@ impl SelectedLivingWorldDmo {
                     entity.set_hand_prop(object,world,living.dmo_objects.as_deref_mut().ok_or("hand prop DMOMan absent")?,
                         living.dmo_locators.as_deref_mut().ok_or("hand prop locators absent")?,cvars,&mut peers)?;
                     entity.initialize_hand_prop_usage(key,vault,living.random.as_mut().ok_or("hand prop Manager RNG absent")?)?;
-                } else {entity.hand_prop_attributes=None;}
+                    if entity.puppet.is_some() {
+                        crate::coop::trace(format_args!("puppet entity {:#x}: hand prop {key:016x} attached", entity.id));
+                    }
+                } else {
+                    // Co-op fork (M19): a puppet's prop refused here (the DMO census's cap,
+                    // most likely) is named, so a prop missing on one screen has a cause.
+                    if entity.puppet.is_some() {
+                        crate::coop::trace(format_args!("puppet entity {:#x}: hand prop {key:016x} refused by the DMO census here", entity.id));
+                    }
+                    entity.hand_prop_attributes=None;
+                }
                 entity.state.as_mut().ok_or("hand prop state absent")?.flags[3]&=!2;
                 Ok(())
             })().map_err(SelectedLivingWorldDmoError::Pedestrians)?;

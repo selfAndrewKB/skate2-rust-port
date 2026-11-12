@@ -10,9 +10,13 @@ use crate::living_world_rain::geometry::Transform;
 /// the owner's keepalive (M17: 20 runs of 3 ticks), since a sample that would say the same is
 /// not sent.
 const COAST_TICKS: u32 = 72;
-/// Over how many ticks a sample's correction (its position and facing) is spread, instead of
-/// taken in one step (M16, M19).
-const BLEND_TICKS: u32 = 3;
+/// Over how many ticks a sample's facing is turned to (M16) and its position's correction is
+/// faded out (M19): the send-on-error rule sends a sample only when the extrapolation is 5 cm or
+/// more off, so every sample brings a correction of that size; over three ticks it was 1.7 cm a
+/// tick on top of a 2.5 cm walking step (the M19 probe's second run: 11 to 13 % of puppet
+/// ticks past 1 cm), over ten it is half a centimetre.
+const YAW_BLEND_TICKS: u32 = 3;
+const POSITION_BLEND_TICKS: u32 = 10;
 /// A correction this large is a teleport, a knockdown's throw or a respawn: taken at once.
 const SNAP_DISTANCE: f32 = 2.0;
 /// A tick whose step strays from the walk by more than this counts as a stutter (M19's meter).
@@ -57,6 +61,12 @@ pub(crate) struct PuppetDrive {
     /// M19: the owner's hand prop this puppet waits to take while its model is not resident
     /// here (traced once per prop), 0 for none.
     pub(crate) prop_waiting: u64,
+    /// M19: a puppet lets its hand prop go only on its owner's word (`releasing` while the
+    /// owner's descriptor throws it); its own behaviours' throws (a chance drop on avoiding, a
+    /// throw at a bin, a knockdown's) are held back, `kept` counting them. Each had made the
+    /// prop vanish from one screen and come back at the owner's next descriptor.
+    pub(crate) releasing: bool,
+    pub(crate) kept: u32,
 }
 
 /// M19: how much a puppet's steps strayed from its walk, since the meter was last read.
@@ -73,7 +83,7 @@ impl PuppetDrive {
         let at = [target[3][0], target[3][1], target[3][2]];
         Self {
             target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false,
-            yaw_from: yaw, yaw_to: yaw, offset: [0.; 3], last_position: at, last_yaw: yaw, last_dt: 1. / 60., stutter: Stutter::default(), prop_waiting: 0,
+            yaw_from: yaw, yaw_to: yaw, offset: [0.; 3], last_position: at, last_yaw: yaw, last_dt: 1. / 60., stutter: Stutter::default(), prop_waiting: 0, releasing: false, kept: 0,
         }
     }
 
@@ -83,8 +93,8 @@ impl PuppetDrive {
     }
 
     /// The owner's next sample. The puppet goes on from where it would have been this tick,
-    /// and the gap to the sample fades over the blend (a gap past `SNAP_DISTANCE` is taken at
-    /// once).
+    /// and the gap to the sample fades over `POSITION_BLEND_TICKS` (a gap past `SNAP_DISTANCE`
+    /// is taken at once).
     pub(crate) fn arrive(&mut self, target: Transform, velocity: [f32; 3], flags: u8) {
         let carried = self.carried_velocity(self.age);
         let here = [0, 1, 2].map(|lane| self.last_position[lane] + carried[lane] * self.last_dt);
@@ -100,10 +110,10 @@ impl PuppetDrive {
         self.flags = flags;
     }
 
-    /// The share of the blend still to come at an age: two thirds on the arrival tick, then a
-    /// third, then none (the step on the arrival tick already moves a third of the way).
-    fn remaining(age: u32) -> f32 {
-        1. - ((age + 1).min(BLEND_TICKS) as f32) / BLEND_TICKS as f32
+    /// The share of a blend of `ticks` still to come at an age (the step on the arrival tick
+    /// already moves one share of the way, so the walk never stops).
+    fn remaining(age: u32, ticks: u32) -> f32 {
+        1. - ((age + 1).min(ticks) as f32) / ticks as f32
     }
 
     /// The velocity the puppet's animation walks at: the owner's last, or none once it has
@@ -125,10 +135,10 @@ impl PuppetDrive {
     /// sample was 72 ticks late: the stutter the player saw.
     pub(crate) fn step(&mut self, dt: f32) -> Transform {
         let coasted = self.age.min(COAST_TICKS) as f32 * dt;
-        let remaining = Self::remaining(self.age);
+        let remaining = Self::remaining(self.age, POSITION_BLEND_TICKS);
         let position = [0, 1, 2].map(|lane| self.target[3][lane] + self.velocity[lane] * coasted + self.offset[lane] * remaining);
         let turn = (self.yaw_to - self.yaw_from + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
-        let yaw = self.yaw_from + turn * (1. - remaining);
+        let yaw = self.yaw_from + turn * (1. - Self::remaining(self.age, YAW_BLEND_TICKS));
         // The meter: this tick's step against the walk the velocity gives.
         let walk = self.carried_velocity(self.age);
         let stray = [0, 1, 2].map(|lane| position[lane] - self.last_position[lane] - walk[lane] * dt).iter().map(|value| value * value).sum::<f32>().sqrt();
@@ -190,15 +200,17 @@ mod tests {
         let mut drive = PuppetDrive::new(at(0.));
         drive.arrive(at(0.), [0., 0., 0.], 0);
         drive.step(DT);
-        // The owner is 5 cm further on than the puppet thought.
+        // The owner is 5 cm further on than the puppet thought: half a centimetre a tick for
+        // ten ticks, then there.
         drive.arrive(at(0.05), [0., 0., 0.], 0);
-        let a = drive.step(DT)[3][0];
-        let b = drive.step(DT)[3][0];
-        let c = drive.step(DT)[3][0];
-        let d = drive.step(DT)[3][0];
-        assert!((a - 0.05 / 3.).abs() < 1e-5 && (b - 0.1 / 3.).abs() < 1e-5, "{a} {b}");
-        assert!((c - 0.05).abs() < 1e-6 && (d - 0.05).abs() < 1e-6, "{c} {d}");
-        assert_eq!(drive.stutter.over, 3, "a third of 5 cm a tick, 1.7 cm, on each of the three ticks of the blend");
+        let mut last = 0.;
+        for tick in 0..POSITION_BLEND_TICKS {
+            let x = drive.step(DT)[3][0];
+            assert!((x - last - 0.005).abs() < 1e-5, "tick {tick}: a step of {} m", x - last);
+            last = x;
+        }
+        assert!((last - 0.05).abs() < 1e-6 && (drive.step(DT)[3][0] - 0.05).abs() < 1e-6);
+        assert_eq!(drive.stutter.over, 0, "no tick of the blend strays past 1 cm");
     }
 
     #[test]

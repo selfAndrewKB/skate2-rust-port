@@ -289,9 +289,24 @@ impl PedestrianConstruction {
         }
         Ok(state.flags[2] & 2 != 0 || state.flags[3] & 2 != 0)
     }
+    /// Co-op fork (M19): a puppet's own throw is held back: its prop goes on its owner's word
+    /// alone (`PuppetDrive::releasing`), counted and traced once per puppet.
+    fn puppet_keeps_its_prop(&mut self) -> bool {
+        let id = self.id;
+        let Some(drive) = self.puppet.as_mut().filter(|drive| !drive.releasing) else { return false };
+        drive.kept += 1;
+        if drive.kept == 1 {
+            crate::coop::trace(format_args!("puppet entity {id:#x}: its own throw of its hand prop held back: the prop goes on its owner's word"));
+        }
+        true
+    }
+
     /// ThrowHandPropAway82e9b528 schedules the release; UpdateHandProp consumes
     /// the flags and timer later. No immediate physics detach occurs here.
     pub(crate) fn throw_hand_prop_away(&mut self, cvars: &InputCvarReferences) -> Result<(), String> {
+        if self.puppet_keeps_its_prop() {
+            return Ok(());
+        }
         let state = self.state.as_mut().ok_or("hand prop AI state absent")?;
         if state.flags[2] & 2 != 0 && state.flags[2] & 1 == 0 {
             state.flags[2] |= 1;
@@ -309,6 +324,7 @@ impl PedestrianConstruction {
         &mut self,position:[f32;4],attack:bool,cvars:&InputCvarReferences,
         random:&mut crate::native_skater_random::NativeSkaterRandom,numeric:&mut N
     )->Result<(),String> where N::Error:std::fmt::Debug {
+        if self.puppet_keeps_its_prop() {return Ok(());}
         let state=self.state.as_mut().ok_or("directed throw AI state absent")?;
         if state.flags[2]&2==0{return Ok(());}
         state.flags[2]|=1;

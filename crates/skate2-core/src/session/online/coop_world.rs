@@ -301,6 +301,21 @@ fn hand_prop_of(pedestrian: &crate::living_world_pedestrian_entity::PedestrianCo
     pedestrian.hand_prop_attributes.as_ref().and_then(|attributes| attributes.collection_key()).unwrap_or(0)
 }
 
+/// M19: a puppet's prop thrown away on its owner's word (the puppet's own throws are held back).
+fn release_as_owner(
+    pedestrian: &mut crate::living_world_pedestrian_entity::PedestrianConstruction,
+    cvars: &crate::input_cvar_runtime::InputCvarReferences,
+) -> Result<(), String> {
+    if let Some(drive) = pedestrian.puppet.as_mut() {
+        drive.releasing = true;
+    }
+    let thrown = pedestrian.throw_hand_prop_away(cvars);
+    if let Some(drive) = pedestrian.puppet.as_mut() {
+        drive.releasing = false;
+    }
+    thrown
+}
+
 /// M19: whether a hand prop's model is resident here (the hand-prop pass's own lookup: the
 /// `hand_props` row's model, its `dmo_models` row's asset). The pass clears a pending prop whose
 /// model is not, so a puppet waits for it instead of setting it pending again at every
@@ -336,7 +351,7 @@ fn sync_hand_prop(
     }
     if hand_prop == 0 {
         if pedestrian.held_hand_prop.is_some() {
-            pedestrian.throw_hand_prop_away(cvars)?;
+            release_as_owner(pedestrian, cvars)?;
             trace(format_args!("puppet {id:08x}: its owner let its hand prop go: thrown away here"));
         } else if let Some(state) = pedestrian.state.as_mut() {
             state.flags[3] &= !2;
@@ -355,7 +370,7 @@ fn sync_hand_prop(
         drive.prop_waiting = 0;
     }
     if here != 0 && pedestrian.held_hand_prop.is_some() {
-        pedestrian.throw_hand_prop_away(cvars)?;
+        release_as_owner(pedestrian, cvars)?;
     }
     pedestrian.hand_prop_attributes = Some(vault.instance(0xec8b_7565_46e2_26f6, hand_prop));
     if let Some(state) = pedestrian.state.as_mut() {
