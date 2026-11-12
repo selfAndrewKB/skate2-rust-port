@@ -702,6 +702,10 @@ pub(crate) struct AiSkaterManager {
     in_an_ai_based_challenge: bool,
     in_an_ambient_skater_challenge: bool,
     max_ambient_skaters_in_ambient_challenge: u32,
+    /// Co-op fork (M12): the campaign's players, among whom the ambient allowance is shared
+    /// (1 outside a campaign), and this console's player index among them.
+    pub(crate) campaign_players: u32,
+    pub(crate) campaign_index: u32,
     in_an_online_game: bool,
     has_challenge_asset_request_occurred: bool,
     pub(crate) allow_ambient_skater_spawn: bool,
@@ -728,6 +732,8 @@ impl Default for AiSkaterManager {
             in_an_ai_based_challenge: false,
             in_an_ambient_skater_challenge: false,
             max_ambient_skaters_in_ambient_challenge: 0,
+            campaign_players: 1,
+            campaign_index: 0,
             in_an_online_game: false,
             has_challenge_asset_request_occurred: false,
             allow_ambient_skater_spawn: true,
@@ -1050,11 +1056,16 @@ impl AiSkaterManager {
     }
 
     fn max_ambient_skaters(&self) -> u32 {
-        if self.in_an_ambient_skater_challenge {
+        let max = if self.in_an_ambient_skater_challenge {
             self.max_ambient_skaters_in_ambient_challenge
         } else {
             self.max_ambient_skaters_based_on_framerate
-        }
+        };
+        // Co-op fork (M12): every console's ambient skaters show on every console, so each
+        // spawns its share of the original's population: the maximum split by player index, the
+        // remainder to the first players (three for two players: two and one).
+        let players = self.campaign_players.max(1);
+        max / players + u32::from(self.campaign_index < max % players)
     }
 
     /// `Update` 0x824d0188 without the test skaters, distance callbacks and audio events.

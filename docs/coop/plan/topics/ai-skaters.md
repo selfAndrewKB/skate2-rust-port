@@ -21,8 +21,8 @@ and the index space settled: [the AI day](../reports/2026-11-11-ai-skaters.md),
   by its own `FactsCoder` against its previous tick, as the player's own frame is); every
   console's round delivers them with the owner's frame at that tick (`Round::next_tick`), so the
   scripts of every console read one AI run: the same trick landed, the same letter, the same
-  tick. Each console's ambient skaters are each console's own (open item 53) and, since M10.3,
-  out of the scripts' frames altogether.
+  tick. Each console's ambient skaters are each console's own (open item 53), since M10.3 out
+  of the scripts' frames altogether, and since M12 shown on every console as puppets.
 - **Creation and destruction are the frames'.** An AI slot's first frame in a tick's frames is
   `cMsgSkaterCreated` to the scripts, its last `cMsgSkaterDestroyed`, with the AI's ordinal as
   the scripts number it (`online_round_ai_messages`), the same tick on every console, the
@@ -43,6 +43,28 @@ and the index space settled: [the AI day](../reports/2026-11-11-ai-skaters.md),
   and no actor: a teleport, reposition or request of a slot without a controller does nothing
   there (`try_teleport_ai_player` false, the controller map empty at the slot), and the owner's
   frames bring the outcome.
+
+## The ambient skaters (2026-11-12, M12)
+
+- **Every console streams its own ambient skaters.** They stay spawned by each console near
+  its own skater (the world is loaded around each console's own skater, as the pedestrian
+  census knows), and their frames and looks go out as the owned challenge AI's do, under the
+  console's own slots; every other console shows them as puppets, with their sound. The
+  allowance is shared: the original's three split by player index, the remainder to the first
+  players (`campaign_players`, `campaign_index`), so two players see three, two from the first
+  console and one from the second.
+- **An owned skater's name carries its owner** (protocol 124): the relay slot is
+  `0x80 | owner << 4 | slot`, the puppet's id `0xA1_0000_0000_0000 | owner << 8 | slot`
+  (`protocol::owned::{frames_slot, skater_id}`), so two consoles' skaters at one slot are two
+  skaters. The challenge AI's puppets are named by the AI owner; at a hand-off the new owner's
+  streams come under its own name, the new owner drops the old owner's puppets of the slots it
+  takes, and on a third console the old puppets go stale.
+- **A puppet whose frames stop hides** after 180 ticks (`OWNED_STALE_TICKS`), its owner
+  having despawned the skater or left; the spawner refills a slot within 30 ticks, so a
+  respawn at the same slot re-dresses the same puppet (a new look, a new position) rather than
+  hiding it.
+- **The scripts see none of it** (M10.3): the ambient skaters are no frame of the scripts',
+  no tester, no AI player.
 
 ## The hand-off (2026-11-11, M11)
 

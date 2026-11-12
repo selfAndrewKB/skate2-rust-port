@@ -92,7 +92,7 @@ up to 25 at once (12 owned, 13 puppets), stream peaks 2.5 to 6.7 kB/s a seat; pr
 everywhere (none streamed yet); contacts sent in 14 missions (up to 555 in the demo), applied by
 the owner, 0 to 2 confirmed knockdowns; handoffs, promotions, demotions 0 throughout; stalled
 round ticks 0 in all but four missions (12 at most, `m_1b_01_goto_school`), starved 0 in all but
-three (10 at most). The ambient AI skaters are not in these counts: each console spawns its own
+three (10 at most). The ambient AI skaters are in them since M12 as owned skaters' streams (each console's own two, for two players); before, each console spawned its own
 (open item 53). The challenge AI skaters were each console's own copies until M10
 (2026-11-11, the AI day): selected from the same data at the same tick and spawned at the same
 slot on every console, driven by each console's own AI on the same paths, not streamed and

@@ -708,6 +708,11 @@ impl RemoteSkater {
         self.stale = true;
     }
 
+    /// The local tick the last frame arrived on, if any since the skater was hidden (M12).
+    pub(super) fn last_arrival(&self) -> Option<u32> {
+        self.last_arrival
+    }
+
     /// A frame arrived on `local_tick`, the last of its run when `run_end`. While this console's
     /// ticks are held (`paced` false: a travel, a load, a sync point) its arrival says nothing of
     /// when frames come, and the playout does not count it.

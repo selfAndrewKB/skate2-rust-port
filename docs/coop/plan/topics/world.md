@@ -64,6 +64,7 @@ traces every decision (entity, old owner, new owner, reason). The table:
 | ambient pedestrian | `Spawner`: the census that spawned it, for life (M1) | yes |
 | story character (a pedestrian a challenge placed) | `EachConsole`: every console spawns and simulates its own copy where its own skater is (M5) | no |
 | security guard | `Chasee`: the console of the player it chases, which is its spawner until M6's migration (a guard chases only the skater of the console that simulates it) (M5) | yes, as a pedestrian |
+| ambient AI skater | `Spawner`: the console whose spawner spawned it, near its own skater; each console spawns its share of the original's three, split by player index (M12) | yes, as an owned skater's frames and look (protocol 124, [ai-skaters](ai-skaters.md)) |
 | prop (a dynamic object with a locator) | `LastToucher`: the console whose skater, or whose car or pedestrian (M11.2), touched it last, by claim number, the highest claim winning everywhere and a tie the lower slot (M5); a touch waits while the owner's latest sample still moves it (M10.1) | yes, in the run's prop list |
 
 Nearest-player ownership with hysteresis and migration: M6.

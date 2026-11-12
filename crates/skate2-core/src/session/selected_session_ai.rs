@@ -251,9 +251,11 @@ impl SessionAi {
     /// Co-op fork (open items 45, 53): a campaign round's humans hold slots 0 to N-1; the AI
     /// skaters seat themselves after them from now on, and an ambient skater that took one of
     /// those slots before the round (the lobby's free skate knew one human) leaves it.
-    pub(crate) fn try_seat_ai_after_humans(&mut self, humans: usize, settings: &PlayersBackendSettings) -> Result<(), String> {
+    pub(crate) fn try_seat_ai_after_humans(&mut self, humans: usize, local: usize, settings: &PlayersBackendSettings) -> Result<(), String> {
         let mut manager = self.manager();
         manager.human_slots = humans;
+        manager.campaign_players = u32::try_from(humans).unwrap_or(1).max(1);
+        manager.campaign_index = u32::try_from(local).unwrap_or(0);
         for slot in 0..humans.min(manager.players.len()) {
             if player_type::is_ai(manager.players[slot].player_type) {
                 if std::env::var_os("SKATE2_TRACE_AI").is_some() {

@@ -252,6 +252,25 @@ waterfront with 15 to 17 pedestrians, seven pushes claimed props (three on seat 
 four times. The nine-mission regression on this build: `2026-11-12-crawl-m11-2` [see the run
 note in missions].
 
+## The second population: the ambient skaters (M12, 2026-11-12)
+
+The player's question before field testing: the skaters riding around in free roam were each
+console's own, and a skater on one screen was not on the other (open item 53). They stay
+spawned by each console near its own skater, since the world is loaded there and nowhere
+else, and every console now streams them as it streams the challenge AI it owns: their looks
+once, their frames in runs with their sound, under the console's own slots; the others show
+them as puppets. For that the owned skaters' names carry their owner on the wire (protocol
+124: three bits of owner in the relay slot, a byte in the puppet's id), the challenge AI's
+puppets being the AI owner's and a hand-off renaming them to the new owner. Each console
+spawns its share of the allowance, the original's three split by player index (two and one for
+two players), so the density is the original's. A puppet whose frames stop hides after three seconds. Proof
+(`../bench/evidence/probe/2026-11-12-m12-soak-seat-{1,2}.log`): four minutes at the
+waterfront on the first build, each seat holding two ambient skaters, sending each one's look
+as it spawned (ten and twelve looks) and building the other's as puppets (twelve and ten
+characters) whose frames carried their sound, then the tagged build with the split; the hand-off probe again (`-m12-handoff-`): the pros' puppets named by
+player 0 taken over by seat 2 at tick 2821 under its own name, the S.K.A.T.E. going on. The
+nine-mission regression on this build: `2026-11-12-crawl-m12` [see the run note in missions].
+
 ## Next
 
 Play on this build: a follow, a photo, a S.K.A.T.E. and a demo with two people, the one pro on

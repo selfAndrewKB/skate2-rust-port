@@ -642,28 +642,31 @@ pub mod owned {
     pub const MOST: usize = 8;
     /// The slots an owned skater can hold: the skater manager's rows (a human's or an AI's).
     pub const SLOTS: usize = 9;
+    /// The owners an owned skater can have: the players' slots (three bits of the relay slot).
+    pub const OWNERS: usize = 8;
     const SLOT_FLAG: u8 = 0x80;
     const ID_FLAG: u64 = 0xA1_0000_0000_0000;
 
-    /// The frame relay's slot of an owned skater at `slot`.
+    /// The frame relay's slot of the skater at `slot` of the player at `owner` (M12: every
+    /// console streams its own, so the name carries the owner).
     #[must_use]
-    pub const fn frames_slot(slot: u8) -> u8 {
-        slot | SLOT_FLAG
+    pub const fn frames_slot(owner: u8, slot: u8) -> u8 {
+        SLOT_FLAG | ((owner & 0x7) << 4) | (slot & 0xf)
     }
-    /// The owned skater's slot of a frame relay slot, if it is one.
+    /// The owner and slot of a frame relay slot, if it is an owned skater's.
     #[must_use]
-    pub const fn slot_of_frames(slot: u8) -> Option<u8> {
-        if slot & SLOT_FLAG != 0 { Some(slot & !SLOT_FLAG) } else { None }
+    pub const fn slot_of_frames(slot: u8) -> Option<(u8, u8)> {
+        if slot & SLOT_FLAG != 0 { Some(((slot >> 4) & 0x7, slot & 0xf)) } else { None }
     }
     /// The user id an owned skater's recipe and frames reach a console under.
     #[must_use]
-    pub const fn skater_id(slot: u8) -> u64 {
-        ID_FLAG | slot as u64
+    pub const fn skater_id(owner: u8, slot: u8) -> u64 {
+        ID_FLAG | ((owner as u64) << 8) | slot as u64
     }
-    /// The owned skater's slot of such a user id, if it is one.
+    /// The owner and slot of such a user id, if it is one.
     #[must_use]
-    pub const fn slot_of_id(id: u64) -> Option<u8> {
-        if id & !0xff == ID_FLAG { Some((id & 0xff) as u8) } else { None }
+    pub const fn slot_of_id(id: u64) -> Option<(u8, u8)> {
+        if id & !0xffff == ID_FLAG { Some((((id >> 8) & 0xff) as u8, (id & 0xff) as u8)) } else { None }
     }
 }
 
@@ -771,7 +774,7 @@ fn read_slot(r: &mut Reader<'_>) -> DecodeResult<u8> {
 fn read_frames_slot(r: &mut Reader<'_>) -> DecodeResult<u8> {
     let slot = r.u8()?;
     match owned::slot_of_frames(slot) {
-        Some(bare) if usize::from(bare) < owned::SLOTS => Ok(slot),
+        Some((owner, bare)) if usize::from(owner) < owned::OWNERS && usize::from(bare) < owned::SLOTS => Ok(slot),
         None if usize::from(slot) < MAX_PLAYERS => Ok(slot),
         _ => Err(DecodeError("slot out of range")),
     }
@@ -1319,17 +1322,21 @@ mod tests {
 
     #[test]
     fn an_owned_skaters_names_round_trip_and_stand_apart_from_the_players() {
-        for slot in 0..=8_u8 {
-            assert_eq!(owned::slot_of_frames(owned::frames_slot(slot)), Some(slot));
-            assert_eq!(owned::slot_of_id(owned::skater_id(slot)), Some(slot));
-            assert_eq!(owned::slot_of_frames(slot), None);
-            assert_eq!(owned::slot_of_id(u64::from(slot)), None);
+        for owner in 0..8_u8 {
+            for slot in 0..=8_u8 {
+                assert_eq!(owned::slot_of_frames(owned::frames_slot(owner, slot)), Some((owner, slot)));
+                assert_eq!(owned::slot_of_id(owned::skater_id(owner, slot)), Some((owner, slot)));
+                assert_eq!(owned::slot_of_frames(slot), None);
+                assert_eq!(owned::slot_of_id(u64::from(slot)), None);
+            }
         }
+        assert_ne!(owned::skater_id(0, 2), owned::skater_id(1, 2), "two players' skaters at one slot are two skaters");
+        assert_ne!(owned::frames_slot(0, 2), owned::frames_slot(1, 2));
         assert_eq!(owned::slot_of_id(0x1234_5678_9abc_def0), None);
-        // Slot 8 (the ninth row) travels on every owned path; slot 9 on none.
+        // Slot 8 (the ninth row) of the eighth player travels on every owned path; slot 9 on none.
         let run = EncodedRun { tick: 1, count: 1, frame: None, frame_before: None, sample: None, sample_before: None, payload: vec![] };
-        assert!(ServerMessage::decode(&ServerMessage::RemoteFrames { slot: owned::frames_slot(8), run: run.clone() }.encode()).is_ok());
-        assert!(ServerMessage::decode(&ServerMessage::RemoteFrames { slot: owned::frames_slot(9), run: run.clone() }.encode()).is_err());
+        assert!(ServerMessage::decode(&ServerMessage::RemoteFrames { slot: owned::frames_slot(7, 8), run: run.clone() }.encode()).is_ok());
+        assert!(ServerMessage::decode(&ServerMessage::RemoteFrames { slot: owned::frames_slot(7, 9), run: run.clone() }.encode()).is_err());
         assert!(ClientMessage::decode(&ClientMessage::OwnedFrames { slot: 8, run: run.clone() }.encode()).is_ok());
         assert!(ClientMessage::decode(&ClientMessage::OwnedFrames { slot: 9, run }.encode()).is_err());
         assert!(ClientMessage::decode(&ClientMessage::Facts { tick: 1, stint: 0, notes: FactsNotes::default(), data: vec![], owned: vec![(8, vec![])] }.encode()).is_ok());
@@ -1422,7 +1429,7 @@ mod tests {
             ServerMessage::GameChange { challenge_type: challenge::JAM, challenge_key: 5, delay: 5000 },
             ServerMessage::Kicked { reason: leave::KICKED_BY_HOST },
             ServerMessage::Facts { slot: 2, tick: 10, stint: 1, notes: FactsNotes { votes: vec![(0, 1)], left: vec![], syncing: true, presented: vec![], prompts: vec![Prompt { seq: 9, kind: 3, value: 2 }], outcomes: vec![] }, data: vec![1], owned: vec![(2, vec![7])] },
-            ServerMessage::RemoteFrames { slot: owned::frames_slot(2), run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: None, sample_before: None, payload: vec![9] } },
+            ServerMessage::RemoteFrames { slot: owned::frames_slot(1, 2), run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: None, sample_before: None, payload: vec![9] } },
             ServerMessage::OwnedFrameAck { slot: 2, latest: 44, mask: 0xff },
             ServerMessage::RemoteFrames { slot: 5, run: EncodedRun { tick: 9, count: 1, frame: None, frame_before: None, sample: Some(8), sample_before: Some(6), payload: vec![] } },
             ServerMessage::FrameAck { latest: 44, mask: 3 },

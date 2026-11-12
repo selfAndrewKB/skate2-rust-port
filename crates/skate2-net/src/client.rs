@@ -189,8 +189,8 @@ impl ClientCore {
     /// The user id a relay slot's frames and facts are delivered under: a player's, or an owned
     /// skater's (`protocol::owned`) under its marked id.
     fn user_of(&self, slot: u8) -> Option<u64> {
-        if let Some(owned) = protocol::owned::slot_of_frames(slot) {
-            return Some(protocol::owned::skater_id(owned));
+        if let Some((owner, owned)) = protocol::owned::slot_of_frames(slot) {
+            return Some(protocol::owned::skater_id(owner, owned));
         }
         self.slots.iter().find(|&(_, &held)| held == slot).map(|(&user_id, _)| user_id)
     }
@@ -310,13 +310,14 @@ impl ClientCore {
                         self.remote_frames.remove(&player.user_id);
                     }
                     ServerMessage::PlayerLeave { user_id, .. } => {
-                        self.slots.remove(user_id);
+                        let left = self.slots.remove(user_id);
                         self.remote_frames.remove(user_id);
                         self.acks_sent.remove(user_id);
-                        // Co-op fork (M10): the owned skaters' streams may be the leaver's; a
-                        // campaign round restarts after a leave, and their owner codes afresh.
-                        self.remote_frames.retain(|&user_id, _| protocol::owned::slot_of_id(user_id).is_none());
-                        self.acks_sent.retain(|&user_id, _| protocol::owned::slot_of_id(user_id).is_none());
+                        // Co-op fork (M10, M12): the leaver's owned skaters' streams go with it
+                        // (their names carry their owner); the others' streams stay.
+                        let leavers = |id: u64| protocol::owned::slot_of_id(id).is_some_and(|(owner, _)| Some(owner) == left);
+                        self.remote_frames.retain(|&user_id, _| !leavers(user_id));
+                        self.acks_sent.retain(|&user_id, _| !leavers(user_id));
                     }
                     _ => {}
                 }
@@ -344,7 +345,7 @@ impl ClientCore {
                 }
                 let mut acks = Vec::new();
                 let slots = &self.slots;
-                let slot_of = |user_id: u64| protocol::owned::slot_of_id(user_id).map(protocol::owned::frames_slot).or_else(|| slots.get(&user_id).copied());
+                let slot_of = |user_id: u64| protocol::owned::slot_of_id(user_id).map(|(owner, slot)| protocol::owned::frames_slot(owner, slot)).or_else(|| slots.get(&user_id).copied());
                 for (user_id, receiver) in &self.remote_frames {
                     let (Some(ack), Some(slot)) = (receiver.ack(), slot_of(*user_id)) else { continue };
                     if self.acks_sent.get(user_id) != Some(&ack) {

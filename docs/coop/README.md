@@ -6,9 +6,11 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.13.2-world-touch`**
-(2026-11-12): M11.2, a car's or a pedestrian's push claims the prop it moves for its console
-(open item 67); M11.1, the owned pro's puppet sounds (its frames carry the actor's audio
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.14.0-ambient-skaters`**
+(2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
+puppets to the others, the owned skaters' names carrying their owner (protocol 124), each
+console spawning its share of the allowance (open item 53); M11.2, a car's or a pedestrian's
+push claims the prop it moves for its console (67); M11.1, the owned pro's puppet sounds (its frames carry the actor's audio
 physics record) and its look goes once per spawn (66); M11 (2026-11-11), the AI skaters pass
 to the next player when their owner leaves (standing at their last frames until the new owner's
 facts carry them, open item 65), and the campaign's players shrink by a leaver so the rules
@@ -59,7 +61,7 @@ Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.13.2` lobby build: the AI missions with two people, the one pro now on
+Play on the `coop-v0.14.0` lobby build: the AI missions with two people, the one pro now on
 both screens, and a S.K.A.T.E. or contest, where both consoles read the same leader and the
 first human to win ends it for both; a rail both skaters lean on, which should stay one rail. The AI day's report says what changed and what it
 measured, its evening section the owned AI:

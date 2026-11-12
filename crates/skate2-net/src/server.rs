@@ -973,7 +973,7 @@ impl ServerCore {
             .members
             .iter()
             .filter_map(|member| Some((member.user_id, Arc::clone(member.recipe.as_ref()?))))
-            .chain(game.members.iter().flat_map(|member| member.owned_recipes.iter().map(|(&slot, data)| (owned::skater_id(slot), Arc::clone(data)))))
+            .chain(game.members.iter().flat_map(|member| member.owned_recipes.iter().map(move |(&slot, data)| (owned::skater_id(member.slot, slot), Arc::clone(data)))))
             .collect();
         // A freeskate activity being proposed is shown to the joiner too, whom it takes if its
         // skater is in the game's world by the start.
@@ -1112,7 +1112,7 @@ impl ServerCore {
         }
         let Some(game) = self.games.get_mut(&game_id) else { return };
         let name = game.member(user_id).map(|member| member.name.clone()).unwrap_or_default();
-        let owned_keys: Vec<u64> = game.member(user_id).map(|member| member.owned_frames.keys().map(|&slot| owned::skater_id(slot)).collect()).unwrap_or_default();
+        let owned_keys: Vec<u64> = game.member(user_id).map(|member| member.owned_frames.keys().map(|&slot| owned::skater_id(member.slot, slot)).collect()).unwrap_or_default();
         game.members.retain(|member| member.user_id != user_id);
         for member in &mut game.members {
             member.holds.remove(&user_id);
@@ -1167,7 +1167,8 @@ impl ServerCore {
                 }
                 let data = Arc::new(data);
                 member.owned_recipes.insert(slot, Arc::clone(&data));
-                self.broadcast(game_id, &ServerMessage::Recipe { user_id: owned::skater_id(slot), data: data.to_vec() }, Some(user_id));
+                let owner = member.slot;
+                self.broadcast(game_id, &ServerMessage::Recipe { user_id: owned::skater_id(owner, slot), data: data.to_vec() }, Some(user_id));
             }
             ClientMessage::Recipe(data) => {
                 let data = Arc::new(data);
@@ -1772,8 +1773,9 @@ impl ServerCore {
         };
         let stream = &game.members[source].owned_frames[&slot];
         let ack = stream.ack().map(|(latest, mask)| ServerMessage::OwnedFrameAck { slot, latest, mask });
-        let key = owned::skater_id(slot);
-        let relay_slot = owned::frames_slot(slot);
+        let owner = game.members[source].slot;
+        let key = owned::skater_id(owner, slot);
+        let relay_slot = owned::frames_slot(owner, slot);
         let mut sends = Vec::new();
         for member in &game.members {
             if member.user_id == user_id || game.hidden_from(user_id, member.user_id) {
@@ -1831,9 +1833,9 @@ impl ServerCore {
             .filter_map(|&(slot, latest, mask)| {
                 // Co-op fork (M10): an owned skater's ack names its marked slot; the stream is
                 // the one member's that owns that slot.
-                if let Some(owned_slot) = owned::slot_of_frames(slot) {
-                    let stream = game.members.iter().find_map(|member| member.owned_frames.get(&owned_slot))?;
-                    return stream.ring().get(latest).map(|_| (owned::skater_id(owned_slot), latest, mask));
+                if let Some((owner, owned_slot)) = owned::slot_of_frames(slot) {
+                    let stream = game.members.iter().find(|member| member.slot == owner)?.owned_frames.get(&owned_slot)?;
+                    return stream.ring().get(latest).map(|_| (owned::skater_id(owner, owned_slot), latest, mask));
                 }
                 let source = game.members.iter().find(|member| member.slot == slot)?;
                 source.frames.ring().get(latest).map(|_| (source.user_id, latest, mask))

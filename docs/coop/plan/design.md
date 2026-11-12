@@ -314,9 +314,11 @@ count their AI three ways (a literal, the local player plus one, every index but
 only this view serves all three ([open items](open-items.md) 56). The challenge AI skaters were
 each console's own at first (the original's challenge AI is offline-only), their frames joining
 the scripts' per-player frames on that console alone; since M10 they are the first player's and
-their frames travel with its facts (§7 below). The ambient skaters stay each console's own (53)
-and, since M10.3, out of the scripts' frames altogether: on every console the scripts read the
-humans and the one AI run, and nothing that differs between consoles (69). When the owner
+their frames travel with its facts (§7 below). The ambient skaters stay spawned by each console
+near its own skater (53) and, since M10.3, out of the scripts' frames altogether: on every
+console the scripts read the humans and the one AI run, and nothing that differs between
+consoles (69); since M12 every console streams its ambient skaters to the others as puppets,
+so the two screens show the same skaters. When the owner
 leaves, the next player owns them (M11: the AI stands at its last frames until the new owner's
 facts carry it, then starts its routine over, [ai-skaters](topics/ai-skaters.md)).
 

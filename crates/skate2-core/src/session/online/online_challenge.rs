@@ -1224,7 +1224,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // them as puppets of its frames and reads them from its facts.
         let ai_owner = world.coop.as_ref().map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
         if let (Some(ai), Some(player)) = (self.inner.ai.as_mut(), self.inner.player.as_ref()) {
-            ai.try_seat_ai_after_humans(count, &player.selected.owners.services.settings).map_err(error)?;
+            ai.try_seat_ai_after_humans(count, local, &player.selected.owners.services.settings).map_err(error)?;
             ai.streamed_challenge_ai = local_index != ai_owner;
             ai.campaign = true;
         }
@@ -1473,7 +1473,10 @@ impl<T, C> SelectedLiveSession<T, C> {
         // puppet here, followed as another player's skater is.
         let user_id = match round.players.get(usize::try_from(player).ok()?) {
             Some(&user_id) => user_id,
-            None if round.campaign => skate2_net::protocol::owned::skater_id(u8::try_from(player).ok()?),
+            None if round.campaign => {
+                let owner = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
+                skate2_net::protocol::owned::skater_id(u8::try_from(owner).ok()?, u8::try_from(player).ok()?)
+            }
             None => return None,
         };
         game.remotes.get(&user_id).filter(|remote| remote.visible())
@@ -2052,8 +2055,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                 changed.push(slot);
             }
         }
+        let owner_index = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
         for slot in hidden {
-            self.online_hide_owned_puppet(slot);
+            self.online_hide_owned_puppet(u8::try_from(owner_index).unwrap_or(0), slot);
         }
         for slot in changed {
             self.online_owned_slot_changed(slot);
@@ -2067,6 +2071,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             ai.streamed_challenge_ai = false;
             ai.campaign = false;
             ai.streamed_spawns.clear();
+            let mut manager = ai.manager();
+            manager.campaign_players = 1;
+            manager.campaign_index = 0;
         }
         self.online_drop_owned_puppets();
     }

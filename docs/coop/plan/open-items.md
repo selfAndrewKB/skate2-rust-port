@@ -214,11 +214,24 @@ Front page: [README](../README.md).
     complete themselves 182 ticks after the execute (`initial→challenge_running→complete`) and
     autosave with one hash. The crawl counts that a pass; what the mission asks of a player in
     play (a team film the diagnostic cannot make) is unproven.
-53. The ambient AI skaters are each console's own: at the same two spots seat 1 spawned
-    `ai_skater_06` and `sammy`, seat 2 `seb` and `ai_skater_06` (the probe's `ai:` lines). Not
-    streamed, not in the inventory's counts; a player sees different skaters than the other.
-    They are no longer testers of the box tests (68) nor frames of the scripts' (69): the
-    scripts read the humans and the owned challenge AI alone.
+53. **Fixed (2026-11-12, M12).** The ambient AI skaters were each console's own: at the same
+    two spots seat 1 spawned `ai_skater_06` and `sammy`, seat 2 `seb` and `ai_skater_06`, and
+    a player saw different skaters than the other. Every console now streams its own ambient
+    skaters as it streams the challenge AI it owns, under its own slots, and shows the others'
+    as puppets with their sound; an owned skater's name carries its owner on the wire
+    (protocol 124), and each console spawns its share of the allowance (the original's three
+    split by player index: two and one for two players). They stay no tester (68) and no frame of the scripts' (69). Proof
+    (`../bench/evidence/probe/2026-11-12-m12-soak-seat-{1,2}.log`, build 930d1ba8): four
+    minutes at the waterfront on the first build (each seat two skaters, before the split),
+    each seat sending each one's look as it spawned (ten and twelve looks) and building the
+    other seat's as puppets (twelve and ten characters) whose frames carried their sound, then
+    the tagged build 4be2feea with the split (two skaters on seat 1, one on seat 2, three looks
+    each way; `probe/2026-11-12-m12-ambient-skaters.md`); `-m12-handoff-seat-{1,2}.log`: the
+    S.K.A.T.E. with the owner leaving, the pros' puppets named by player 0 taken over by seat 2
+    at tick 2821 under its own name; the nine-mission regression `2026-11-12-crawl-m12` [see
+    the run note in missions]. What a player will see: a respawn at a slot re-dresses the
+    puppet in place (a new look, a jump to the new spot) within a second; whether that reads
+    well is play's to say. Not yet played by the player.
 54. Fixed (2026-11-11): four location missions (`m_08_01_teleport_trainingfacility_in`/`_out`,
     `m_2a_01_goto`, `m_3a_01_goto`) carry an empty `MapStartLocation`; the execute no longer asks
     for a teleport to the empty name (the native lookup fails on it and moves nobody). The crawl

@@ -247,7 +247,7 @@ pub(super) struct Online {
     owned_teleported: BTreeMap<u8, bool>,
     /// Co-op fork (M11.1): the owned slots whose frames have carried an audio record here, for
     /// the trace (the puppet sounds as the owner's actor does).
-    owned_sound: BTreeSet<u8>,
+    owned_sound: BTreeSet<u64>,
     /// The trick HUD's view of the local skater that its replay frames carry, and whether the
     /// last tick could not take it (traced once a time it starts failing).
     hud: crate::online::hud_record::HudRecorder,
@@ -319,6 +319,10 @@ const GM_ONLINE_FREE_SKATE: u32 = 4;
 /// places its own skater.
 const CAMPAIGN_START: [f32; 16] = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
 
+/// Co-op fork (M12): an owned skater's puppet hides after this many local ticks without a
+/// frame (its owner despawned it, or left); the runs come every `INTERVAL` ticks at most.
+const OWNED_STALE_TICKS: u32 = 180;
+
 /// Whether a run of replay frames ends at `tick` for runs of `interval` ticks.
 const fn ends_at(tick: u32, interval: u32) -> bool {
     tick % interval == 0
@@ -338,13 +342,14 @@ fn owned_ai_net_frames<T, C>(
     sample: bool,
     vault: &Arc<crate::attribute_runtime::AttributeRuntimeVault>,
     sent: &BTreeMap<u8, u64>,
+    challenge: bool,
 ) -> Result<Vec<(u8, u64, Option<Vec<u8>>, NetFrame)>, SelectedLiveError> {
     let challenge_slots: Vec<u32> = inner
         .ai_skaters
         .iter()
         .map(|skater| skater.player_index())
         .filter(|&slot| usize::try_from(slot).is_ok_and(|slot| slot >= humans))
-        .filter(|&slot| inner.ai.as_ref().and_then(|ai| ai.client_type(i32::try_from(slot).unwrap_or(-1))) == Some(crate::ai::actor::AiClientType::Challenge))
+        .filter(|&slot| (inner.ai.as_ref().and_then(|ai| ai.client_type(i32::try_from(slot).unwrap_or(-1))) == Some(crate::ai::actor::AiClientType::Challenge)) == challenge)
         .collect();
     let mut frames = Vec::with_capacity(challenge_slots.len());
     for skater in inner.ai_skaters.iter_mut().filter(|skater| challenge_slots.contains(&skater.player_index())) {
@@ -555,19 +560,19 @@ impl<T, C> SelectedLiveSession<T, C> {
                         // of it, made at their first arrival in a campaign.
                         let campaign = game.attributes.challenge_type == challenge::CAMPAIGN;
                         let remote = match owned::slot_of_id(user_id) {
-                            Some(slot) if campaign => Some(game.remotes.entry(user_id).or_insert_with(|| {
-                                crate::coop::trace(format_args!("owned AI skater at slot {slot}: its frames arrive; a puppet here"));
-                                RemoteSkater::new(user_id, owned::frames_slot(slot))
+                            Some((owner, slot)) if campaign => Some(game.remotes.entry(user_id).or_insert_with(|| {
+                                crate::coop::trace(format_args!("owned skater at slot {slot} of player {owner}: its frames arrive; a puppet here"));
+                                RemoteSkater::new(user_id, owned::frames_slot(owner, slot))
                             })),
                             Some(_) => None,
                             None => game.remotes.get_mut(&user_id),
                         };
                         if let Some(remote) = remote {
-                            if let Some(slot) = owned::slot_of_id(user_id)
+                            if let Some((owner, slot)) = owned::slot_of_id(user_id)
                                 && !frame.audio_words.is_empty()
-                                && self.online.owned_sound.insert(slot)
+                                && self.online.owned_sound.insert(user_id)
                             {
-                                crate::coop::trace(format_args!("owned AI skater at slot {slot}: its frames carry its sound from tick {}", frame.tick));
+                                crate::coop::trace(format_args!("owned skater at slot {slot} of player {owner}: its frames carry its sound from tick {}", frame.tick));
                             }
                             remote.receive(tick, *frame, paced, run_end);
                         }
@@ -1551,7 +1556,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // Co-op fork (M10): an owned challenge AI skater's look makes its puppet if its frames
         // have not yet.
         let remote = match owned::slot_of_id(user_id) {
-            Some(slot) if game.attributes.challenge_type == challenge::CAMPAIGN => game.remotes.entry(user_id).or_insert_with(|| RemoteSkater::new(user_id, owned::frames_slot(slot))),
+            Some((owner, slot)) if game.attributes.challenge_type == challenge::CAMPAIGN => game.remotes.entry(user_id).or_insert_with(|| RemoteSkater::new(user_id, owned::frames_slot(owner, slot))),
             Some(_) => return Ok(()),
             None => match game.remotes.get_mut(&user_id) {
                 Some(remote) => remote,
@@ -1773,9 +1778,16 @@ impl<T, C> SelectedLiveSession<T, C> {
         // Co-op fork (M10): the challenge AI skaters this console owns in a campaign go out as
         // its own skater does: their look once per actor, their frames in runs of the same
         // cadence, each under the AI's slot in the round.
+        // M12: every console streams its own ambient skaters too, under its own slots; the
+        // relay names them by their owner.
         let owned_ai = match self.career.as_ref().map(|career| career.system.world()).and_then(|world| world.coop.as_ref().map(|campaign| (campaign.seats, crate::challenge::players::owns_challenge_ai(world)))) {
-            Some((humans, true)) => owned_ai_net_frames(&mut self.inner, humans, tick, watched || ends_at(tick, interval), &vault, &game.owned_sent)?,
-            _ => Vec::new(),
+            Some((humans, owns)) => {
+                let sample = watched || ends_at(tick, interval);
+                let mut owned = if owns { owned_ai_net_frames(&mut self.inner, humans, tick, sample, &vault, &game.owned_sent, true)? } else { Vec::new() };
+                owned.extend(owned_ai_net_frames(&mut self.inner, humans, tick, sample, &vault, &game.owned_sent, false)?);
+                owned
+            }
+            None => Vec::new(),
         };
         // The owner's game camera rides the frames of the AI skater it follows (a S.K.A.T.E.
         // leader's turn), as its own frames carry it for a followed turn.
@@ -1817,6 +1829,15 @@ impl<T, C> SelectedLiveSession<T, C> {
         let own_rig = game.own_rig.clone();
         let mounts = Arc::clone(&self.inner.assets.as_ref().ok_or_else(|| error("assets absent"))?.mounts);
         for remote in game.remotes.values_mut() {
+            // M12: an owned skater whose frames stopped (its owner despawned it, or left) hides
+            // until they come again, as a player's does.
+            if let Some((owner, slot)) = owned::slot_of_id(remote.user_id)
+                && remote.visible()
+                && remote.last_arrival().is_some_and(|at| tick.saturating_sub(at) > OWNED_STALE_TICKS)
+            {
+                crate::coop::trace(format_args!("owned skater at slot {slot} of player {owner}: no frames for {OWNED_STALE_TICKS} ticks: its puppet hides"));
+                remote.hide();
+            }
             match remote.finish_character() {
                 Some(Ok(took)) => trace(format_args!("{:016x}'s character built in {:.1} ms", remote.user_id, took.as_secs_f64() * 1000.0)),
                 Some(Err(e)) => {
@@ -1970,9 +1991,9 @@ impl<T, C> SelectedLiveSession<T, C> {
 
     /// Co-op fork (M10): an owned challenge AI skater's puppet shows no more: its owner
     /// destroyed the skater (the round's frames stopped naming its slot).
-    pub(super) fn online_hide_owned_puppet(&mut self, slot: i32) {
-        if let Some(remote) = u8::try_from(slot).ok().and_then(|slot| self.online.game.as_mut()?.remotes.get_mut(&owned::skater_id(slot))) {
-            crate::coop::trace(format_args!("owned AI skater at slot {slot}: its puppet hides"));
+    pub(super) fn online_hide_owned_puppet(&mut self, owner: u8, slot: i32) {
+        if let Some(remote) = u8::try_from(slot).ok().and_then(|slot| self.online.game.as_mut()?.remotes.get_mut(&owned::skater_id(owner, slot))) {
+            crate::coop::trace(format_args!("owned AI skater at slot {slot} of player {owner}: its puppet hides"));
             remote.hide();
         }
     }
@@ -1984,7 +2005,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.online.owned_runs.remove(&slot);
         self.online.owned_teleported.remove(&slot);
         if let Some(game) = self.online.game.as_mut() {
-            game.remotes.remove(&owned::skater_id(slot));
+            // The old owner's puppet of the slot, whoever it was.
+            game.remotes.retain(|&id, _| owned::slot_of_id(id).is_none_or(|(_, owned)| owned != slot));
             game.owned_sent.remove(&slot);
         }
     }
