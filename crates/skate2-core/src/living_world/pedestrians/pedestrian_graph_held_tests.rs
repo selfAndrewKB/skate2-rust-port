@@ -89,3 +89,15 @@ fn a_graph_reset_after_a_failed_held_update_is_held_again() {
     graph.update_delegate(AiDelegate::Pedestrian, 1. / 60., &mut instances, &mut backend).unwrap();
 }
 
+/// A collision right after the reset: the puppet's own update runs from the graph's start (the
+/// spawn path), with nothing held first.
+#[test]
+fn a_reset_graph_runs_its_own_update_from_the_start() {
+    let (mut graph, mut instances, mut backend) = (PedestrianGraph::default(), PedestrianGraphBehaviours::default(), Refusing::default());
+    assert!(held(&mut graph, &mut instances, &mut backend, WALKING).unwrap());
+    backend.refuse_next_begin = true;
+    assert!(held(&mut graph, &mut instances, &mut backend, TAKEDOWN).is_err());
+    graph.end_all_and_reset(&mut instances, &mut backend).unwrap();
+    graph.update_delegate(AiDelegate::Pedestrian, 1. / 60., &mut instances, &mut backend).unwrap();
+    assert!(!instances.is_empty(), "the root's behaviours begun again");
+}
