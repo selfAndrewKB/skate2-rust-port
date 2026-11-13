@@ -230,6 +230,23 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     taunt, the takedown, the chase jump and the avoid's step played in the soaks without fault. A callback needing its own navigation's state elsewhere would
     show the same way (an error naming the missing state); none other is known.
 
+## Play (2026-11-12, the player, M20 lobby build bd5145d)
+
+83. **The joiner's seat stopped after an hour** (`InvalidActiveSet` in the pedestrians' tick).
+    **Fixed (M21):** a puppet's held update failed partway at its owner's takedown decision
+    and left the graph half applied; a failed held update now resets the graph and leaves that
+    state alone. Proof: `../bench/evidence/probe/2026-11-13-m21-held-reset.md` (the unit test
+    reproduces the stop; the owner's takedown itself is not staged on the bench). Not yet
+    played.
+84. A knocked-down puppet is still down when its owner gets up (it records the knockdown a
+    sample late and plays the whole fall), so the M16 stand-up closes its collision at the
+    owner's word: it stands at once, its get-up not played (12 of the joiner's 20 knockdowns in
+    the field test). The colliding behaviour's own early end (`forced_to_recover`, the timer
+    expired) would play the get-up; not built.
+85. M21's review, recorded: an `End` that fails during a state change's exit is run again by
+    the reset (its `remove` comes after the `?`), and the backend's `capture` keeps the last
+    failure's message, so a reset's trace can name the wrong behaviour; neither is seen.
+
 ## Session ([topic](topics/session.md))
 
 7. Two primed saves continue at the same spot with the same look; the bench teleports the seats

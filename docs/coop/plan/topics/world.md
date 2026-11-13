@@ -308,6 +308,16 @@ its own speed without making a trajectory (`jump_now`, `Services::is_puppet`; it
 samples): the jump's landing is set only by a pedestrian's own navigation, and the first M20
 build with the mirror stopped on it.
 
+**A held graph that fails is reset (2026-11-13, M21).** The field test on the M20 lobby stopped
+the joiner after an hour: a puppet's graph failed to be held at its owner's
+`WaitForTakedownDecision` (a pedestrian deciding to take down the skater that kept knocking it
+over; the takedown's behaviour asserts on a puppet, which has no target) partway through the
+state change, and the puppet's own update at its next knockdown met the half-applied set
+(`InvalidActiveSet`). Until M21 one failed held update ended holding for good and left the graph
+as it stopped; now it ends every behaviour and puts the graph back to its start
+(`PedestrianGraph::end_all_and_reset`), and only that state goes unheld. The stop is reproduced
+on the pedestrian graph's own data (`pedestrian_graph_held_tests.rs`).
+
 ## History
 
 - 2026-11-10 M5: the table grew by story characters, guards and props; the stream by the
