@@ -32,6 +32,14 @@ impl PedestrianConstruction {
     pub(crate) fn jump_now<N: ReckoningNumeric>(&mut self, cvars: &InputCvarReferences,
         numeric: &mut N,
     ) -> Result<(), String> where N::Error: std::fmt::Debug {
+        // Co-op fork (M20): a puppet plays its owner's intents, a jump's among them, but its
+        // navigation never set a jump's landing (SetJumpToPosition) and its path through the
+        // jump is its owner's samples: the clip plays, the trajectory is not made. Until this
+        // guard a puppet's jump stopped the game ("JumpNow before SetJumpToPosition", the
+        // M20 collision soak, seat 2 at tick 7148).
+        if self.puppet.is_some() {
+            return Ok(());
+        }
         let speed = self.max_chase_speed()?;
         let position = self.core.as_ref().ok_or("pedestrian core not constructed")?.transform[3];
         let tuning = cvars.try_pedestrian_jump_tuning().map_err(|e| format!("pedestrian jump cvars: {e:?}"))?;
