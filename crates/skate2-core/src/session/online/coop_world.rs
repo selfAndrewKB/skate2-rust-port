@@ -312,7 +312,9 @@ pub(in super::super) struct CoopWorld {
     /// M20: every intent list heard from the others, by its hash.
     intent_names: BTreeMap<u32, Vec<crate::play_animation::FastString30>>,
     bad_runs: u32,
-    shoved: bool,
+    /// The diagnostic shoves done, and the puppet they go to after the first.
+    shoved: usize,
+    shoved_id: Option<u32>,
     stats: Stats,
 }
 
@@ -328,12 +330,20 @@ fn census_trace_on() -> bool {
 /// The census dump's period in round ticks.
 const CENSUS_EVERY: u32 = 60;
 
-/// `SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>`: at that tick the nearest puppet is knocked down here
+/// `SKATE2_DIAGNOSTIC_COOP_SHOVE=<tick>[,<tick>...]`: at each tick a puppet is knocked down here
 /// as if the local skater had hit it, and the contact goes to its owner, so the bench proves
-/// the round trip without steering a skater into a pedestrian.
-fn diagnostic_shove_tick() -> Option<u32> {
-    static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_SHOVE").ok().and_then(|tick| tick.parse().ok()))
+/// the round trip without steering a skater into a pedestrian. The first goes to the nearest
+/// puppet, the rest to the same one while it is still a puppet here (M20: a pedestrian knocked
+/// down again and again, as the field test's crash had it).
+fn diagnostic_shove_ticks() -> &'static [u32] {
+    static TICKS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
+    TICKS.get_or_init(|| {
+        let mut ticks = std::env::var("SKATE2_DIAGNOSTIC_COOP_SHOVE").ok().map_or_else(Vec::new, |ticks| {
+            ticks.split(',').filter_map(|tick| tick.trim().parse().ok()).collect::<Vec<u32>>()
+        });
+        ticks.sort_unstable();
+        ticks
+    })
 }
 
 /// `SKATE2_DIAGNOSTIC_COOP_NUDGE=<tick>[,<tick>...]`: at each tick the nearest prop with a
@@ -1079,9 +1089,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
 
                 // 5. The diagnostic shove: the nearest puppet, hit as a skater would hit it.
-                if let Some(at) = diagnostic_shove_tick()
+                if let Some(&at) = diagnostic_shove_ticks().get(coop.shoved)
                     && tick >= at
-                    && !coop.shoved
                 {
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
                     let roster = living.pedestrian_entities.as_deref_mut().ok_or("pedestrian EntityMan absent")?;
@@ -1091,18 +1100,21 @@ impl<T, C> SelectedLiveSession<T, C> {
                         .filter(|(_, known)| known.owner != Owner::Local)
                         .filter_map(|(&id, puppet)| {
                             let core = roster.get(puppet.entity)?.core.as_ref()?;
-                            Some((distance_squared(core.transform[3], centre), id, puppet.entity))
+                            // After the first, the same puppet while it is one here.
+                            let d2 = if coop.shoved_id == Some(id) { -1. } else { distance_squared(core.transform[3], centre) };
+                            Some((d2, id, puppet.entity))
                         })
                         .min_by(|a, b| a.0.total_cmp(&b.0));
                     if let Some((d2, id, entity)) = nearest {
-                        coop.shoved = true;
+                        coop.shoved += 1;
+                        coop.shoved_id = Some(id);
                         let pedestrian = roster.get_mut(entity).expect("listed");
                         // M16: as a skater's hit, the contact alone goes to the owner; nothing
                         // plays here until the owner's flags and graph state say so.
                         if let Some(drive) = pedestrian.puppet.as_mut() {
                             drive.pending_contact = Some((CollisionForce::Knockdown as u32 as u8, CollisionDirection::Front as u32 as u8, [0., 0., 6.], [0., 0., 0.]));
                         }
-                        trace(format_args!("diagnostic: shoved puppet {id:08x} at {:.1} m: contact to its owner at {tick}, its word awaited", d2.sqrt()));
+                        trace(format_args!("diagnostic: shoved puppet {id:08x} at {:.1} m: contact to its owner at {tick}, its word awaited", d2.max(0.).sqrt()));
                     } else if tick == at {
                         trace(format_args!("diagnostic: no puppet to shove at {tick}"));
                     }

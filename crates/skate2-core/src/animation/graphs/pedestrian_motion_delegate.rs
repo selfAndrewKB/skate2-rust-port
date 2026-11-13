@@ -98,6 +98,7 @@ impl ConditionResults {
         callback: impl FnOnce() -> Result<bool, Error>) -> Result<bool, Error>
     {
         if usize::from(condition) >= data::CONDITIONS.len() {
+            crate::coop::trace(format_args!("pedestrian motion graph: condition {condition} past the table"));
             return Err(Error::InvalidActiveSet);
         }
         let word = usize::from(condition / 32);
@@ -223,7 +224,12 @@ impl<K> PedestrianMotionDelegate<K> {
             }
         }
         for state in exited {
-            if self.times.remove(&state).is_none() { return Err(Error::InvalidActiveSet); }
+            if self.times.remove(&state).is_none() {
+                // Co-op fork, diagnostic (M20): which state, so a field log names it.
+                crate::coop::trace(format_args!("pedestrian motion graph: state {state} ({}) left but not active (active states {:?})",
+                    declarations.states[usize::from(state)].name, self.times.keys().collect::<Vec<_>>()));
+                return Err(Error::InvalidActiveSet);
+            }
         }
         // Transition829318f8: every authored hook section of the three delegates is empty.
         if selected.transition != NULL_INDEX && declarations.transitions[usize::from(selected.transition)].hooks.count != 0 {
@@ -235,8 +241,16 @@ impl<K> PedestrianMotionDelegate<K> {
             let section = declarations.states[usize::from(state)].behaviours;
             for occurrence in section.index..section.index + section.count {
                 if !backend.enabled(occurrence)? { continue; }
-                let position = self.active.binary_search_by_key(&occurrence, |x| x.occurrence)
-                    .map_or_else(|position| Ok(position), |_| Err(Error::InvalidActiveSet))?;
+                let position = match self.active.binary_search_by_key(&occurrence, |x| x.occurrence) {
+                    Err(position) => position,
+                    Ok(_) => {
+                        // Co-op fork, diagnostic (M20): the behaviour still active as its state
+                        // is entered again.
+                        crate::coop::trace(format_args!("pedestrian motion graph: state {state} ({}) entered with its behaviour {occurrence} still active (active {:?})",
+                            declarations.states[usize::from(state)].name, self.active.iter().map(|active| active.occurrence).collect::<Vec<_>>()));
+                        return Err(Error::InvalidActiveSet);
+                    }
+                };
                 if self.active.len() == declarations.active_capacity { return Err(Error::Capacity); }
                 let instance = backend.create_instance(occurrence)?;
                 self.active.insert(position, ActiveBehaviour { occurrence, instance });

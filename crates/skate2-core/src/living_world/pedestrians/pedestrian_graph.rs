@@ -260,7 +260,12 @@ impl PedestrianGraph {
             }
         }
         for state in exited {
-            if self.times.remove(&state).is_none() { return Err(Error::InvalidActiveSet); }
+            if self.times.remove(&state).is_none() {
+                // Co-op fork, diagnostic (M20): which state, from where, so a field log names it.
+                crate::coop::trace(format_args!("pedestrian graph: state {state} ({}) left but not active (current {}, active states {:?})",
+                    declarations.states[usize::from(state)].name, self.current, self.times.keys().collect::<Vec<_>>()));
+                return Err(Error::InvalidActiveSet);
+            }
         }
         if selected.transition != NULL_INDEX {
             // UpdateTransition82933c30 uses hook indices, and calls nothing
@@ -279,8 +284,16 @@ impl PedestrianGraph {
             let section = declarations.states[usize::from(state)].behaviours;
             for occurrence in section.index..section.index + section.count {
                 if !backend.enabled(occurrence)? { continue; }
-                let position = instances.active.binary_search(&occurrence)
-                    .map_or_else(|position| Ok(position), |_| Err(Error::InvalidActiveSet))?;
+                let position = match instances.active.binary_search(&occurrence) {
+                    Err(position) => position,
+                    Ok(_) => {
+                        // Co-op fork, diagnostic (M20): the behaviour still active as its state
+                        // is entered again.
+                        crate::coop::trace(format_args!("pedestrian graph: state {state} ({}) entered with its behaviour {occurrence} ({}) still active (current {}, active {:?})",
+                            declarations.states[usize::from(state)].name, declarations.behaviours[usize::from(occurrence)].name, self.current, instances.active));
+                        return Err(Error::InvalidActiveSet);
+                    }
+                };
                 if instances.active.len() == declarations.active_capacity { return Err(Error::Capacity); }
                 backend.create_instance(self, occurrence)?;
                 // Native publishes the occurrence before calling Begin.
