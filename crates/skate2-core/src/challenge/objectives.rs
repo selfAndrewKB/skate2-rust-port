@@ -109,6 +109,11 @@ pub struct Triggers {
 }
 
 impl Triggers {
+    /// Co-op fork, diagnostic: the trick-kind trigger this pass carries, for the judging trace.
+    fn trick_kind(&self) -> Option<&'static str> {
+        [(self.air_complete, "an air"), (self.sequence_complete, "a sequence"), (self.grind_complete, "a grind"), (self.manual_pumped, "a manual")]
+            .into_iter().find_map(|(on, name)| on.then_some(name))
+    }
     fn read(db: &AttribDb, objective: u64) -> Self {
         let b = db
             .attribute(class::CHALLENGE_OBJECTIVE, objective, field::OBJECTIVE_TRIGGERS)
@@ -1298,10 +1303,26 @@ fn evaluate_group(lua: &mut Lua<World>, world: &mut World, group: u32, triggers:
             let o = &world.objectives.groups[gi].objectives[i];
             (o.state, o.key)
         };
+        // Co-op fork, diagnostic: how each active objective judged a trick (the player's field
+        // test of the Burnette photo, 2026-11-13: every attempt a bail, and no trace said whether
+        // a landed trick reached the objective at all).
+        let judging = world.coop.is_some().then(|| triggers.trick_kind()).flatten().filter(|_| state == Status::Active);
+        let player = world.objectives.groups[gi].player;
         if state != Status::Active || !triggers.matches(Triggers::read(&world.db, key)) {
+            if let Some(kind) = judging {
+                crate::coop::trace(format_args!("objective {key:016x} of player {player}: {kind} not judged (it does not listen for one)"));
+            }
             continue;
         }
         let result = full_completion_test(lua, world, group, i, triggers.sequence_complete);
+        if let Some(kind) = judging {
+            let verdict = match result {
+                -2 => "met: complete".to_owned(),
+                -1 => "not met yet".to_owned(),
+                failed => format!("failed its requirement {failed}"),
+            };
+            crate::coop::trace(format_args!("objective {key:016x} of player {player}: {kind} judged: {verdict}"));
+        }
         if result != -2 {
             if result >= 0 {
                 #[expect(clippy::cast_precision_loss, reason = "index")]
@@ -1711,6 +1732,9 @@ pub fn receive(lua: &mut Lua<World>, world: &mut World, event: &Event) {
         let (wiped_out, used_marker) = (flag("Wipedout"), flag("UsedSessionMarker"));
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "sequence score")]
         let score = number("SequenceScore").unwrap_or(0.0) as u32;
+        if world.coop.is_some() {
+            crate::coop::trace(format_args!("trick: player {player} sequence: score {score}, bailed {wiped_out}, session marker {used_marker}; {} objective groups", ids.len()));
+        }
         let db = std::sync::Arc::clone(&world.db);
         for group in ids {
             if let Some(g) = group_mut(world, group) {
@@ -1807,6 +1831,15 @@ pub fn receive(lua: &mut Lua<World>, world: &mut World, event: &Event) {
             .and_then(|f| f.iter().find(|(n, _)| *n == "UsedSessionMarker"))
             .is_some_and(|(_, v)| matches!(v, Field::Bool(true)));
         let air = world.skaters.iter().find(|f| f.player == player).and_then(|f| f.finished_air);
+        if world.coop.is_some() {
+            match &air {
+                Some(a) => crate::coop::trace(format_args!(
+                    "trick: player {player} air: landed {}, sketchy {}, grab {} ({:.2} s), tweak {}, {} frames, peak {:.2} m, distance {:.2} m, spins {}, flips {}, first trick {}; bailed {wiped_out}, session marker {used_marker}; {} objective groups",
+                    a.landed_successfully, a.landing_was_sketchy, a.grab_occured, a.grab_time, a.tweak_occured, a.in_air_frames, a.height_to_peak,
+                    a.horizontal_distance, a.player_spin180_count, a.player_num_flips, a.first_scorable_id, ids.len())),
+                None => crate::coop::trace(format_args!("trick: player {player} air, no record of it; bailed {wiped_out}, session marker {used_marker}; {} objective groups", ids.len())),
+            }
+        }
         for group in ids {
             if let Some(air) = &air
                 && !wiped_out
