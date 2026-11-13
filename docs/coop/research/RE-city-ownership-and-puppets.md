@@ -46,6 +46,13 @@ gave each. Code under `crates/skate2-core/src/`: `living_world/population/`,
   while it collides (`PuppetDrive::colliding`), so a knockdown's packet plays. A startled run
   shows as a run; a startle's stumble and the mood's gestures do not travel yet (the
   behaviour itself would have to).
+- The rule since M20 [CONFIRMED on the bench]: the owner's active stage travels (a hash, its
+  names on a change) and the puppet's base packet takes it (`IntentQueue::mirror_stage`); a
+  trailing turn name (`override_turn`'s eight) goes in as its own stage, which the puppet's
+  motion graph completes and `pop_completed_turn` pops. The speed table stood in for intents
+  it could not see: a stop to talk read as a slow walk (`shuffle`) from the speed left over,
+  and a walk near a band's edge flickered between bands (the walk in place and the pauses,
+  `../bench/evidence/probe/2026-11-12-m20-walk.md`).
 - The puppet's look: the census spawn drew a model and colours for the owner's entity key at
   random on the receiving side, though the descriptor carried them; the spawn now takes the
   owner's model key and recipe id (`PedestrianCensusFrame::look`,

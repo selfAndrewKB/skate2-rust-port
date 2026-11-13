@@ -269,7 +269,14 @@ What is shared and what is not, as data, not by eye: `tools/coop/sync_inventory.
 [sync-inventory.md](sync-inventory.md) from the structs (a field it does not know fails the
 check, so a new field cannot go unclassified); `SKATE2_TRACE_COOP_CENSUS=1` on every seat
 writes, every 60 round ticks, one line per pedestrian the seat knows (world id, owner, epoch,
-position, yaw, speed, flags, model, graph behaviour, moods, down); and
+position, yaw, speed, flags, model, graph behaviour, moods, down, and since M20 `i q<queued>
+<names>`, its intent generator's active stage, with a `census <tick>: <id> plays <names>` line
+for what its motion graph is given); `tools/coop/intent_audit.py seat-1.log seat-2.log` pairs an
+owner's census with its puppet's and counts where the intents differ, and
+`tools/coop/walk_audit.py` gives a soak's walk-in-place figures (of an owner's stood seconds,
+its puppet moving past 0.3 m/s, or given another major intent), its collisions (the owners'
+knocked-down seconds whose puppet was given no collision intent, each seat's longest run of a
+puppet colliding) and its summed jerk; and
 `tools/coop/sync_audit.py seat-1.log seat-2.log` pairs the seats' lines by world id and round
 tick and reports, per field, how many pairs agree within tolerance (position 0.5 m, yaw 5°,
 speed 0.5 m/s, flags, model and down exact), the worst gap and where, the divergences still

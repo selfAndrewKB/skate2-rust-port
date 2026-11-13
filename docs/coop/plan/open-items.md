@@ -204,6 +204,32 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     root motion, or its update cadence. Whether the eye sees it is play's to say; the puppets
     are not made to copy it.
 
+## Play (2026-11-12, the player, M19 lobby build 0700f045)
+
+79. **Pedestrians stop and walk in place on one screen (the joiner, the player thought); walking
+    puppets pause every few steps** ("almost like they're moonwalking"). **Fixed (M20):** the
+    puppet's intents were re-derived from its owner's speed (a stop's leftover speed read as a
+    slow walk, a walk near a band's edge flickered between bands); the owner's active intent
+    stage now travels and the puppet plays it. Proof: `../bench/evidence/probe/2026-11-12-m20-walk.md`
+    (the measured velocity first, which made it worse; the census probe that found the cause;
+    the mirror's soak: the same major intent in 98.5 % of pairs). Not yet played.
+80. A puppet's own intent queue keeps the packets its held graph's behaviours suggest (an
+    avoid's jump, a collision's, a sit) and nothing completes them, since the puppet plays its
+    owner's stage; since M20 a puppet's collision clears that queue before it is suggested (four
+    stale packets had rejected it: the puppet stood through its owner's knockdown). Whether the
+    held graph should suggest at all on a puppet is unread.
+81. The samples' lateness is measured on one Mac (mean 0.1 to 0.2 ticks, worst 1); two machines
+    over the internet are unmeasured. The trace (`world runs received at`) and the placing of
+    a late sample (`PuppetDrive::arrive_late`, at most 30 ticks) are in every build; a step in
+    the owner's tick against this console's (a hitch its loop never caught up) reads as
+    lateness for up to two seconds (the review's finding; the window was ten seconds).
+82. A puppet plays its owner's intents, so every clip callback of the original runs on a puppet
+    whose navigation never ran: the jump's (`JumpNow` needs `SetJumpToPosition`) stopped a seat
+    and is guarded (the clip at its own speed, its phase never in flight, so the motion graph's
+    landing condition holds at once and the clip may end early: the eye's to say); the sit, the
+    taunt, the takedown, the chase jump and the avoid's step played in the soaks without fault. A callback needing its own navigation's state elsewhere would
+    show the same way (an error naming the missing state); none other is known.
+
 ## Session ([topic](topics/session.md))
 
 7. Two primed saves continue at the same spot with the same look; the bench teleports the seats

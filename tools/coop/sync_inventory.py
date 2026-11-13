@@ -67,13 +67,13 @@ CLASSES = {
     'last_frame_hand_position': ('local', 'hand props do not travel'),
     'plugin': ('local', 'waypoint plugin (spectators)'),
     'plugin_removal_requested': ('local', 'waypoint plugin'),
-    'intent_queue': ('derived', 'a puppet\'s base locomotion intents from the streamed velocity (M6); packets (collisions) from the streamed flags'),
+    'intent_queue': ('streamed', 'the owner\'s active stage (its intents) travels by hash, named on a change; a puppet\'s base packet takes it, a turn as its own stage (M20; from the streamed velocity M6 to M19); its own packets only while it collides'),
     'navigation_intent': ('local', 'navigation'),
     'perception': ('local', 'a puppet perceives nothing (M5)'),
     'state_out': ('streamed', 'state (the speech/audio event) travels as motion; the receiver does not apply it'),
     'collision_info': ('streamed', 'force and direction travel in flags'),
     'navigation_modifiers': ('local', 'navigation'),
-    'animation': ('derived', 'the motion graph plays the derived intents and the held graph\'s behaviours (M16); clip phase is each console\'s own'),
+    'animation': ('derived', 'the motion graph plays the owner\'s intents (M20) and the held graph\'s behaviours (M16); clip phase is each console\'s own'),
     'nav_rig': ('local', 'navigation'),
     'collision': ('derived', 'colliding and required_to_begin_colliding set from the streamed KNOCKED_DOWN, STANDING_HIT and COLLIDING flags; nothing predicted on a puppet since M16'),
     'post_adjust': ('local', 'pose adjust'),
@@ -87,6 +87,14 @@ CLASSES = {
 
 FIELD = re.compile(r'^\s*pub(?:\(crate\))?\s+([a-z_][a-z0-9_]*)\s*:')
 
+
+
+def stream_format():
+    """The world stream's format, as `world_stream.rs` declares it."""
+    m = re.search(r'pub const FORMAT: u8 = (\d+);', open(STREAM).read())
+    if not m:
+        sys.exit('no FORMAT in world_stream.rs')
+    return int(m.group(1))
 
 def struct_fields(path, name):
     text = path.read_text(encoding='utf-8')
@@ -122,7 +130,7 @@ def main():
              '`living_world/pedestrians/living_world_pedestrian_entity.rs`; the classes are the reviewed part',
              '(a field the structs have and the script does not know fails the check). Front page:',
              '[README](../README.md). The audit that measures it: `tools/coop/sync_audit.py`.', '',
-             '## What travels (the world stream, format 6)', '']
+             f'## What travels (the world stream, format {stream_format()})', '']
     for name, fields in wire.items():
         lines.append(f'- `{name}`: ' + ', '.join(f'`{f}`' for f in fields))
     lines += ['', '## A pedestrian\'s state (`PedestrianConstruction`)', '',

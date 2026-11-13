@@ -34,7 +34,8 @@ differs in 99.5 % of pairs and the moods in 41 %, by design (not shared).
 - **A puppet is its owner's copy.** Spawned with the owner's model key and recipe id (the
   descriptor's, which the census's own draw ignored before: the player saw different models
   per screen); its walk, run and stand come from the owner's velocity through the animation
-  data's own speed table (`update_puppet_intent`), with no navigation and no turn stage; its
+  data's own speed table (`update_puppet_intent`; since M20 the owner's own intents), with no
+  navigation and no turn stage; its
   own graph and navigation run only while it collides, so a knockdown still plays. A startled
   run shows as a run; the stumble and the mood's gestures do not travel yet.
 - **One world id for life, a table of owners.** A world id is the first spawner's slot and
@@ -265,6 +266,47 @@ past 5 mm were 3.1 % and 4.4 % a seat, the own pedestrians' 18.5 % and 15.1 % (t
 own root motion), and the linear fade's 9.3 % and 10.2 % in the A/B. The pedestrians stopping to
 greet or talk (`DoGreet`, `PedestrianDoStartConversation`, the graph's states) are the owner's
 held state on the puppet since M16.
+
+**A puppet plays its owner's intents (2026-11-12, M20).** The player saw pedestrians still stop
+and walk in place on one screen, and walking puppets pause every few steps ("almost like
+they're moonwalking"). A census probe naming each copy's intents found the cause: owner and
+puppet agreed on their active intents in 79.5 % of 4172 paired samples, the owner walking or idle
+while its puppet shuffled in 289 (the band the puppet re-derived from a wavering speed, M6's
+rule), and the puppet's own intent queue held packets its held graph had suggested that nothing
+completes (an avoid's jump, a collision's, a sit), so following that queue would be wrong. Now
+every sample carries the owner's active stage as a hash (`EntityState::intents`, four bytes,
+stream format 7) and its names as text in the three samples after a change and with a
+descriptor (`intent_names`, checked against the hash on arrival); each console keeps every list
+it has heard by hash (30 in a soak), and a puppet's base packet takes its owner's list when it
+changes (`IntentQueue::mirror_stage`), a turn (wherever it stands: a stop's `ForceStop` follows
+it) as a stage of its own that the puppet's motion graph completes and pops as the owner's did,
+a list without a turn ending one still playing; a colliding puppet runs its own intents and
+takes its owner's again after, and a puppet promoted to this console's own starts its intents
+clean (`ClearAllIntents`). The M6 band stands in while a list's names are not heard here. On the soak the motion graphs were given the same major intent in
+98.5 % of pairs, a stood owner's puppet another in 5.3 % and 0.4 % a seat; jerk past 5 mm 2.9 %
+and 3.1 %. M20 also measured the samples' lateness (the two game loops' pacing; mean 0.1 to
+0.2 ticks, worst 1, on one Mac; the owner's punctual tick is the least over a second and the
+one before) and places a late sample in time (`PuppetDrive::arrive_late`),
+and a sample's velocity is the one its pedestrian moves at (`measured_velocity`, over eight
+ticks), not its navigation's.
+
+**An owner's knockdown always plays on its puppet (2026-11-12, M20).** The puppet plays its
+owner's standing hit a sample late, so the knockdown that often follows found it still
+colliding: until M20 it was dropped, or its packet was rejected (a collision cannot interrupt a
+collision, and four packets fill a queue), and a rejected packet never completes, so the
+colliding state waited on it for good. The soaks' census saw an owner's knocked-down seconds
+with no collision on its puppet (10 of 16 on one seat) and puppets colliding for a minute. A
+knockdown this console's own skater caused played no collision of the puppet's own at all
+since M16 took away the prediction (the owner's confirmation was counted and nothing recorded;
+the mirror showed the clip, the puppet's state stayed up). Now every owner's knockdown waits as
+due until the puppet's own standing hit ends (its packet cleared, so it ends at the next
+update; a collision no behaviour ends is closed after two seconds) and a puppet's collision
+clears its queue before it is suggested: 1 of 5 and 1 of 12 such seconds (a sample's lag), the
+longest colliding run 6 s. A puppet promoted to this console's own keeps a collision in progress
+(its get-up is its colliding behaviour's). A puppet playing its owner's jump plays the clip at
+its own speed without making a trajectory (`jump_now`, `Services::is_puppet`; its path is the
+samples): the jump's landing is set only by a pedestrian's own navigation, and the first M20
+build with the mirror stopped on it.
 
 ## History
 
