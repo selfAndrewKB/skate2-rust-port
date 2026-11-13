@@ -484,11 +484,14 @@ impl super::SelectedRecipeFrame<'_> {
             // Co-op fork (M6): a puppet's walk, run or stand is its owner's velocity; its
             // own intents only while it collides.
             match entity.puppet.as_ref().filter(|_| !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref())) {
-                Some(puppet) => {
-                    let velocity = puppet.locomotion_velocity();
-                    entity.update_puppet_intent(velocity)?;
+                Some(_) => entity.update_puppet_intent()?,
+                None => {
+                    // M20: a colliding puppet runs its own intents; its owner's go in again after.
+                    if let Some(drive) = entity.puppet.as_mut() {
+                        drive.applied_intents = None;
+                    }
+                    entity.update_intent(&mesh, cvars, &mut HostReckoningNumeric)?
                 }
-                None => entity.update_intent(&mesh, cvars, &mut HostReckoningNumeric)?,
             }
         }
         Ok(())

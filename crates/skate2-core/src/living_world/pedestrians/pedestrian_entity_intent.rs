@@ -56,7 +56,29 @@ impl PedestrianConstruction {
     /// Co-op fork (M6): a puppet's locomotion intents from its owner's velocity, through the
     /// animation data's own speed table (`select_speed_mapping`), with no navigation and no
     /// turn stage (its yaw is the sample's). What `IntentQueue::update` does without a packet.
-    pub(crate) fn update_puppet_intent(&mut self, velocity: [f32; 4]) -> Result<(), String> {
+    pub(crate) fn update_puppet_intent(&mut self) -> Result<(), String> {
+        let drive = self.puppet.as_mut().ok_or("puppet intent drive absent")?;
+        let velocity = drive.locomotion_velocity();
+        // M20: the owner's intents, applied to the base packet when they change. Until M20 the
+        // band came from the owner's velocity alone: a stop to talk, a turn or a speed near a
+        // band's edge played as another band here (the census, 2026-11-12: owner and puppet
+        // agreed on 79.5% of samples; the owner walking or idle while its puppet shuffled was
+        // the walk in place and the moonwalk the player saw).
+        let owner = drive.owner_intents.as_ref().map(|(hash, names)| (*hash, names));
+        if let Some((hash, names)) = owner {
+            let changed = drive.applied_intents != Some(hash);
+            let names = changed.then(|| names.clone());
+            drive.applied_intents = Some(hash);
+            let animation = self.animation.as_mut().ok_or("puppet intent animation absent")?;
+            let queue = self.intent_queue.as_mut().ok_or("puppet intent queue absent")?;
+            if let Some(names) = names {
+                queue.mirror_stage(&names, &mut animation.ai_input)?;
+            }
+            queue.pop_completed_turn(&mut animation.ai_input)?;
+            animation.motion_intents.valid = true;
+            animation.motion_intents.set_packet(queue.base.active()?);
+            return Ok(());
+        }
         let speed = (velocity[0] * velocity[0] + velocity[2] * velocity[2]).sqrt();
         let animation = self.animation.as_mut().ok_or("puppet intent animation absent")?;
         let queue = self.intent_queue.as_mut().ok_or("puppet intent queue absent")?;

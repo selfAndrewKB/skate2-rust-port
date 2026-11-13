@@ -5,6 +5,7 @@
 //! skater, scoring and scripts see it as they see any pedestrian.
 
 use crate::living_world_rain::geometry::Transform;
+use crate::play_animation::FastString30;
 
 /// How many ticks a puppet carries on at its last velocity before it stands where it is: past
 /// the owner's keepalive (M17: 20 runs of 3 ticks), since a sample that would say the same is
@@ -79,6 +80,26 @@ pub(crate) struct PuppetDrive {
     /// prop vanish from one screen and come back at the owner's next descriptor.
     pub(crate) releasing: bool,
     pub(crate) kept: u32,
+    /// M20: the intents its owner's intent generator gives its motion graph (their hash and
+    /// names), once this console has heard the names; `None` before (or from a peer that sends
+    /// none), when the M6 speed band stands in.
+    pub(crate) owner_intents: Option<(u32, Vec<FastString30>)>,
+    /// The hash of the owner's intents last applied to this puppet's base packet: they are
+    /// applied when they change, so this puppet's own motion graph completes the transitions
+    /// and turns between, as the owner's does.
+    pub(crate) applied_intents: Option<u32>,
+}
+
+/// M20: a stage's intents as one number, for the world stream: FNV-1a over each name's packed
+/// words and a separator; never 0, which the stream keeps for none.
+pub(crate) fn intents_hash(names: &[FastString30]) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for name in names {
+        for byte in name.words.iter().flat_map(|word| word.to_le_bytes()).chain([0xff]) {
+            hash = (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193);
+        }
+    }
+    hash.max(1)
 }
 
 /// M19: how much a puppet's steps jerked (changed from one tick to the next), since the meter
@@ -106,7 +127,7 @@ impl PuppetDrive {
         let at = [target[3][0], target[3][1], target[3][2]];
         Self {
             target, velocity: [0.; 4], age: 0, late: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false,
-            yaw_from: yaw, yaw_to: yaw, from_origin: at, from_velocity: [0.; 3], last_position: at, last_step: [0.; 3], last_yaw: yaw, last_dt: 1. / 60., stutter: Stutter::default(), prop_waiting: 0, releasing: false, kept: 0,
+            yaw_from: yaw, yaw_to: yaw, from_origin: at, from_velocity: [0.; 3], last_position: at, last_step: [0.; 3], last_yaw: yaw, last_dt: 1. / 60., stutter: Stutter::default(), prop_waiting: 0, releasing: false, kept: 0, owner_intents: None, applied_intents: None,
         }
     }
 
@@ -295,6 +316,20 @@ mod tests {
         for w in xs[120..].windows(2) {
             assert!((w[1] - w[0] - 1.5 * DT).abs() < 1e-3, "a step of {} m", w[1] - w[0]);
         }
+    }
+
+    /// The names travel as text: each comes back as the same packed name, so the hash the
+    /// owner sent is the hash of what the puppet plays.
+    #[test]
+    fn intent_names_survive_the_text_round_trip() {
+        let names: Vec<FastString30> = ["Walk", "", "TurnLeft135", "ChaseRun", "Slow", "Converse"]
+            .iter().map(|name| FastString30::encode(name).unwrap()).collect();
+        let again: Vec<FastString30> = names.iter()
+            .map(|name| FastString30::encode(&name.decode().unwrap()).unwrap()).collect();
+        assert_eq!(names, again);
+        assert_eq!(intents_hash(&names), intents_hash(&again));
+        assert_ne!(intents_hash(&names[..1]), intents_hash(&names[..2]), "an empty minor counts");
+        assert_ne!(intents_hash(&[]), 0);
     }
 
     #[test]

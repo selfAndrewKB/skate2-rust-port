@@ -90,6 +90,8 @@ struct Sent {
     flags: u8,
     motion: u8,
     graph: u16,
+    /// M20: the hash of the intents last sent.
+    intents: u32,
     runs: u32,
     /// M19: the hand prop last described, so a change sends a descriptor at once.
     hand_prop: u64,
@@ -136,6 +138,15 @@ fn measured_velocity(trail: &std::collections::VecDeque<[f32; 3]>) -> Option<[f3
     let velocity = [0, 1, 2].map(|lane| (last[lane] - first[lane]) / seconds);
     (velocity.iter().map(|value| value * value).sum::<f32>() < 100.).then_some(velocity)
 }
+
+/// M20: a stage's intent names as text, for the world stream.
+fn intent_texts(stage: &[crate::play_animation::FastString30]) -> Vec<String> {
+    stage.iter().map(|name| name.decode().unwrap_or_default()).collect()
+}
+
+/// M20: the intent lists a console keeps by hash at most (a pedestrian's vocabulary is a few
+/// dozen; this bounds a peer that sends nonsense).
+const MOST_INTENT_LISTS: usize = 4096;
 
 /// How many ticks of a pedestrian's positions its measured velocity spans (M20): a stride's
 /// share, so the root motion's surge within a step averages out.
@@ -191,6 +202,11 @@ struct Stats {
     stale: u32,
     /// M17: samples the send-on-error rule withheld.
     withheld: u64,
+    /// M20: intent lists named in samples sent; puppet samples whose intents were applied, and
+    /// those whose hash had no names heard yet.
+    intents_named: u64,
+    intents_known: u64,
+    intents_unknown: u64,
     /// M20: the lateness of the samples received (ticks), its sum, worst and count past 3.
     late_samples: u64,
     late_sum: u64,
@@ -276,6 +292,8 @@ pub(in super::super) struct CoopWorld {
     /// to talk or wait kept a navigation velocity of up to half a metre a second while it stood,
     /// and its puppet walked in place to it: the player, 2026-11-12, and the M19 census dumps).
     own_trail: BTreeMap<u32, std::collections::VecDeque<[f32; 3]>>,
+    /// M20: every intent list heard from the others, by its hash.
+    intent_names: BTreeMap<u32, Vec<crate::play_animation::FastString30>>,
     bad_runs: u32,
     shoved: bool,
     stats: Stats,
@@ -501,6 +519,19 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
         for entity in run.entities {
             let id = entity.id;
+            // M20: the names behind an intent hash, kept for every record that follows.
+            if let Some(names) = entity.intent_names.as_ref().filter(|_| entity.intents != 0)
+                && !coop.intent_names.contains_key(&entity.intents)
+                && coop.intent_names.len() < MOST_INTENT_LISTS
+            {
+                let names = names.iter().map(|name| crate::play_animation::FastString30::encode(name)).collect::<Result<Vec<_>, _>>();
+                match names {
+                    Ok(names) => {
+                        coop.intent_names.insert(entity.intents, names);
+                    }
+                    Err(error) => trace(format_args!("world run from {owner}: intent names for {:08x} refused: {error:?}", entity.intents)),
+                }
+            }
             let known = coop.entities.get_mut(&id);
             let stale = known.as_ref().is_some_and(|known| entity.epoch < known.epoch || (entity.epoch == known.epoch && known.owner == Owner::Local));
             if stale {
@@ -701,6 +732,16 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         let Some(drive) = pedestrian.puppet.as_mut() else { continue };
                         drive.arrive_late(stream::transform(sample.position, sample.yaw), sample.velocity, sample.flags, late);
+                        // M20: the owner's intents, once their names are heard.
+                        match coop.intent_names.get(&sample.intents) {
+                            Some(names) if sample.intents != 0 => {
+                                if drive.owner_intents.as_ref().is_none_or(|(hash, _)| *hash != sample.intents) {
+                                    drive.owner_intents = Some((sample.intents, names.clone()));
+                                }
+                                coop.stats.intents_known += 1;
+                            }
+                            _ => coop.stats.intents_unknown += u64::from(sample.intents != 0),
+                        }
                         // M16: the owner's graph state holds this puppet's graph.
                         if !drive.held_failed {
                             drive.graph = (sample.graph != crate::generated_action_load::NULL_INDEX).then_some(sample.graph);
@@ -1013,13 +1054,24 @@ impl<T, C> SelectedLiveSession<T, C> {
                         };
                         let speed = (core.velocity[0].powi(2) + core.velocity[1].powi(2) + core.velocity[2].powi(2)).sqrt();
                         let down = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
+                        // M20: the intents its motion graph is given, and how many packets wait.
+                        let intents = pedestrian.intent_queue.as_ref().map_or_else(|| "none".to_owned(), |queue| {
+                            let names = queue.active_stage().map_or_else(|_| "absent".to_owned(), |stage| {
+                                stage.intents().iter().map(|name| name.decode().unwrap_or_else(|_| "?".to_owned())).collect::<Vec<_>>().join("/")
+                            });
+                            format!("q{} {names}", queue.queued())
+                        });
+                        let played = pedestrian.animation.as_ref().map_or_else(|| "none".to_owned(), |animation| {
+                            animation.motion_intents.names().iter().map(|name| name.decode().unwrap_or_else(|_| "?".to_owned())).collect::<Vec<_>>().join("/")
+                        });
                         trace(format_args!(
-                            "census {round_tick}: {wid:08x} {owner} e{} {:.2} {:.2} {:.2} yaw {:.1} v {:.2} f{} m{:016x} g{} moods{} {}",
+                            "census {round_tick}: {wid:08x} {owner} e{} {:.2} {:.2} {:.2} yaw {:.1} v {:.2} f{} m{:016x} g{} moods{} {} i {intents}",
                             tracked.epoch, core.transform[3][0], core.transform[3][1], core.transform[3][2],
                             stream::yaw_of(&core.transform).to_degrees(), speed, entity_flags(pedestrian), core.model_key,
                             pedestrian.graph.current, pedestrian.state.as_ref().map_or(0, |state| state.moods.len()),
                             if down { "down" } else { "up" }
                         ));
+                        trace(format_args!("census {round_tick}: {wid:08x} plays {played}"));
                     }
                 }
 
@@ -1143,6 +1195,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let velocity = coop.own_trail.get(&id).and_then(measured_velocity).unwrap_or([core.velocity[0], core.velocity[1], core.velocity[2]]);
                         let motion = pedestrian.state_out.state.min(255) as u8;
                         let graph = pedestrian.graph.current;
+                        // M20: the intents its motion graph is given, sent by hash; named on a
+                        // change and with a descriptor.
+                        let stage = pedestrian.intent_queue.as_ref().map(|queue| queue.active_intents()).unwrap_or_default();
+                        let intents = if stage.is_empty() { 0 } else { crate::pedestrian_puppet::intents_hash(&stage) };
                         let hand_prop = hand_prop_of(pedestrian);
                         // M19: a hand prop taken or dropped is a descriptor's news, sent at once.
                         let describe = describe || tracked.sent.is_some_and(|last| last.hand_prop != hand_prop);
@@ -1160,6 +1216,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                                     || last.flags != entity_flags
                                     || last.motion != motion
                                     || last.graph != graph
+                                    || last.intents != intents
                             }
                         };
                         if !due {
@@ -1167,7 +1224,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                             coop.stats.withheld += 1;
                             continue;
                         }
-                        tracked.sent = Some(Sent { tick, position, yaw, velocity, flags: entity_flags, motion, graph, runs: tracked.runs, hand_prop });
+                        let name_them = intents != 0 && (describe || tracked.sent.is_none_or(|last| last.intents != intents));
+                        coop.stats.intents_named += u64::from(name_them);
+                        tracked.sent = Some(Sent { tick, position, yaw, velocity, flags: entity_flags, motion, graph, intents, runs: tracked.runs, hand_prop });
                         owned.push((d2, EntityState {
                             id: wid,
                             kind,
@@ -1179,6 +1238,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                             flags: entity_flags,
                             motion: pedestrian.state_out.state.min(255) as u8,
                             graph: pedestrian.graph.current,
+                            intents,
+                            intent_names: name_them.then(|| intent_texts(&stage)),
                             descriptor: describe.then(|| Descriptor {
                                 entity_key: core.entity_key,
                                 model_key: core.model_key,
@@ -1197,6 +1258,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let Owner::Remote(slot) = tracked.owner else { continue };
                         let Some(pedestrian) = roster.get(tracked.entity) else { continue };
                         let Some(core) = pedestrian.core.as_ref() else { continue };
+                        let handoff_stage = pedestrian.intent_queue.as_ref().map(|queue| queue.active_intents()).unwrap_or_default();
+                        let handoff_intents = if handoff_stage.is_empty() { 0 } else { crate::pedestrian_puppet::intents_hash(&handoff_stage) };
                         owned.push((-1., EntityState {
                             id: wid,
                             kind: tracked.kind,
@@ -1208,6 +1271,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                             flags: entity_flags(pedestrian),
                             motion: pedestrian.state_out.state.min(255) as u8,
                             graph: pedestrian.graph.current,
+                            intents: handoff_intents,
+                            intent_names: (handoff_intents != 0).then(|| intent_texts(&handoff_stage)),
                             descriptor: Some(Descriptor { entity_key: core.entity_key, model_key: core.model_key, recipe_id: core.recipe_id, colours: core.colour_indices, story: None, hand_prop: hand_prop_of(pedestrian) }),
                         }));
                     }
@@ -1295,6 +1360,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.refused, stats.stale
                     ));
                     trace(format_args!("world stream at {tick}: {} samples withheld by the send-on-error rule (M17)", stats.withheld));
+                    trace(format_args!("world stream at {tick}: intents named in {} samples sent; puppet samples with their owner's intents {}, with intents not yet named {}; {} intent lists heard (M20)",
+                        stats.intents_named, stats.intents_known, stats.intents_unknown, coop.intent_names.len()));
                     if stats.late_samples > 0 {
                         trace(format_args!("world runs received at {tick}: {} with samples, lateness mean {:.2} ticks, worst {}, {} past 3 ticks (M20)",
                             stats.late_samples, stats.late_sum as f64 / stats.late_samples as f64, stats.late_worst, stats.late_over));

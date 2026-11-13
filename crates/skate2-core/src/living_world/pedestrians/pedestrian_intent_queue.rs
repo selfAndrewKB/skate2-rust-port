@@ -79,6 +79,12 @@ impl AiGraphInput {
     }
 }
 
+/// Co-op fork (M20): whether an intent is one `IntentStage::override_turn` adds.
+fn is_turn(name: &FastString30) -> bool {
+    ["ReverseRight", "ReverseLeft", "TurnRight135", "TurnLeft135", "TurnRight90", "TurnLeft90", "TurnRight45", "TurnLeft45"]
+        .iter().any(|turn| FastString30::encode(turn).is_ok_and(|turn| turn == *name))
+}
+
 pub(crate) struct IntentQueue {
     pub(crate) base: IntentPacket,
     pub(crate) jump: u64,
@@ -325,6 +331,12 @@ impl IntentQueue {
         self.packets.get_mut(&id).ok_or_else(|| format!("pedestrian packet {id} absent"))
     }
     pub(crate) fn contains(&self, id: u64) -> bool { self.queue.contains(&id) }
+    /// Co-op fork (M20): the active stage's intents, for the world stream.
+    pub(crate) fn active_intents(&self) -> Vec<FastString30> {
+        self.active_stage().map(|stage| stage.intents().to_vec()).unwrap_or_default()
+    }
+    /// Co-op fork, diagnostic: how many packets are queued (the census dump).
+    pub(crate) fn queued(&self) -> usize { self.queue.len() }
     /// CreateMonitoredIntent82e9c130/RegisterIntentMonitor82e9a338. The native
     /// fixed_map permits overflow allocation, so 16 is not a rejection limit.
     pub(crate) fn create_monitored(&mut self,
@@ -426,14 +438,47 @@ impl IntentQueue {
             self.packet_mut(id)?.state = PacketState::Active;
             Ok(Some(id))
         } else {
-            if input.decrement_turn_packet {
-                if self.base.active_stage > 0 {
-                    self.base.active_stage -= 1;
-                    self.base.stages.pop().ok_or("pedestrian empty base stage")?;
-                }
-                input.decrement_turn_packet = false;
-            }
+            self.pop_completed_turn(input)?;
             Ok(None)
         }
+    }
+
+    /// The base packet's turn stage, popped once the motion graph completed the turn (the tail
+    /// of Update82e937b0's queue prefix with no packet queued).
+    pub(crate) fn pop_completed_turn(&mut self, input: &mut AiGraphInput) -> Result<(), String> {
+        if input.decrement_turn_packet {
+            if self.base.active_stage > 0 {
+                self.base.active_stage -= 1;
+                self.base.stages.pop().ok_or("pedestrian empty base stage")?;
+            }
+            input.decrement_turn_packet = false;
+        }
+        Ok(())
+    }
+
+    /// Co-op fork (M20): a puppet's base packet made its owner's active stage. A stage ending
+    /// in a turn is the stage before it with the turn added (`IntentStage::override_turn`), so
+    /// it goes in as two stages, the turn's active, and this console's motion graph completes
+    /// the turn and pops it as the owner's did; the stage's own controls stay the base's.
+    pub(crate) fn mirror_stage(&mut self, names: &[FastString30], input: &mut AiGraphInput) -> Result<(), String> {
+        let turn = names.len() > 1 && names.last().is_some_and(is_turn);
+        let plain = if turn { &names[..names.len() - 1] } else { names };
+        let mut stage = self.base.stages.first().cloned().unwrap_or_else(idle_stage);
+        stage.clear_intents();
+        for &name in plain {
+            stage.add_intent(name)?;
+        }
+        self.base.stages.clear();
+        self.base.active_stage = 0;
+        self.base.add_stage(stage.clone())?;
+        if let (true, Some(&name)) = (turn, names.last()) {
+            stage.add_intent(name)?;
+            stage.rotate_to_target = false;
+            stage.min_linear_velocity = 0.;
+            input.locomotion_turn_complete = false;
+            self.base.add_stage(stage)?;
+            self.base.set_active_stage(1)?;
+        }
+        Ok(())
     }
 }

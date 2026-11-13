@@ -16,7 +16,7 @@
 
 use super::ownership::Kind;
 
-pub const FORMAT: u8 = 6;
+pub const FORMAT: u8 = 7;
 
 /// A world id names an entity across consoles: its first spawner's slot in the game (4 bits)
 /// over that console's local entity id (its type nibble and 24-bit counter); it stays through
@@ -80,8 +80,21 @@ pub struct EntityState {
     /// M16: the state the owner's AI graph is in (`PedestrianGraph::current`, `NULL_INDEX` for
     /// none), which a puppet's graph is held at.
     pub graph: u16,
+    /// M20: the intents the owner's intent generator gives its motion graph (its active stage:
+    /// a speed band's major and minor, a turn, a conversation's), as their hash
+    /// (`pedestrian_puppet::intents_hash`), 0 for none: a puppet plays these, not a band of
+    /// its own from a speed.
+    pub intents: u32,
+    /// The names behind `intents`, sent when they change and with a descriptor; a receiver
+    /// keeps every list it has heard by its hash, so a list goes once and then by hash.
+    pub intent_names: Option<Vec<String>>,
     pub descriptor: Option<Descriptor>,
 }
+
+/// At most this many intent names in a stage (`IntentStage::add_intent`'s capacity), each of at
+/// most `MOST_INTENT_LENGTH` bytes (a `FastString30`).
+pub const MOST_INTENTS: usize = 4;
+pub const MOST_INTENT_LENGTH: usize = 30;
 
 /// A local skater's contact with another console's entity, for its owner to apply.
 #[derive(Clone, Debug, PartialEq)]
@@ -208,6 +221,19 @@ fn write_entity(out: &mut Vec<u8>, entity: &EntityState) {
     out.push(entity.flags);
     out.push(entity.motion);
     out.extend_from_slice(&entity.graph.to_le_bytes());
+    out.extend_from_slice(&entity.intents.to_le_bytes());
+    match &entity.intent_names {
+        Some(names) => {
+            let names = &names[..names.len().min(MOST_INTENTS)];
+            out.push(names.len() as u8);
+            for name in names {
+                let bytes = &name.as_bytes()[..name.len().min(MOST_INTENT_LENGTH)];
+                out.push(bytes.len() as u8);
+                out.extend_from_slice(bytes);
+            }
+        }
+        None => out.push(u8::MAX),
+    }
     write_vector(out, entity.position, POSITION_SCALE, i64::from(i32::MAX));
     let turns = entity.yaw / std::f32::consts::TAU;
     let yaw = ((turns - turns.floor()) * 65536.).round() as u32 & 0xffff;
@@ -325,6 +351,26 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
         let flags = r.u8()?;
         let motion = r.u8()?;
         let graph = u16::from_le_bytes([r.u8()?, r.u8()?]);
+        let intents = u32::from_le_bytes([r.u8()?, r.u8()?, r.u8()?, r.u8()?]);
+        let intent_names = match r.u8()? {
+            u8::MAX => None,
+            count if usize::from(count) <= MOST_INTENTS => {
+                let mut names = Vec::with_capacity(usize::from(count));
+                for _ in 0..count {
+                    let length = usize::from(r.u8()?);
+                    if length > MOST_INTENT_LENGTH {
+                        return Err("world run intent name too long");
+                    }
+                    let mut bytes = Vec::with_capacity(length);
+                    for _ in 0..length {
+                        bytes.push(r.u8()?);
+                    }
+                    names.push(String::from_utf8(bytes).map_err(|_| "world run intent name not text")?);
+                }
+                Some(names)
+            }
+            _ => return Err("world run intent count"),
+        };
         let position = read_vector(&mut r, POSITION_SCALE)?;
         let yaw = (r.varint()? & 0xffff) as f32 / 65536. * std::f32::consts::TAU;
         let velocity = read_vector(&mut r, VELOCITY_SCALE)?;
@@ -349,7 +395,7 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
             }
             _ => return Err("world run descriptor flag"),
         };
-        run.entities.push(EntityState { id, kind, owner, epoch, position, yaw, velocity, flags, motion, graph, descriptor });
+        run.entities.push(EntityState { id, kind, owner, epoch, position, yaw, velocity, flags, motion, graph, intents, intent_names, descriptor });
     }
     if r.at != bytes.len() {
         return Err("world run has trailing bytes");
@@ -436,6 +482,8 @@ mod tests {
                     flags: flags::KNOCKED_DOWN | flags::COLLIDING | (2 << flags::DIRECTION_SHIFT),
                     motion: 8,
                     graph: 41,
+                    intents: 0x5a17_0b0e,
+                    intent_names: Some(vec!["walk".into(), String::new(), "turnleft90".into()]),
                     descriptor: Some(Descriptor { entity_key: 0x1234, model_key: 0xabcd_ef01_2345_6789, recipe_id: 7, colours: [3, 250], story: None, hand_prop: 0x1234_5678_9abc_def0 }),
                 },
                 EntityState {
@@ -449,6 +497,8 @@ mod tests {
                     flags: 0,
                     motion: 0,
                     graph: 65535,
+                    intents: 0x5a17_0b0e,
+                    intent_names: None,
                     descriptor: None,
                 },
                 // M14: a story character, its descriptor naming the challenge's entry.
@@ -463,6 +513,8 @@ mod tests {
                     flags: 0,
                     motion: 2,
                     graph: 3,
+                    intents: 0,
+                    intent_names: Some(Vec::new()),
                     descriptor: Some(Descriptor { entity_key: 0x4e6e_5331_d54e_4f61, model_key: 9, recipe_id: 8, colours: [0, 0], story: Some((0xd013_3edf_cd5f_d171, 0)), hand_prop: 0 }),
                 },
             ],
@@ -496,7 +548,7 @@ mod tests {
         assert_eq!(back.entities[2].descriptor.as_ref().and_then(|d| d.story), Some((0xd013_3edf_cd5f_d171, 0)), "the story identity travels (M14)");
         assert_eq!(back.entities[0].descriptor.as_ref().map(|d| d.hand_prop), Some(0x1234_5678_9abc_def0), "the hand prop travels (M19)");
         for (a, b) in back.entities.iter().zip(&run.entities) {
-            assert_eq!((a.id, a.kind, a.owner, a.epoch, a.flags, a.motion, a.graph, &a.descriptor), (b.id, b.kind, b.owner, b.epoch, b.flags, b.motion, b.graph, &b.descriptor));
+            assert_eq!((a.id, a.kind, a.owner, a.epoch, a.flags, a.motion, a.graph, a.intents, &a.intent_names, &a.descriptor), (b.id, b.kind, b.owner, b.epoch, b.flags, b.motion, b.graph, b.intents, &b.intent_names, &b.descriptor));
             for lane in 0..3 {
                 assert!((a.position[lane] - b.position[lane]).abs() <= 1. / 256., "{:?} vs {:?}", a.position, b.position);
                 assert!((a.velocity[lane] - b.velocity[lane]).abs() <= 1. / 64.);
@@ -517,8 +569,9 @@ mod tests {
         assert_eq!(back.props.len(), 1, "the props always fit");
         assert!(back.entities.is_empty());
         // The rest (the despawns, a contact, a prop) takes 59 bytes; the first entity, with its
-        // descriptor (the story field, the hand prop, M14 and M19), up to 69.
-        let (bytes, included) = encode(&run, 135);
+        // descriptor (the story field, the hand prop, M14 and M19) and its intents named (M20),
+        // up to 91.
+        let (bytes, included) = encode(&run, 150);
         assert_eq!(included, 1, "{} bytes", bytes.len());
     }
 
@@ -573,7 +626,9 @@ mod tests {
         let (with, _) = encode(&WorldRun { entities: vec![run.entities[0].clone()], ..Default::default() }, 1024);
         let (without, _) = encode(&WorldRun { entities: vec![run.entities[1].clone()], ..Default::default() }, 1024);
         // The budget arithmetic in docs/coop/bench.md rests on these.
-        assert!(with.len() <= 69, "{} bytes with a descriptor", with.len());
-        assert!(without.len() <= 32, "{} bytes without", without.len());
+        // M20: the intents' hash costs 4 bytes and a byte for no names; names, sent on a
+        // change, cost a byte and a byte per name and its text.
+        assert!(with.len() <= 69 + 5 + 17, "{} bytes with a descriptor and its intents named", with.len());
+        assert!(without.len() <= 32 + 5, "{} bytes without", without.len());
     }
 }
