@@ -17,6 +17,8 @@ const COAST_TICKS: u32 = 72;
 /// ticks past 1 cm), over ten it is half a centimetre.
 const YAW_BLEND_TICKS: u32 = 3;
 const POSITION_BLEND_TICKS: u32 = 10;
+/// A sample later than this is placed as though this late (its path carried on no further).
+const MOST_LATE: u32 = 30;
 /// A correction this large is a teleport, a knockdown's throw or a respawn: taken at once.
 const SNAP_DISTANCE: f32 = 2.0;
 /// A tick whose step differs from the tick before's by more than this counts as a jerk (M19's
@@ -30,6 +32,10 @@ pub(crate) struct PuppetDrive {
     pub(crate) target: Transform,
     pub(crate) velocity: [f32; 4],
     pub(crate) age: u32,
+    /// M20: how many ticks late the last sample arrived against its owner's punctual ones (the
+    /// two consoles' game loops are paced apart, so samples bunch and gap): the sample's path
+    /// is carried on that much further, so a late sample is not a step back.
+    late: u32,
     /// The owner's last flags (`coop::world_stream::flags`).
     pub(crate) flags: u8,
     /// A full collision the local skater made with this puppet, waiting to be reported to its
@@ -99,7 +105,7 @@ impl PuppetDrive {
         let yaw = crate::coop::world_stream::yaw_of(&target);
         let at = [target[3][0], target[3][1], target[3][2]];
         Self {
-            target, velocity: [0.; 4], age: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false,
+            target, velocity: [0.; 4], age: 0, late: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false,
             yaw_from: yaw, yaw_to: yaw, from_origin: at, from_velocity: [0.; 3], last_position: at, last_step: [0.; 3], last_yaw: yaw, last_dt: 1. / 60., stutter: Stutter::default(), prop_waiting: 0, releasing: false, kept: 0,
         }
     }
@@ -113,6 +119,11 @@ impl PuppetDrive {
     /// velocity it is showing) blends into the sample's over `POSITION_BLEND_TICKS`; a gap past
     /// `SNAP_DISTANCE` is taken at once.
     pub(crate) fn arrive(&mut self, target: Transform, velocity: [f32; 3], flags: u8) {
+        self.arrive_late(target, velocity, flags, 0);
+    }
+
+    /// The owner's next sample, `late` ticks behind its owner's punctual ones.
+    pub(crate) fn arrive_late(&mut self, target: Transform, velocity: [f32; 3], flags: u8, late: u32) {
         let showing = if self.last_dt > 0. { self.last_step.map(|step| step / self.last_dt) } else { [0.; 3] };
         let mut here = [0, 1, 2].map(|lane| self.last_position[lane] + self.last_step[lane]);
         let mut showing = showing;
@@ -137,6 +148,7 @@ impl PuppetDrive {
         self.target = target;
         self.velocity = [velocity[0], velocity[1], velocity[2], 0.];
         self.age = 0;
+        self.late = late.min(MOST_LATE);
         self.flags = flags;
     }
 
@@ -172,9 +184,10 @@ impl PuppetDrive {
     /// sample was 72 ticks late: the stutter the player saw.
     pub(crate) fn step(&mut self, dt: f32) -> Transform {
         let coasted = self.age.min(COAST_TICKS) as f32 * dt;
+        let sample_coasted = (self.age + self.late).min(COAST_TICKS) as f32 * dt;
         let w = Self::into_new_path(self.age);
         let position = [0, 1, 2].map(|lane| {
-            let new = self.target[3][lane] + self.velocity[lane] * coasted;
+            let new = self.target[3][lane] + self.velocity[lane] * sample_coasted;
             let old = self.from_origin[lane] + self.from_velocity[lane] * coasted;
             old + (new - old) * w
         });
@@ -262,6 +275,26 @@ mod tests {
         assert!(worst_jerk(&xs[POSITION_BLEND_TICKS as usize..]) < 0.008, "{} m", worst_jerk(&xs[POSITION_BLEND_TICKS as usize..]));
         let end = xs[xs.len() - 1];
         assert!((end - (1.5 + 0.02)).abs() < 1e-4 && (xs[xs.len() - 2] - end).abs() < 1e-6, "stopped at the owner's spot: {end}");
+    }
+
+    /// Samples arriving bunched and gapped (the two game loops paced apart): placed by their
+    /// lateness, the walk steps evenly; taken as punctual, it stalls behind each late one.
+    #[test]
+    fn late_samples_placed_in_time_keep_the_walk_even() {
+        let mut drive = PuppetDrive::new(at(0.));
+        drive.arrive(at(0.), [1.5, 0., 0.], 0);
+        let mut xs = Vec::new();
+        for tick in 0..300_u32 {
+            // A sample every 6 ticks, each 0 to 4 ticks late in turn.
+            if tick > 0 && tick % 6 == 0 {
+                let sent = tick - (tick / 6) % 5;
+                drive.arrive_late(at(1.5 * DT * sent as f32), [1.5, 0., 0.], 0, tick - sent);
+            }
+            xs.push(drive.step(DT)[3][0]);
+        }
+        for w in xs[120..].windows(2) {
+            assert!((w[1] - w[0] - 1.5 * DT).abs() < 1e-3, "a step of {} m", w[1] - w[0]);
+        }
     }
 
     #[test]

@@ -95,6 +95,52 @@ struct Sent {
     hand_prop: u64,
 }
 
+/// M20: an owner's tick against this console's: the least difference seen this window and the
+/// last (a 300-tick window), so a sample's lateness is its difference past that.
+#[derive(Debug, Clone, Copy)]
+struct Clock {
+    least: i64,
+    least_before: i64,
+    window: u32,
+}
+
+impl Clock {
+    const WINDOW: u32 = 300;
+
+    fn new(difference: i64, local: u32) -> Self {
+        Self { least: difference, least_before: difference, window: local / Self::WINDOW }
+    }
+
+    /// A run's difference seen at a local tick: the lateness of its samples.
+    fn late(&mut self, difference: i64, local: u32) -> u32 {
+        let window = local / Self::WINDOW;
+        if window != self.window {
+            self.least_before = if window == self.window + 1 { self.least } else { difference };
+            self.least = difference;
+            self.window = window;
+        }
+        self.least = self.least.min(difference);
+        let punctual = self.least.min(self.least_before);
+        u32::try_from(difference - punctual).unwrap_or(0)
+    }
+}
+
+/// M20: the velocity a pedestrian moves at, from its last positions; `None` for too short a
+/// trail or one that jumped (a respawn, a teleport).
+fn measured_velocity(trail: &std::collections::VecDeque<[f32; 3]>) -> Option<[f32; 3]> {
+    if trail.len() < 4 {
+        return None;
+    }
+    let (first, last) = (trail.front()?, trail.back()?);
+    let seconds = (trail.len() - 1) as f32 / 60.;
+    let velocity = [0, 1, 2].map(|lane| (last[lane] - first[lane]) / seconds);
+    (velocity.iter().map(|value| value * value).sum::<f32>() < 100.).then_some(velocity)
+}
+
+/// How many ticks of a pedestrian's positions its measured velocity spans (M20): a stride's
+/// share, so the root motion's surge within a step averages out.
+const TRAIL_TICKS: usize = 8;
+
 #[derive(Debug)]
 struct Spawn {
     owner: u8,
@@ -145,6 +191,11 @@ struct Stats {
     stale: u32,
     /// M17: samples the send-on-error rule withheld.
     withheld: u64,
+    /// M20: the lateness of the samples received (ticks), its sum, worst and count past 3.
+    late_samples: u64,
+    late_sum: u64,
+    late_worst: u32,
+    late_over: u64,
     /// M19's baseline: this console's own pedestrians' jerk, measured as the puppets' is.
     own_ticks: u64,
     own_jerk: f64,
@@ -198,7 +249,11 @@ pub(in super::super) struct CoopWorld {
     locals: BTreeMap<u32, u32>,
     spawns: BTreeMap<u32, Spawn>,
     /// The samples received for known puppets, applied at the next tick.
-    updates: Vec<EntityState>,
+    /// The others' samples to apply, each with its lateness in ticks (M20).
+    updates: Vec<(EntityState, u32)>,
+    /// M20: each owner's clock against this console's (the least of `local tick - its tick`
+    /// over this window and the last, so drift is followed), for a sample's lateness.
+    clocks: BTreeMap<u8, Clock>,
     despawns: Vec<u32>,
     /// Puppets handed to this console, promoted at the next tick.
     promotions: Vec<u32>,
@@ -216,6 +271,11 @@ pub(in super::super) struct CoopWorld {
     refused: BTreeSet<u32>,
     /// M19's baseline meter: this console's own pedestrians' last position and step.
     own_steps: BTreeMap<u32, ([f32; 3], [f32; 3])>,
+    /// M20: this console's own pedestrians' last positions (`TRAIL_TICKS` of them): the velocity
+    /// their samples carry is the one they move at, not their navigation's (a pedestrian stopped
+    /// to talk or wait kept a navigation velocity of up to half a metre a second while it stood,
+    /// and its puppet walked in place to it: the player, 2026-11-12, and the M19 census dumps).
+    own_trail: BTreeMap<u32, std::collections::VecDeque<[f32; 3]>>,
     bad_runs: u32,
     shoved: bool,
     stats: Stats,
@@ -423,6 +483,22 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
         };
         let coop = &mut self.online.coop;
+        // M20: the run's lateness against its owner's punctual runs.
+        let local = self.completed_frames;
+        let difference = i64::from(local) - i64::from(tick);
+        let late = match coop.clocks.get_mut(&owner) {
+            Some(clock) => clock.late(difference, local),
+            None => {
+                coop.clocks.insert(owner, Clock::new(difference, local));
+                0
+            }
+        };
+        if !run.entities.is_empty() {
+            coop.stats.late_samples += 1;
+            coop.stats.late_sum += u64::from(late);
+            coop.stats.late_worst = coop.stats.late_worst.max(late);
+            coop.stats.late_over += u64::from(late > 3);
+        }
         for entity in run.entities {
             let id = entity.id;
             let known = coop.entities.get_mut(&id);
@@ -465,7 +541,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             coop.demotions.push(id);
                         }
                     }
-                    coop.updates.push(entity);
+                    coop.updates.push((entity, late));
                 }
                 None => {
                     if let Some(descriptor) = entity.descriptor.clone() {
@@ -585,7 +661,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             trace(format_args!("own pedestrian {id:08x} demoted: another console claimed it at {tick}"));
                         }
                     }
-                    for sample in coop.updates.drain(..) {
+                    for (sample, late) in coop.updates.drain(..) {
                         let Some(puppet) = coop.entities.get_mut(&sample.id).filter(|known| known.owner != Owner::Local) else { continue };
                         let Some(pedestrian) = roster.get_mut(puppet.entity) else {
                             trace(format_args!("puppet {:08x}: its entity {:#x} is gone from the roster", sample.id, puppet.entity));
@@ -624,7 +700,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             }
                         }
                         let Some(drive) = pedestrian.puppet.as_mut() else { continue };
-                        drive.arrive(stream::transform(sample.position, sample.yaw), sample.velocity, sample.flags);
+                        drive.arrive_late(stream::transform(sample.position, sample.yaw), sample.velocity, sample.flags, late);
                         // M16: the owner's graph state holds this puppet's graph.
                         if !drive.held_failed {
                             drive.graph = (sample.graph != crate::generated_action_load::NULL_INDEX).then_some(sample.graph);
@@ -959,6 +1035,16 @@ impl<T, C> SelectedLiveSession<T, C> {
                             let Some(core) = pedestrian.core.as_ref() else { continue };
                             let at = [core.transform[3][0], core.transform[3][1], core.transform[3][2]];
                             seen.insert(id);
+                            // M20: the trail the measured velocity is read from; a jump past a
+                            // metre (a respawn, a teleport) starts it again.
+                            let trail = coop.own_trail.entry(id).or_default();
+                            if trail.back().is_some_and(|last| (0..3).map(|lane| (at[lane] - last[lane]).powi(2)).sum::<f32>() > 1.) {
+                                trail.clear();
+                            }
+                            trail.push_back(at);
+                            if trail.len() > TRAIL_TICKS {
+                                trail.pop_front();
+                            }
                             if let Some((last, last_step)) = coop.own_steps.get(&id).copied() {
                                 let step = [at[0] - last[0], at[1] - last[1], at[2] - last[2]];
                                 let jerk = (0..3).map(|lane| (step[lane] - last_step[lane]).powi(2)).sum::<f32>().sqrt();
@@ -976,6 +1062,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             }
                         }
                         coop.own_steps.retain(|id, _| seen.contains(id));
+                        coop.own_trail.retain(|id, _| seen.contains(id));
                     }
                 }
 
@@ -1052,7 +1139,8 @@ impl<T, C> SelectedLiveSession<T, C> {
                         // facing the extrapolation misses, a descriptor due or the keepalive is.
                         let position = [core.transform[3][0], core.transform[3][1], core.transform[3][2]];
                         let yaw = stream::yaw_of(&core.transform);
-                        let velocity = [core.velocity[0], core.velocity[1], core.velocity[2]];
+                        // M20: the velocity it moves at (its navigation's while the trail is short).
+                        let velocity = coop.own_trail.get(&id).and_then(measured_velocity).unwrap_or([core.velocity[0], core.velocity[1], core.velocity[2]]);
                         let motion = pedestrian.state_out.state.min(255) as u8;
                         let graph = pedestrian.graph.current;
                         let hand_prop = hand_prop_of(pedestrian);
@@ -1087,7 +1175,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             epoch: tracked.epoch,
                             position: [core.transform[3][0], core.transform[3][1], core.transform[3][2]],
                             yaw: stream::yaw_of(&core.transform),
-                            velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
+                            velocity,
                             flags: entity_flags,
                             motion: pedestrian.state_out.state.min(255) as u8,
                             graph: pedestrian.graph.current,
@@ -1207,6 +1295,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                         stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.refused, stats.stale
                     ));
                     trace(format_args!("world stream at {tick}: {} samples withheld by the send-on-error rule (M17)", stats.withheld));
+                    if stats.late_samples > 0 {
+                        trace(format_args!("world runs received at {tick}: {} with samples, lateness mean {:.2} ticks, worst {}, {} past 3 ticks (M20)",
+                            stats.late_samples, stats.late_sum as f64 / stats.late_samples as f64, stats.late_worst, stats.late_over));
+                    }
                     // M19: the puppets' jerk since the last window: each tick's step against the
                     // tick before's, summed over every puppet here.
                     let mut living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
