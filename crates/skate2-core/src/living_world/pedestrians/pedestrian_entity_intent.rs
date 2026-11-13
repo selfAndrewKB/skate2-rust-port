@@ -79,9 +79,12 @@ impl PedestrianConstruction {
             animation.motion_intents.set_packet(queue.base.active()?);
             return Ok(());
         }
+        // The M6 band rewrites the base stage: the owner's list goes in again when it is heard.
+        drive.applied_intents = None;
         let speed = (velocity[0] * velocity[0] + velocity[2] * velocity[2]).sqrt();
         let animation = self.animation.as_mut().ok_or("puppet intent animation absent")?;
         let queue = self.intent_queue.as_mut().ok_or("puppet intent queue absent")?;
+        queue.pop_completed_turn(&mut animation.ai_input)?;
         // As `update_base_locomotion`: while the motion graph plays a locomotion transition or
         // a turn, the intents stay as they are (re-selecting them every tick restarted the
         // transition every tick: the player saw pedestrians limp).

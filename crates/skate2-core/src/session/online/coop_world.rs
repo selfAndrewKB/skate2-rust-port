@@ -72,7 +72,9 @@ struct Tracked {
     /// M20: the owner's knockdown, not yet played on this puppet because the puppet was still
     /// in a collision of its own (its owner's standing hit, played a sample late): played on
     /// the first tick the puppet is free, its standing hit ended for it.
-    knockdown_due: Option<CollisionDirection>,
+    /// And the tick it fell due: past `DUE_PATIENCE` ticks the puppet's collision is closed for
+    /// it (a colliding flag left on with no behaviour to end it).
+    knockdown_due: Option<(CollisionDirection, u32)>,
     /// How many runs this console has streamed it in (an owned one's).
     runs: u32,
     /// How many ticks a peer has been nearer by the margin (an owned one's), and which.
@@ -151,6 +153,10 @@ fn measured_velocity(trail: &std::collections::VecDeque<[f32; 3]>) -> Option<[f3
 fn intent_texts(stage: &[crate::play_animation::FastString30]) -> Vec<String> {
     stage.iter().map(|name| name.decode().unwrap_or_default()).collect()
 }
+
+/// M20: how long an owner's knockdown waits for its puppet's own collision to end before that
+/// collision is closed for it (a standing hit ends within a second once its packet is cleared).
+const DUE_PATIENCE: u32 = 120;
 
 /// M20: how many samples name a change of intents (a run lost leaves the others).
 const NAME_SAMPLES: u8 = 3;
@@ -784,11 +790,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                             if puppet.awaiting.take().is_some() {
                                 coop.stats.confirmed += 1;
                                 trace(format_args!("puppet {:08x}: the owner confirmed the knockdown at {tick}", sample.id));
-                            } else {
-                                // M20: played below, this tick or once the puppet is free (until
-                                // M20 a knockdown that found the puppet colliding was dropped).
-                                puppet.knockdown_due = Some(direction_of(sample.flags));
                             }
+                            // M20: played below, this tick or once the puppet is free; a knockdown
+                            // this console's skater caused too (nothing predicts it here since M16:
+                            // until M20 a confirmed one played only through the owner's intents,
+                            // the puppet's own state up), and one that found the puppet colliding
+                            // (until M20 dropped).
+                            puppet.knockdown_due = Some((direction_of(sample.flags), tick));
                         } else if !knocked {
                             puppet.knockdown_due = None;
                             if puppet.knocked_down {
@@ -832,7 +840,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     // is recorded on the first tick it is free. One already down here is the
                     // same knockdown.
                     for (&id, puppet) in coop.entities.iter_mut().filter(|(_, known)| known.owner != Owner::Local) {
-                        let Some(direction) = puppet.knockdown_due else { continue };
+                        let Some((direction, due)) = puppet.knockdown_due else { continue };
                         let Some(pedestrian) = roster.get_mut(puppet.entity).filter(|pedestrian| pedestrian.puppet.is_some()) else {
                             puppet.knockdown_due = None;
                             continue;
@@ -842,8 +850,18 @@ impl<T, C> SelectedLiveSession<T, C> {
                             continue;
                         }
                         if PuppetDrive::colliding(pedestrian.collision.as_ref()) {
+                            if tick.saturating_sub(due) <= DUE_PATIENCE {
+                                pedestrian.clear_all_intents()?;
+                                continue;
+                            }
+                            // A colliding flag no behaviour ends: closed, as the owner's "up" closes
+                            // a knockdown, so the owner's knockdown plays.
+                            if let Some(collision) = pedestrian.collision.as_mut() {
+                                collision.colliding = false;
+                                collision.required_to_begin_colliding = false;
+                            }
                             pedestrian.clear_all_intents()?;
-                            continue;
+                            trace(format_args!("puppet {id:08x}: its collision still open {DUE_PATIENCE} ticks after its owner's knockdown fell due: closed at {tick}"));
                         }
                         pedestrian.record_accepted_full_collision(CollisionForce::Knockdown, direction, cvars)?;
                         puppet.knockdown_due = None;
@@ -1026,8 +1044,14 @@ impl<T, C> SelectedLiveSession<T, C> {
                     }
                     // M20: its intents start clean (ClearAllIntents): the mirrored stage and the
                     // packets its held graph suggested as a puppet go, and the graph input's
-                    // completions with them, so its own intent generator starts from idle.
-                    pedestrian.clear_all_intents()?;
+                    // completions with them, so its own intent generator starts from idle. Not
+                    // while it collides or lies down: the collision's packet is its colliding
+                    // behaviour's, which would stand it up at once with no get-up.
+                    let down = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
+                    if !down && !PuppetDrive::colliding(pedestrian.collision.as_ref()) {
+                        pedestrian.clear_all_intents()?;
+                    }
+                    known.knockdown_due = None;
                     let old = known.owner;
                     known.owner = ownership::decide(known.kind, id, Some(old), Owner::Local, &format!("handed to this console: its player is nearer (epoch {})", known.epoch));
                     known.runs = 0;

@@ -25,6 +25,15 @@ pub(crate) struct Behaviours { entries: Vec<Entry> }
 /// These are operations on the already retained pedestrian owners, not a second
 /// animation player, timer store, intent queue, RNG or hand-prop system. Bind one
 /// adapter to the delegate's actual entity authority for the duration of Update.
+/// A jump clip's speed: its length over the jump's time (82718520); a puppet's clip at its own
+/// speed (Co-op fork, M20: a puppet's jump has no time, its path being its owner's samples).
+fn jump_speed<B: Services + ?Sized>(backend: &mut B, original_length: f32, downward: bool) -> Result<f32, String> {
+    if backend.is_puppet() {
+        return Ok(1.);
+    }
+    Ok(original_length / backend.jump_time(downward)?)
+}
+
 pub(crate) trait Services: PlayRemappedAnimationCollaborator<Error = String> {
     fn has_entity(&self) -> bool;
     fn state(&mut self) -> Result<&mut PedestrianStateStorage, String>;
@@ -37,6 +46,9 @@ pub(crate) trait Services: PlayRemappedAnimationCollaborator<Error = String> {
     fn set_attempting_takedown(&mut self, value: bool) -> Result<(), String>;
     fn trigger_jump(&mut self) -> Result<(), String>;
     fn jump_time(&mut self, downward: bool) -> Result<f32, String>;
+    /// Co-op fork (M20): whether the entity is a puppet, whose jump has no trajectory: its jump
+    /// clips play at their own speed (`original_length / jump_time` is the trajectory's).
+    fn is_puppet(&self) -> bool { false }
     fn has_hand_prop(&mut self) -> Result<bool, String>;
     fn drop_on_large_avoid_probability(&mut self) -> Result<f32, String>;
     fn bernoulli_random(&mut self, probability: f32) -> Result<bool, String>;
@@ -159,7 +171,7 @@ impl Behaviours {
                 // computing a speed then calling the generic Begin wrapper.
                 let mut animation = animation.clone();
                 if let Some(mirror) = animation.mirror_override_raw.take() { backend.write_mirror_override_raw(mirror)?; }
-                animation.playback_speed_bits = (*original_length / backend.jump_time(*downward)?).to_bits();
+                animation.playback_speed_bits = jump_speed(backend, *original_length, *downward)?.to_bits();
                 animation.begin(backend)?;
             }
             Behaviour::KeepTimer(_) | Behaviour::KeepMonitor(_) => {}
@@ -210,7 +222,7 @@ impl Behaviours {
                 (Animation, Behaviour::Animation(animation)) => animation.update(backend)?,
                 (JumpAnimation, Behaviour::JumpAnimation { animation, original_length, downward }) => {
                     let mut animation = animation.clone();
-                    animation.playback_speed_bits = (*original_length / backend.jump_time(*downward)?).to_bits();
+                    animation.playback_speed_bits = jump_speed(backend, *original_length, *downward)?.to_bits();
                     animation.update(backend)?;
                 }
                 (Timer, Behaviour::KeepTimer(kind)) => { //826ef798 fsubs then fsel

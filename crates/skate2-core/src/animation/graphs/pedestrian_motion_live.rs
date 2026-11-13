@@ -211,6 +211,7 @@ where N::Error: std::fmt::Debug {
         let jump = &self.entity.spatial_adjust.as_ref().ok_or("pedestrian SpatialAdjust absent")?.jump;
         Ok(if downward { jump.down_time } else { jump.up_time })
     }
+    fn is_puppet(&self) -> bool { self.entity.puppet.is_some() }
     fn stop_channels(&mut self, blend: f32) -> Result<(), String> { self.animation_mut()?.channels.stop(blend); Ok(()) }
     fn set_attempting_takedown(&mut self, value: bool) -> Result<(), String> {
         //82e6fd68: state+3240 bit2, then inline StopChannels(.2) when true.

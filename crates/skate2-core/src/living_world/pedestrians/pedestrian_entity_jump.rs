@@ -37,7 +37,13 @@ impl PedestrianConstruction {
         // jump is its owner's samples: the clip plays, the trajectory is not made. Until this
         // guard a puppet's jump stopped the game ("JumpNow before SetJumpToPosition", the
         // M20 collision soak, seat 2 at tick 7148).
+        // The jump's phase is made definite (not downward, not in flight: the motion graph's
+        // `JumperDownward` reads it, and nothing moves the puppet along an arc), and its clip
+        // plays at its own speed (`Services::is_puppet`).
         if self.puppet.is_some() {
+            let jump = &mut self.spatial_adjust.as_mut().ok_or("pedestrian spatial adjust not constructed")?.jump;
+            jump.downward_motion = Some(false);
+            jump.is_jumping = false;
             return Ok(());
         }
         let speed = self.max_chase_speed()?;
