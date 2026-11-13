@@ -332,6 +332,27 @@ mod tests {
         assert_ne!(intents_hash(&[]), 0);
     }
 
+    /// A stop that turns to face someone sends its turn before the `ForceStop`
+    /// (`update_base_locomotion` adds the stop to the turn's stage): the turn is found there,
+    /// played as its own stage and popped at its completion; a list without a turn ends it.
+    #[test]
+    fn a_turn_is_its_own_stage_wherever_it_stands() {
+        use crate::pedestrian_intent_packet::queue::{AiGraphInput, IntentQueue};
+        let name = |text: &str| FastString30::encode(text).unwrap();
+        let mut queue = IntentQueue::new();
+        let mut input = AiGraphInput::new();
+        queue.mirror_stage(&[name("Walk"), name(""), name("TurnLeft90"), name("ForceStop")], &mut input).unwrap();
+        assert_eq!(queue.base.active().unwrap().intents(), &[name("Walk"), name(""), name("TurnLeft90"), name("ForceStop")]);
+        assert!(!input.locomotion_turn_complete);
+        input.decrement_turn_packet = true;
+        queue.pop_completed_turn(&mut input).unwrap();
+        assert_eq!(queue.base.active().unwrap().intents(), &[name("Walk"), name("")]);
+        queue.mirror_stage(&[name("Walk"), name(""), name("TurnRight135")], &mut input).unwrap();
+        queue.mirror_stage(&[name("Idle"), name("")], &mut input).unwrap();
+        assert!(input.locomotion_turn_complete && !input.decrement_turn_packet);
+        assert_eq!(queue.base.active().unwrap().intents(), &[name("Idle"), name("")]);
+    }
+
     #[test]
     fn a_teleport_is_taken_at_once() {
         let mut drive = PuppetDrive::new(at(0.));

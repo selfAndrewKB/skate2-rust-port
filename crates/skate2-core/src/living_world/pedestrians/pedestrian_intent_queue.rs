@@ -456,13 +456,18 @@ impl IntentQueue {
         Ok(())
     }
 
-    /// Co-op fork (M20): a puppet's base packet made its owner's active stage. A stage ending
-    /// in a turn is the stage before it with the turn added (`IntentStage::override_turn`), so
-    /// it goes in as two stages, the turn's active, and this console's motion graph completes
-    /// the turn and pops it as the owner's did; the stage's own controls stay the base's.
+    /// Co-op fork (M20): a puppet's base packet made its owner's active stage. A stage with a
+    /// turn is the stage before it with the turn added (`IntentStage::override_turn`; a
+    /// `ForceStop` may follow it, added to the turn's stage), so it goes in as two stages, the
+    /// names before the turn and all of them, the turn's active, and this console's motion
+    /// graph completes the turn and pops it as the owner's did; the stage's own controls stay
+    /// the base's. A list without a turn ends any turn this puppet still plays (its owner's
+    /// ended first), and a completion still pending from an earlier turn is dropped: the
+    /// native code never removes a turn stage before its completion, so the flags are made
+    /// what that completion would have left.
     pub(crate) fn mirror_stage(&mut self, names: &[FastString30], input: &mut AiGraphInput) -> Result<(), String> {
-        let turn = names.len() > 1 && names.last().is_some_and(is_turn);
-        let plain = if turn { &names[..names.len() - 1] } else { names };
+        let turn = names.iter().skip(1).position(is_turn).map(|index| index + 1);
+        let plain = turn.map_or(names, |index| &names[..index]);
         let mut stage = self.base.stages.first().cloned().unwrap_or_else(idle_stage);
         stage.clear_intents();
         for &name in plain {
@@ -471,13 +476,19 @@ impl IntentQueue {
         self.base.stages.clear();
         self.base.active_stage = 0;
         self.base.add_stage(stage.clone())?;
-        if let (true, Some(&name)) = (turn, names.last()) {
-            stage.add_intent(name)?;
-            stage.rotate_to_target = false;
-            stage.min_linear_velocity = 0.;
-            input.locomotion_turn_complete = false;
-            self.base.add_stage(stage)?;
-            self.base.set_active_stage(1)?;
+        input.decrement_turn_packet = false;
+        match turn {
+            Some(index) => {
+                for &name in &names[index..] {
+                    stage.add_intent(name)?;
+                }
+                stage.rotate_to_target = false;
+                stage.min_linear_velocity = 0.;
+                input.locomotion_turn_complete = false;
+                self.base.add_stage(stage)?;
+                self.base.set_active_stage(1)?;
+            }
+            None => input.locomotion_turn_complete = true,
         }
         Ok(())
     }

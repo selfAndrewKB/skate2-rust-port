@@ -90,8 +90,9 @@ struct Sent {
     flags: u8,
     motion: u8,
     graph: u16,
-    /// M20: the hash of the intents last sent.
+    /// M20: the hash of the intents last sent, and how many more samples name them.
     intents: u32,
+    names_left: u8,
     runs: u32,
     /// M19: the hand prop last described, so a change sends a descriptor at once.
     hand_prop: u64,
@@ -107,7 +108,10 @@ struct Clock {
 }
 
 impl Clock {
-    const WINDOW: u32 = 300;
+    /// A second: the least is over this window and the last, so a step in the owner's tick
+    /// against this console's (a hitch its loop never caught up) reads as lateness for at most
+    /// two seconds, while a second holds many punctual runs.
+    const WINDOW: u32 = 60;
 
     fn new(difference: i64, local: u32) -> Self {
         Self { least: difference, least_before: difference, window: local / Self::WINDOW }
@@ -143,6 +147,9 @@ fn measured_velocity(trail: &std::collections::VecDeque<[f32; 3]>) -> Option<[f3
 fn intent_texts(stage: &[crate::play_animation::FastString30]) -> Vec<String> {
     stage.iter().map(|name| name.decode().unwrap_or_default()).collect()
 }
+
+/// M20: how many samples name a change of intents (a run lost leaves the others).
+const NAME_SAMPLES: u8 = 3;
 
 /// M20: the intent lists a console keeps by hash at most (a pedestrian's vocabulary is a few
 /// dozen; this bounds a peer that sends nonsense).
@@ -524,11 +531,14 @@ impl<T, C> SelectedLiveSession<T, C> {
                 && !coop.intent_names.contains_key(&entity.intents)
                 && coop.intent_names.len() < MOST_INTENT_LISTS
             {
+                // The names must hash to the hash they came with: a list kept under the wrong
+                // hash would play for the whole session.
                 let names = names.iter().map(|name| crate::play_animation::FastString30::encode(name)).collect::<Result<Vec<_>, _>>();
                 match names {
-                    Ok(names) => {
+                    Ok(names) if !names.is_empty() && crate::pedestrian_puppet::intents_hash(&names) == entity.intents => {
                         coop.intent_names.insert(entity.intents, names);
                     }
+                    Ok(names) => trace(format_args!("world run from {owner}: intent names {names:?} refused: they do not hash to {:08x}", entity.intents)),
                     Err(error) => trace(format_args!("world run from {owner}: intent names for {:08x} refused: {error:?}", entity.intents)),
                 }
             }
@@ -740,7 +750,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                                 }
                                 coop.stats.intents_known += 1;
                             }
-                            _ => coop.stats.intents_unknown += u64::from(sample.intents != 0),
+                            // A list not named here yet (its run lost): the M6 band from the
+                            // owner's speed until it is, not the last list (a walk played on
+                            // while the owner stood).
+                            _ => {
+                                drive.owner_intents = None;
+                                coop.stats.intents_unknown += u64::from(sample.intents != 0);
+                            }
                         }
                         // M16: the owner's graph state holds this puppet's graph.
                         if !drive.held_failed {
@@ -979,6 +995,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     if let Some(core) = pedestrian.core.as_mut() {
                         core.allow_culling = true;
                     }
+                    // M20: its intents start clean (ClearAllIntents): the mirrored stage and the
+                    // packets its held graph suggested as a puppet go, and the graph input's
+                    // completions with them, so its own intent generator starts from idle.
+                    pedestrian.clear_all_intents()?;
                     let old = known.owner;
                     known.owner = ownership::decide(known.kind, id, Some(old), Owner::Local, &format!("handed to this console: its player is nearer (epoch {})", known.epoch));
                     known.runs = 0;
@@ -1224,9 +1244,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                             coop.stats.withheld += 1;
                             continue;
                         }
-                        let name_them = intents != 0 && (describe || tracked.sent.is_none_or(|last| last.intents != intents));
+                        // Runs are not acknowledged: a change is named in its first
+                        // `NAME_SAMPLES` samples, so one lost run does not leave it unnamed.
+                        let changed = tracked.sent.is_none_or(|last| last.intents != intents);
+                        let names_left = if changed { NAME_SAMPLES - 1 } else { tracked.sent.map_or(0, |last| last.names_left.saturating_sub(1)) };
+                        let name_them = intents != 0 && (describe || changed || tracked.sent.is_some_and(|last| last.names_left > 0));
                         coop.stats.intents_named += u64::from(name_them);
-                        tracked.sent = Some(Sent { tick, position, yaw, velocity, flags: entity_flags, motion, graph, intents, runs: tracked.runs, hand_prop });
+                        tracked.sent = Some(Sent { tick, position, yaw, velocity, flags: entity_flags, motion, graph, intents, names_left, runs: tracked.runs, hand_prop });
                         owned.push((d2, EntityState {
                             id: wid,
                             kind,
@@ -1259,6 +1283,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let Some(pedestrian) = roster.get(tracked.entity) else { continue };
                         let Some(core) = pedestrian.core.as_ref() else { continue };
                         let handoff_stage = pedestrian.intent_queue.as_ref().map(|queue| queue.active_intents()).unwrap_or_default();
+                        let handoff_velocity = coop.own_trail.get(&tracked.entity).and_then(measured_velocity).unwrap_or([core.velocity[0], core.velocity[1], core.velocity[2]]);
                         let handoff_intents = if handoff_stage.is_empty() { 0 } else { crate::pedestrian_puppet::intents_hash(&handoff_stage) };
                         owned.push((-1., EntityState {
                             id: wid,
@@ -1267,7 +1292,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             epoch: tracked.epoch,
                             position: [core.transform[3][0], core.transform[3][1], core.transform[3][2]],
                             yaw: stream::yaw_of(&core.transform),
-                            velocity: [core.velocity[0], core.velocity[1], core.velocity[2]],
+                            velocity: handoff_velocity,
                             flags: entity_flags(pedestrian),
                             motion: pedestrian.state_out.state.min(255) as u8,
                             graph: pedestrian.graph.current,
