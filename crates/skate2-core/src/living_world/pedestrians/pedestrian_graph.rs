@@ -114,6 +114,9 @@ pub(crate) trait PedestrianGraphBackend {
 /// Native sorted IndexSet<20>; no second entity or behavior roster.
 #[derive(Default)]
 pub(crate) struct PedestrianGraphBehaviours { active: Vec<u16> }
+impl PedestrianGraphBehaviours {
+    pub(crate) fn is_empty(&self) -> bool { self.active.is_empty() }
+}
 
 /// Declarations for the same generated TemplateHC runtime. Family-specific
 /// predicates remain supplied by that generated delegate.
@@ -125,6 +128,24 @@ pub(crate) struct GeneratedDeclarations {
     pub(crate) active_capacity: usize,
 }
 impl PedestrianGraph {
+    /// Co-op fork (M21): every active behaviour ended, the last first (EndAllBehaviours82934830's
+    /// order), and the graph back to its start (no current state, no state active). A held
+    /// update that failed partway (a state a puppet cannot enter: the field test's
+    /// `WaitForTakedownDecision`) left its states and behaviours half applied, and the
+    /// puppet's next update of its own stopped the game on them (`InvalidActiveSet`). Every
+    /// behaviour is ended even past a failed end; the first failure is returned.
+    pub(crate) fn end_all_and_reset(&mut self, instances: &mut PedestrianGraphBehaviours,
+        backend: &mut impl PedestrianGraphBackend) -> Result<(), Error> {
+        let mut first = Ok(());
+        while let Some(occurrence) = instances.active.pop() {
+            if let Err(error) = backend.end_and_remove(self, occurrence) {
+                first = first.and(Err(error));
+            }
+        }
+        *self = Self::default();
+        first
+    }
+
     /// TemplateHC.EndAllBehaviours8293df00: descending occurrence removal;
     /// state identity and timers are retained by this operation.
     pub(crate) fn end_all(&self,instances:&mut PedestrianGraphBehaviours,
@@ -305,3 +326,7 @@ impl PedestrianGraph {
             &instances.active)
     }
 }
+
+#[cfg(test)]
+#[path = "pedestrian_graph_held_tests.rs"]
+mod held_tests;

@@ -126,6 +126,19 @@ impl PedestrianConstruction{
         self.graph=graph;self.behaviours=instances;self.ai_bindings=Some(bindings);
         result.map_err(|error|failure.unwrap_or_else(||error.to_string()))
     }
+    /// Co-op fork (M21): every behaviour ended and the graph back to its start
+    /// (`PedestrianGraph::end_all_and_reset`), after a held update that failed partway.
+    pub(crate) fn reset_ai_graph(&mut self,services:&mut impl AiWorldServices)->Result<(),String>{
+        let Some(mut bindings)=self.ai_bindings.take() else {return Ok(());};
+        let mut graph=std::mem::take(&mut self.graph);
+        let mut instances=std::mem::take(&mut self.behaviours);
+        let mut backend=Backend{entity:self,bindings:&mut bindings,services,failure:None,context_instance:None};
+        let result=graph.end_all_and_reset(&mut instances,&mut backend);
+        let failure=backend.failure.take();
+        drop(backend);
+        self.graph=graph;self.behaviours=instances;self.ai_bindings=Some(bindings);
+        result.map_err(|error|failure.unwrap_or_else(||error.to_string()))
+    }
     /// Co-op fork (M16): the graph held at `state`, its owner's (`PedestrianGraph::update_delegate_held`).
     pub(crate) fn update_ai_graph_as(&mut self,dt:f32,services:&mut impl AiWorldServices,state:u16)->Result<bool,String>{
         let mut bindings=self.ai_bindings.take().ok_or("pedestrian AI graph not loaded")?;

@@ -49,9 +49,13 @@ pub(crate) struct PuppetDrive {
     pub(crate) was_colliding: bool,
     /// M16: the state the owner's AI graph is in, from its last sample, which this puppet's
     /// graph is held at (`PedestrianGraph::update_delegate_held`); `None` before the first
-    /// sample, or once a held update failed here (`held_failed`: the old gate from then on).
+    /// sample.
     pub(crate) graph: Option<u16>,
-    pub(crate) held_failed: bool,
+    /// M21: the owner's states this puppet's graph could not be held at (a held update that
+    /// failed there: the graph was reset, and while the owner is in one of these the puppet's
+    /// graph is not held). Until M21 one failure ended holding for good and left the graph
+    /// half applied (the field test's stop).
+    pub(crate) unheld: std::collections::BTreeSet<u16>,
     /// M16: the facing turned to over the blend: the facing shown when the sample arrived and
     /// the sample's own.
     yaw_from: f32,
@@ -126,7 +130,7 @@ impl PuppetDrive {
         let yaw = crate::coop::world_stream::yaw_of(&target);
         let at = [target[3][0], target[3][1], target[3][2]];
         Self {
-            target, velocity: [0.; 4], age: 0, late: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, held_failed: false,
+            target, velocity: [0.; 4], age: 0, late: 0, flags: 0, pending_contact: None, was_colliding: false, graph: None, unheld: std::collections::BTreeSet::new(),
             yaw_from: yaw, yaw_to: yaw, from_origin: at, from_velocity: [0.; 3], last_position: at, last_step: [0.; 3], last_yaw: yaw, last_dt: 1. / 60., stutter: Stutter::default(), prop_waiting: 0, releasing: false, kept: 0, owner_intents: None, applied_intents: None,
         }
     }

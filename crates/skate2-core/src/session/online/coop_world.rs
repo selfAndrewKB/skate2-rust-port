@@ -779,9 +779,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             }
                         }
                         // M16: the owner's graph state holds this puppet's graph.
-                        if !drive.held_failed {
-                            drive.graph = (sample.graph != crate::generated_action_load::NULL_INDEX).then_some(sample.graph);
-                        }
+                        drive.graph = (sample.graph != crate::generated_action_load::NULL_INDEX).then_some(sample.graph);
                         // M19: a descriptor's hand prop, taken or dropped as the owner's.
                         if let Some(descriptor) = sample.descriptor.as_ref() {
                             sync_hand_prop(pedestrian, descriptor.hand_prop, vault, models, cvars, sample.id)?;

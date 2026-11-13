@@ -51,22 +51,27 @@ impl super::SelectedRecipeFrame<'_> {
                     let was_colliding = entity.puppet.as_mut().map(|drive| std::mem::replace(&mut drive.was_colliding, colliding_now));
                     let own_graph = entity.puppet.is_none() || colliding_now || was_colliding == Some(true);
                     // M16: a puppet's graph is held at its owner's state every tick, so it plays
-                    // what its owner plays; a held update that fails here (a state this console
-                    // cannot enter) is traced once and the puppet falls back to the M6 gate.
+                    // what its owner plays. M21: a held update that fails here (a state this
+                    // console cannot enter: a takedown with no target) resets the graph to its
+                    // start, every behaviour ended (it stopped partway, half applied, and the
+                    // puppet's next update of its own stopped the game on it: the field test,
+                    // 2026-11-12), and that state is not held again; the others still are.
                     // While the puppet collides (a knockdown or a standing hit from the owner's
                     // flags) its own graph plays the collision, as M6 had it; the colliding
                     // state itself is never held.
-                    let held = entity.puppet.as_ref().filter(|drive| !drive.held_failed && !colliding_now && was_colliding != Some(true)).and_then(|drive| drive.graph);
+                    let held = entity.puppet.as_ref().filter(|drive| !colliding_now && was_colliding != Some(true))
+                        .and_then(|drive| drive.graph.filter(|state| !drive.unheld.contains(state)));
                     if entity.ai_bindings.is_some() {
                         match held {
                             Some(state) => match entity.update_ai_graph_as(target.dt, frame, state) {
                                 Ok(true) => {}
                                 Ok(false) => entity.update_ai_graph(target.dt, frame)?,
                                 Err(error) => {
-                                    crate::coop::trace(format_args!("puppet entity {:#x}: its graph cannot be held at its owner's state {state}: {error}; its own gate from now on", entity.id));
+                                    let reset = entity.reset_ai_graph(frame);
+                                    crate::coop::trace(format_args!("puppet entity {:#x}: its graph cannot be held at its owner's state {state}: {error}; the graph reset ({}), the state not held again",
+                                        entity.id, reset.as_ref().map_or_else(|error| format!("an end failed: {error}"), |()| "every behaviour ended".to_owned())));
                                     if let Some(drive) = entity.puppet.as_mut() {
-                                        drive.held_failed = true;
-                                        drive.graph = None;
+                                        drive.unheld.insert(state);
                                     }
                                 }
                             },
