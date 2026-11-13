@@ -174,6 +174,17 @@ impl CollidingBehaviour {
                 services.throw_hand_prop_away(entity)?;
             }
         }
+        // Co-op fork (M20): a puppet's collision is its owner's, which the owner's own queue
+        // took: the puppet's queue is cleared first (a high priority's clear, as a collision's
+        // replace would), so neither the packets its held graph suggested and nothing completes
+        // (four fill the queue) nor its own collision still at the front (a collision cannot
+        // interrupt a collision) rejects it. A rejected packet never completes, and the
+        // colliding state waited on it: the puppet stood through its owner's knockdown, or
+        // stayed in its colliding state for a minute (the M20 soaks).
+        if entity.puppet.is_some() {
+            entity.intent_queue.as_mut().unwrap().clear(true,
+                Some(&mut entity.animation.as_mut().ok_or("collision Begin requires animation input")?.ai_input))?;
+        }
         entity.intent_queue.as_mut().unwrap().suggest(id,
             &mut entity.animation.as_mut().ok_or("collision Begin requires animation input")?.ai_input)?;
         entity.collision.as_mut().unwrap().colliding = true;

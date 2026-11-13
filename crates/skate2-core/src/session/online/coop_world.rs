@@ -69,6 +69,10 @@ struct Tracked {
     /// The local tick a contact was sent to the owner and not yet confirmed by its flags.
     awaiting: Option<u32>,
     knocked_down: bool,
+    /// M20: the owner's knockdown, not yet played on this puppet because the puppet was still
+    /// in a collision of its own (its owner's standing hit, played a sample late): played on
+    /// the first tick the puppet is free, its standing hit ended for it.
+    knockdown_due: Option<CollisionDirection>,
     /// How many runs this console has streamed it in (an owned one's).
     runs: u32,
     /// How many ticks a peer has been nearer by the margin (an owned one's), and which.
@@ -780,12 +784,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                             if puppet.awaiting.take().is_some() {
                                 coop.stats.confirmed += 1;
                                 trace(format_args!("puppet {:08x}: the owner confirmed the knockdown at {tick}", sample.id));
-                            } else if !pedestrian.collision.as_ref().is_some_and(|collision| collision.colliding) {
-                                let direction = direction_of(sample.flags);
-                                pedestrian.record_accepted_full_collision(CollisionForce::Knockdown, direction, cvars)?;
-                                trace(format_args!("puppet {:08x}: knocked down by its owner ({direction:?}) at {tick}", sample.id));
+                            } else {
+                                // M20: played below, this tick or once the puppet is free (until
+                                // M20 a knockdown that found the puppet colliding was dropped).
+                                puppet.knockdown_due = Some(direction_of(sample.flags));
                             }
                         } else if !knocked {
+                            puppet.knockdown_due = None;
                             if puppet.knocked_down {
                                 trace(format_args!("puppet {:08x}: up again at {tick}", sample.id));
                             }
@@ -819,6 +824,30 @@ impl<T, C> SelectedLiveSession<T, C> {
                                 }
                             }
                         }
+                    }
+
+                    // 1b. M20: the owners' knockdowns due. A puppet still in a standing hit of
+                    // its own (the owner's, played a sample late) has it ended (its packet
+                    // cleared, so its completion closes it at the next update); the knockdown
+                    // is recorded on the first tick it is free. One already down here is the
+                    // same knockdown.
+                    for (&id, puppet) in coop.entities.iter_mut().filter(|(_, known)| known.owner != Owner::Local) {
+                        let Some(direction) = puppet.knockdown_due else { continue };
+                        let Some(pedestrian) = roster.get_mut(puppet.entity).filter(|pedestrian| pedestrian.puppet.is_some()) else {
+                            puppet.knockdown_due = None;
+                            continue;
+                        };
+                        if pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) {
+                            puppet.knockdown_due = None;
+                            continue;
+                        }
+                        if PuppetDrive::colliding(pedestrian.collision.as_ref()) {
+                            pedestrian.clear_all_intents()?;
+                            continue;
+                        }
+                        pedestrian.record_accepted_full_collision(CollisionForce::Knockdown, direction, cvars)?;
+                        puppet.knockdown_due = None;
+                        trace(format_args!("puppet {id:08x}: knocked down by its owner ({direction:?}) at {tick}"));
                     }
 
                     // 2. The others' contacts on this console's own pedestrians, through the
@@ -975,7 +1004,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     ownership::decide(kind, id, None, Owner::Remote(owner), "its census spawned it");
                     trace(format_args!("puppet {id:08x} of slot {owner} spawned as entity {entity:#x} (entity key {:016x}, model {:016x}, epoch {}) at {tick}",
                         spawn.descriptor.entity_key, spawn.descriptor.model_key, spawn.state.epoch));
-                    coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, runs: 0, nearer: (0, 0), behind: 0, sent: None });
+                    coop.entities.insert(id, Tracked { entity, owner: Owner::Remote(owner), epoch: spawn.state.epoch, kind, updated: tick, awaiting: None, knocked_down: spawn.state.flags & flags::KNOCKED_DOWN != 0, knockdown_due: None, runs: 0, nearer: (0, 0), behind: 0, sent: None });
                     if let (Some(identity), Some(challenge)) = (story, challenge.as_deref_mut()) {
                         crate::challenge::characters::remote_story_spawned(challenge, identity, owner, entity, spawn.state.position);
                     }
@@ -1173,7 +1202,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let tracked = coop.entities.entry(wid).or_insert_with(|| {
                             let reason = if story { "a challenge placed it here: streamed to the others, never handed over" } else if guard { "this census spawned it; it chases this console's skater only" } else { "this census spawned it" };
                             ownership::decide(kind, wid, None, ownership::owner(kind, Owner::Local), reason);
-                            Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, runs: 0, nearer: (0, 0), behind: 0, sent: None }
+                            Tracked { entity: id, owner: Owner::Local, epoch: 0, kind, updated: tick, awaiting: None, knocked_down: false, knockdown_due: None, runs: 0, nearer: (0, 0), behind: 0, sent: None }
                         });
                         // The handoff rule: a peer nearer by the margin for a second takes it.
                         let position = core.transform[3];
