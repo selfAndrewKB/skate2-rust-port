@@ -368,6 +368,22 @@ by its hash and the server and clients resolve it from what they hold (protocol 
 pedestrian's hand prop rides the descriptor and the puppet carries the same one; a puppet's
 position blends to each sample over the cadence ([world](topics/world.md)).
 
+**The round's pace: the original's (2026-11-17, M22).** Each console's skater runs free and
+only the round waits for every player's facts, so a round can trail its own skater by a lead
+set when the players' facts began (two seconds on the bench) or left by a stall, and the
+objectives react that much late. The original's pace control closes it: while another player
+paces the round with the local skater, `UpdateInputRate`'s formula (`docs/online/lockstep.md`
+§8) reads the round's lead (the local facts produced and not yet run) as its "sent and not
+simulated" and trims the 60 Hz timer between 58 and 62 Hz (`coop::pace`); alone, the game's
+own timer stands (Online Speed included), and a slow motion's rate stands. A round with no
+tick for 60 simulation ticks shows the game's "Waiting for Skaters" on the online event log
+until ticks flow, as the original's "waiting for players" popup did; the notice also shows
+while the other player travels or loads, since the scripts do wait then. A stalled seat's
+debt sprint (the host loop's, not co-op's) is kept: it restores the step, and the pace settles
+what it leaves, about four ticks a second, so a long gap takes minutes. The pair settles at
+62 Hz on a near link, the original's online pace. [CONFIRMED on the bench, provisional]
+(`../bench/evidence/probe/2026-11-17-m22-pace.md`).
+
 **Story characters: the spawner's (2026-11-12, M14).** A pedestrian a challenge placed was
 every console's own (M5), so a mission's photographer or pro stood and walked differently on
 each screen (open item 70). Now the console whose tester box spawned it owns it for life and

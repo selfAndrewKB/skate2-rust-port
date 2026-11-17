@@ -271,7 +271,13 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     other seat's challenge logic freezes silently meanwhile (the original says "waiting for
     players" after a second); and a seat's round can trail its own skater by a constant lead set
     at the round's start (2 s there), which the original's ±4 % pace control would close.
-    Undecided: a stall notice, pace control, a gentler sprint.
+    **Answered by M22 (2026-11-17, `../bench/evidence/probe/2026-11-17-m22-pace.md`):** the
+    original's pace control trims each seat's timer (58–62 Hz) from its round's lead, closing
+    the start's lead within the first minute and the lead a stall leaves (a 6 s freeze: the
+    host's largest 304 then 12, the joiner's 60 then 22; before, 479 and a joiner left 328
+    behind by its own sprint); "Waiting for Skaters" shows on the event log after a second
+    without a round tick and goes when ticks flow. The sprint stays (it restores the step). A
+    seat silent for 10 s is still dropped (the transport's timeout).
 
 ## Session ([topic](topics/session.md))
 
