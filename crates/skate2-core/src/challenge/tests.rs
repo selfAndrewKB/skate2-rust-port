@@ -1498,3 +1498,50 @@ fn a_game_unload_gives_the_skaters_the_scoring_of_no_challenge() {
     assert_eq!(inputs.enabled, [true; 14]);
     assert_eq!(scoring.current, None);
 }
+
+/// Co-op probe (M21): the Burnette photo's objectives' Lua, as the objective system runs it.
+#[test]
+#[ignore = "requires original external game data via SKATE2_GAME_ROOT"]
+fn print_burnette_photo_objective_sources() {
+    use super::objectives::field;
+    let db = career_db();
+    let class = super::keys::class::CHALLENGE_OBJECTIVE;
+    for key in [0x1ccb_32cf_a345_d7fe_u64, 0x47f4_4153_4998_96c0] {
+        for (name, field) in [("definition", field::OBJECTIVE_DEFINITION), ("points valid", field::POINTS_VALID), ("failures", field::FAILURES)] {
+            if let Some(a) = db.attribute(class, key, field) {
+                for i in 0..a.len() {
+                    let text = a.data(i).and_then(|at| db.text_at(at)).unwrap_or("<none>");
+                    eprintln!("{key:016x} {name} {i}:\n{text}\n");
+                }
+            }
+        }
+    }
+}
+
+/// Co-op probe (M21): the Burnette photo's on-screen texts.
+#[test]
+#[ignore = "requires original external game data via SKATE2_GAME_ROOT"]
+fn print_burnette_photo_texts() {
+    use skate2_formats::localization::{Histogram, LanguageCategory, string_hash};
+    let root = std::env::var("SKATE2_GAME_ROOT").expect("SKATE2_GAME_ROOT");
+    let mut mounts = MountSet::new();
+    for archive in SKATE2_ARCHIVES.iter() {
+        if let Ok(big) = MountedBig::open(archive.path_under(std::path::Path::new(&root)), archive.use_external_header) {
+            mounts.push(big);
+        }
+    }
+    let lang = "data\\fe\\languages\\english\\LANGUAGE_English";
+    let histogram = Histogram::parse(&mounts.read_path(&format!("{lang}_HISTOGRAM_skate2ng.BIN")).unwrap()).unwrap();
+    for label in ["ID_CHALLENGE_M_2D_01_PHOTO_TM_BURNETTE_OBJECTIVE0", "ID_CHALLENGE_M_2D_01_PHOTO_TM_BURNETTE_OBJECTIVE1",
+        "ID_CHALLENGE_M_2D_01_PHOTO_TM_BURNETTE_OBJECTIVE", "ID_CHALLENGE_M_2D_01_PHOTO_TM_BURNETTE_DESCRIPTION", "ID_CHALLENGE_M_2D_01_PHOTO_TM_BURNETTE_TITLE",
+        "ID_CHALLENGE_M_2D_01_PHOTO_TM_BURNETTE", "ID_CHALLENGE_TIPS_TWEAKAIR"] {
+        for category in ["Global", "FrontEnd"] {
+            let Ok(bytes) = mounts.read_path(&format!("{lang}_{category}_skate2ng.BIN")) else { continue };
+            let table = LanguageCategory::parse(&bytes).unwrap();
+            if let Some(packed) = table.packed_string(string_hash(label.as_bytes())) {
+                let text = histogram.unpack(packed, 1024, false).unwrap();
+                eprintln!("{label}: {}", String::from_utf16_lossy(&text.units));
+            }
+        }
+    }
+}
