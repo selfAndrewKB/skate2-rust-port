@@ -276,7 +276,10 @@ owner's census with its puppet's and counts where the intents differ, and
 `tools/coop/walk_audit.py` gives a soak's walk-in-place figures (of an owner's stood seconds,
 its puppet moving past 0.3 m/s, or given another major intent), its collisions (the owners'
 knocked-down seconds whose puppet was given no collision intent, each seat's longest run of a
-puppet colliding) and its summed jerk; and
+puppet colliding) and its summed jerk;
+`tools/coop/pace_audit.py seat-N.log ...` (M22) gives each seat's round lead over its own
+skater (first, largest, last, and from when it stays under 45 ticks), the timer's changes and
+range, and every "waiting for players" notice shown and taken down; and
 `tools/coop/sync_audit.py seat-1.log seat-2.log` pairs the seats' lines by world id and round
 tick and reports, per field, how many pairs agree within tolerance (position 0.5 m, yaw 5°,
 speed 0.5 m/s, flags, model and down exact), the worst gap and where, the divergences still

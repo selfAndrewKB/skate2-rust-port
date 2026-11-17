@@ -7,6 +7,8 @@
 pub mod outcomes;
 #[path = "ownership.rs"]
 pub mod ownership;
+#[path = "pace.rs"]
+pub mod pace;
 #[path = "prompts.rs"]
 pub mod prompts;
 #[path = "rules.rs"]

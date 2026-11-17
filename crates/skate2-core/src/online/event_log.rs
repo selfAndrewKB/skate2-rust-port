@@ -115,6 +115,26 @@ impl EventLog {
         }
     }
 
+    /// PC port (co-op M22): a notice held on screen while it holds (the original's "waiting for
+    /// players" popup stays until frames flow): its line stays past its intro without fading,
+    /// and one pushed out by newer lines comes back.
+    pub fn keep(&mut self, text: &EventText) {
+        match self.lines.iter_mut().find(|line| line.text == *text && line.state != LineState::Outro) {
+            Some(line) => line.timer = line.timer.min(INTRO_UPDATES),
+            None => self.add(text.clone()),
+        }
+    }
+
+    /// PC port (co-op M22): a notice that no longer holds plays its outro now (the original's
+    /// "waiting for players" popup closes when frames flow again).
+    pub fn retire(&mut self, text: &EventText) {
+        for line in self.lines.iter_mut().filter(|line| line.text == *text && line.state != LineState::Outro) {
+            line.timer = OUTRO_UPDATE;
+            line.state = LineState::Outro;
+            self.refresh = true;
+        }
+    }
+
     /// `Clear` 0x8261a020, as `OE_GameLeft` and `OE_Disconnected` run it.
     pub fn clear(&mut self) {
         if !self.lines.is_empty() {
@@ -159,6 +179,40 @@ mod tests {
         }
         assert!(log.snapshot().lines.is_empty());
         assert!(log.take_refresh());
+    }
+
+    #[test]
+    fn a_retired_line_plays_its_outro_and_goes() {
+        let mut log = EventLog::default();
+        log.add(EventText::plain("ID_ONLINE_WAITING_FOR_SKATERS"));
+        log.add(EventText::named("ID_ONLINE_EVENT_LEAVE", "Rob"));
+        log.update();
+        log.take_refresh();
+        log.retire(&EventText::plain("ID_ONLINE_WAITING_FOR_SKATERS"));
+        assert!(log.take_refresh());
+        assert_eq!(log.snapshot().lines[0].1, LineState::Outro);
+        assert_eq!(log.snapshot().lines[1].1, LineState::Intro, "only that line");
+        for _ in OUTRO_UPDATE..DROP_UPDATE {
+            log.update();
+        }
+        assert_eq!(log.snapshot().lines.len(), 1);
+    }
+
+    #[test]
+    fn a_kept_line_stays_and_comes_back() {
+        let waiting = EventText::plain("ID_ONLINE_WAITING_FOR_SKATERS");
+        let mut log = EventLog::default();
+        log.add(waiting.clone());
+        for _ in 0..2 * DROP_UPDATE {
+            log.keep(&waiting);
+            log.update();
+        }
+        assert_eq!(log.snapshot().lines, [(waiting.clone(), LineState::Shown)], "held past its time");
+        for name in ["A", "B", "C", "D", "E"] {
+            log.add(EventText::named("ID_ONLINE_EVENT_LEAVE", name));
+        }
+        log.keep(&waiting);
+        assert_eq!(log.snapshot().lines.last(), Some(&(waiting, LineState::Intro)), "pushed out, back");
     }
 
     #[test]

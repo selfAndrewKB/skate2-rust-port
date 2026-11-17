@@ -172,6 +172,8 @@ pub(super) struct Online {
     pub(super) start: Option<[f32; 16]>,
     pub(super) event_log: EventLog,
     notices: Vec<OnlineNotice>,
+    /// Co-op fork (M22): the last ping's round trip to the server, for a campaign round's pace.
+    pub(super) round_trip: Option<std::time::Duration>,
     /// Co-op fork: the campaign's shared living world.
     pub(super) coop: coop_world::CoopWorld,
     /// Co-op fork: the campaign's offline-flags trace went out for this game.
@@ -580,6 +582,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
                 ClientEvent::Facts { user_id, tick, stint, notes, data, owned } => self.online_facts(user_id, tick, stint, notes, &data, &owned),
                 ClientEvent::World { user_id, tick, data } => self.online_world_event(user_id, tick, &data),
+                ClientEvent::RoundTrip(rtt) => self.online.round_trip = Some(rtt),
                 ClientEvent::Message(message) => {
                     if let Err(e) = self.online_message(message) {
                         self.online_unplayable(&e)?;

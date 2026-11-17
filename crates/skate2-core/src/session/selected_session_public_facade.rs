@@ -4047,7 +4047,9 @@ impl<T, C> SelectedLiveSession<T, C> {
     pub fn sim_timer_hz(&self) -> Option<i32> {
         let world = self.inner.world_handle()?.lock().ok()?;
         let hz = world.sim_rate.lock().ok()?.timer_hz();
-        Some(hz)
+        // Co-op fork (M22): a campaign round's pace trims the baseline, as `UpdateInputRate`
+        // sets the timer online; a slow motion's rate stands.
+        Some(if hz == crate::coop::pace::BASE_HZ { self.campaign_pace_hz().unwrap_or(hz) } else { hz })
     }
 
     /// Online Speed applies to this game: picked in Gameplay Settings and not online.
@@ -4055,7 +4057,8 @@ impl<T, C> SelectedLiveSession<T, C> {
     pub fn online_speed_pacing(&self) -> bool {
         let pacing = || -> Option<bool> {
             let world = self.inner.world_handle()?.lock().ok()?;
-            let pacing = world.sim_rate.lock().ok()?.online_speed_pacing();
+            // Co-op fork (M22): a campaign round's pace owns the timer.
+            let pacing = world.sim_rate.lock().ok()?.online_speed_pacing() && self.campaign_pace_hz().is_none();
             Some(pacing)
         };
         pacing().unwrap_or(false)

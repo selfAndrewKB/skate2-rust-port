@@ -103,6 +103,9 @@ const STALL_TICKS: u32 = 240;
 /// the server counts a report only while it is fresh, so one from a wait that has ended cannot
 /// join later ones.
 const STALL_REPORT_TICKS: u32 = 60;
+/// Co-op fork (M22): the "waiting for players" notice's text, the game's own (`SetupLobbyHUD`'s
+/// waiting line); the original's `eSk8FEPopup_Online_WaitForPlayersSmall` is not read here.
+const WAITING_FOR_SKATERS: &str = "ID_ONLINE_WAITING_FOR_SKATERS";
 
 /// Where the challenge last teleported a player of a turn-based round (see [`SPOT_LIMIT`]),
 /// whether their skater has shown there since, and whether this console now leaves it undrawn.
@@ -326,6 +329,13 @@ pub(super) struct Round {
     /// Co-op fork: the round is a campaign's, the whole session long: every player paces it,
     /// its objective groups each read their own player, and it never completes.
     pub(super) campaign: bool,
+    /// Co-op fork (M22): a campaign round's pace and its "waiting for players" notice
+    /// (`crate::coop::pace`).
+    pace: crate::coop::pace::Pace,
+    stall: crate::coop::pace::StallWatch,
+    /// The session frame the pace and the watch last stepped in: a frame the round is not
+    /// updated in (a travel) leaves the timer to the game and starts the wait again.
+    paced_frame: Option<u32>,
     /// Co-op fork (M9): the outcomes this console's scripts decided and not yet carried by a tick,
     /// numbered; the newest applied of each player's.
     outcomes_pending: Vec<skate2_net::protocol::Outcome>,
@@ -418,6 +428,9 @@ impl Round {
             released: BTreeSet::new(),
             load_entered: false,
             campaign: false,
+            pace: crate::coop::pace::Pace::default(),
+            stall: crate::coop::pace::StallWatch::default(),
+            paced_frame: None,
             prompts_pending: Vec::new(),
             prompt_seq: 0,
             prompts_applied: [0; MAX_PLAYERS],
@@ -476,6 +489,25 @@ impl Round {
     /// Whether the local skater's facts pace the round.
     fn local_contributes(&self) -> bool {
         usize::try_from(self.local).is_ok_and(|local| self.contributes(local))
+    }
+
+    /// Co-op fork (M22): the local facts produced and not yet run, while a running campaign round
+    /// is paced by the local skater and at least one other player (`UpdateInputRate`'s "sent and
+    /// not simulated"); none otherwise.
+    fn campaign_pace_lead(&self) -> Option<u32> {
+        let others = self.players.len().saturating_sub(self.disconnected.len()) > 1;
+        (self.campaign && self.running() && others && self.local_contributes()).then(|| self.produced.saturating_sub(self.processed))
+    }
+
+    /// Co-op fork (M22): why the pace has no lead to read, for the trace.
+    fn unpaced_reason(&self) -> &'static str {
+        if !self.running() {
+            "the round not running (a sync point)"
+        } else if !self.local_contributes() {
+            "the local skater not pacing the round"
+        } else {
+            "no other player in the round"
+        }
     }
 
     /// Whether the local skater plays the round now: its facts pace the challenge, and the other
@@ -1235,6 +1267,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // tick the leader's facts announce.
         career.nis.set_skip_blocked(true);
         career.prompt_notes_on = true;
+        self.retire_campaign_notice();
         self.online.round = Some(round);
         self.online.campaign_hold = false;
         crate::coop::trace(format_args!(
@@ -1358,6 +1391,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Lobby skate again (`SetupGame` 0x82778530 after the round): the round's challenge system
     /// goes and the local skater returns to the game's location.
     pub(super) fn end_online_round(&mut self) -> Result<(), SelectedLiveError> {
+        self.retire_campaign_notice();
         let Some(round) = self.online.round.take() else { return Ok(()) };
         self.end_campaign_ai_streams();
         let (ticks, bytes) = round.facts_sent;
@@ -1699,6 +1733,69 @@ impl<T, C> SelectedLiveSession<T, C> {
         Ok(())
     }
 
+    /// Co-op fork (M22): one simulation tick of a campaign round's pace and stall notice, from
+    /// the lead before the round ran and whether a round tick ran.
+    fn update_campaign_pace(&mut self, lead: Option<u32>, ran: bool) {
+        let (rtt, frame) = (self.online.round_trip, self.completed_frames);
+        let Some(round) = self.online.round.as_mut().filter(|round| round.campaign) else { return };
+        let resumed = round.paced_frame.is_some_and(|last| frame.saturating_sub(last) > 1);
+        round.paced_frame = Some(frame);
+        let (tick, before, paced_before) = (round.processed, round.pace.hz(), round.pace.paced());
+        if let Some(paced) = round.pace.update(lead, rtt) {
+            match paced.lead {
+                Some(lead) => crate::coop::trace(format_args!(
+                    "pace at tick {tick}: timer {before} -> {} Hz, {lead} local facts not yet run (free/target {:.2}, target {:.1}, ping {:.0} ms)",
+                    paced.hz, paced.ratio, paced.target, paced.ping_ms
+                )),
+                None => crate::coop::trace(format_args!("pace at tick {tick}: timer {before} -> {} Hz, {}", paced.hz, round.unpaced_reason())),
+            }
+        } else if paced_before && !round.pace.paced() {
+            crate::coop::trace(format_args!("pace at tick {tick}: the game's own timer again, {}", round.unpaced_reason()));
+        }
+        let notice = if round.running() && round.processed > 0 && !resumed { round.stall.update(ran) } else { round.stall.pause() };
+        let awaited = round.awaited();
+        let shown = round.stall.shown();
+        let text = EventText::plain(WAITING_FOR_SKATERS);
+        match notice {
+            Some(crate::coop::pace::Notice::Open) => crate::coop::trace(format_args!(
+                "waiting for players at tick {tick}: no round tick for {} simulation ticks, awaiting {}, notice shown",
+                crate::coop::pace::STALL_TICKS,
+                awaited.map_or_else(|| "no other player's facts".to_owned(), |user_id| format!("user {user_id}'s facts"))
+            )),
+            Some(crate::coop::pace::Notice::Close(waited)) => {
+                crate::coop::trace(format_args!("waiting for players over at tick {tick} after {waited} simulation ticks{}, notice taken down", if resumed { " (this console's own pause in the round's updates)" } else { "" }));
+                self.online.event_log.retire(&text);
+            }
+            None => {}
+        }
+        if shown {
+            self.online.event_log.keep(&text);
+        }
+    }
+
+    /// Co-op fork (M22): a campaign round going (its end, a new round in its place) takes its
+    /// "waiting for players" notice down.
+    fn retire_campaign_notice(&mut self) {
+        if let Some(round) = self.online.round.as_mut().filter(|round| round.campaign)
+            && let Some(crate::coop::pace::Notice::Close(waited)) = round.stall.pause()
+        {
+            crate::coop::trace(format_args!("waiting for players over with the round after {waited} simulation ticks, notice taken down"));
+            self.online.event_log.retire(&EventText::plain(WAITING_FOR_SKATERS));
+        }
+    }
+
+    /// Co-op fork (M22): the timer rate a campaign round's pace sets for the 60 Hz baseline,
+    /// while another player paces the round with the local skater and the round was stepped in
+    /// the last frame.
+    pub(in super::super) fn campaign_pace_hz(&self) -> Option<i32> {
+        let frame = self.completed_frames;
+        self.online
+            .round
+            .as_ref()
+            .filter(|round| round.campaign && round.pace.paced() && round.paced_frame.is_some_and(|last| frame.saturating_sub(last) <= 1))
+            .map(|round| round.pace.hz())
+    }
+
     /// The players pacing the next challenge tick (`Round::contributors`). Pins do not count:
     /// a script pins `vars.LocalPlayerID`, a different player on each console.
     fn online_contributors(&self) -> Option<u8> {
@@ -1890,6 +1987,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 self.produce_online_facts()?;
                 self.diagnostic_race_gates(local)?;
                 let completed = self.completed_frames;
+                let pace_lead = self.online.round.as_ref().and_then(Round::campaign_pace_lead);
                 let (ticks, stalled) = self.online.round.as_mut().map_or((0, None), |round| {
                     let lead = round.ready_lead(CATCH_UP_LEAD + 1);
                     let (ticks, refilling) = pace(lead, round.refilling);
@@ -1898,7 +1996,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         round.stalls += 1;
                     }
                     if completed % 600 == 0 && round.processed > 0 {
-                        trace(format_args!("round at tick {}: {} ready, stalled {} of the last 600 ticks", round.processed, lead, std::mem::take(&mut round.stalls)));
+                        trace(format_args!("round at tick {}: {} ready, stalled {} of the last 600 ticks, timer {} Hz", round.processed, lead, std::mem::take(&mut round.stalls), round.pace.hz()));
                     }
                     // Only a round with no tick ready waits at its next tick, which every console
                     // whose game matches the others' reaches with the same players pacing it.
@@ -1910,8 +2008,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     trace(format_args!("the round has waited {STALL_TICKS} ticks or more at tick {tick} for {name}'s facts: telling the server"));
                     self.online.send(ClientMessage::Stalled { user_id, tick });
                 }
+                let mut ran = 0;
                 for _ in 0..ticks {
                     let Some((frames, disconnects, own, presented, prompts, outcomes)) = self.online.round.as_mut().filter(|round| round.running()).and_then(Round::next_tick) else { break };
+                    ran += 1;
                     if std::env::var_os("SKATE2_TRACE_ONLINE_INPUTS").is_some() {
                         self.trace_online_inputs(&frames);
                     }
@@ -1999,6 +2099,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         break;
                     }
                 }
+                self.update_campaign_pace(pace_lead, ran > 0);
                 Ok(())
             }
             Stage::Results => Ok(()),

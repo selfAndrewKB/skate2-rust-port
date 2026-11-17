@@ -49,6 +49,8 @@ pub enum ClientEvent {
     Facts { user_id: u64, tick: u32, stint: u32, notes: FactsNotes, data: Vec<u8>, owned: Vec<(u8, Vec<u8>)> },
     /// Co-op fork: another member's world run (`ClientMessage::World`).
     World { user_id: u64, tick: u32, data: Vec<u8> },
+    /// Co-op fork (M22): a ping's round trip to the server, for the round's pace.
+    RoundTrip(Duration),
 }
 
 #[derive(Debug)]
@@ -367,7 +369,9 @@ impl ClientCore {
             }
             ServerMessage::Pong { time } => {
                 let elapsed = u64::try_from(now.saturating_duration_since(self.epoch).as_micros()).unwrap_or(u64::MAX);
-                self.rtt = Some(Duration::from_micros(elapsed.saturating_sub(time)));
+                let rtt = Duration::from_micros(elapsed.saturating_sub(time));
+                self.rtt = Some(rtt);
+                self.events.push(ClientEvent::RoundTrip(rtt));
             }
             // Co-op fork (M18): a look by hash: the bytes this client holds, delivered as the
             // look itself; one it never saw is asked for, and arrives as a `Recipe`.
