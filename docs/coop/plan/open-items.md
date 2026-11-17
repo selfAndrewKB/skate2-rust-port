@@ -264,7 +264,14 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     times speed until caught up. The catch-up is the port's own host loop, not co-op's; whether
     a co-op seat should sprint, or the pacing slow the leader instead, is undecided. Facts were
     produced up to 1660 ticks ahead of those processed there; what that lead does to the
-    joiner's own input in a catch-up is not measured. Logs as item 72's.
+    joiner's own input in a catch-up is not measured. Logs as item 72's. **Probed (2026-11-16,
+    `../bench/evidence/probe/2026-11-16-m22-stall.md`):** a seat frozen 20 s is dropped (the
+    transport's 10 s) and rejoins; frozen 6 s it pays its debt at about 1.2× for 26 s on this
+    Mac (the sprint is what restores the lockstep: the other seat kept producing facts); the
+    other seat's challenge logic freezes silently meanwhile (the original says "waiting for
+    players" after a second); and a seat's round can trail its own skater by a constant lead set
+    at the round's start (2 s there), which the original's ±4 % pace control would close.
+    Undecided: a stall notice, pace control, a gentler sprint.
 
 ## Session ([topic](topics/session.md))
 
