@@ -151,6 +151,13 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     set, and every one completed on both seats from the joiner's notes
     (`../bench/evidence/probe/2026-11-12-m15-joiner-wins.md`). What a joiner's own trick in a
     photo zone does on the host remains play's to judge (the bench does no tricks).
+    **Read (2026-11-16, the player's attempts with the trick-judging trace, dec9032):** the
+    joiner's tricks reach its copy on both seats and are judged alike; the shot's condition is
+    `EnteredVolumesInOrder(0x6431203e38706, 0x4ea7203e38706) and DidSpecificTrickGroup("grabs_tweak")`
+    ("Tweak Grab above the Deck": the second volume is above the pool's deck, not the scoring
+    boundary `0x4ea7103e38706`), so three clean tweak airs peaking at 1 to 2.2 m were "not met
+    yet": none reached the volume above the deck, which the host reached in the 2026-11-12
+    field test. Logs `../bench/evidence/probe/2026-11-16-field-test-6-seat-{1,2}.log`.
 73. A story character's pedestrian id is drawn from the same counter as the census's, and the
     world stream names an owned pedestrian by its owner's slot and local id: seat 2's
     photographer `02000e71` was later also the host's census pedestrian `02000e71`
@@ -246,6 +253,18 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
 85. M21's review, recorded: an `End` that fails during a state change's exit is run again by
     the reset (its `remove` comes after the `?`), and the backend's `capture` keeps the last
     failure's message, so a reset's trace can name the wrong behaviour; neither is seen.
+
+## Play (2026-11-16, the player, lobby build dec9032)
+
+86. **Both screens slowed and stuttered, then ran very fast, then normal** (the Mac on low
+    battery, two seats and the server on it). The joiner's seat fell up to 1242 fixed ticks
+    (20 s) behind the wall clock and stalled up to 389 of 600 ticks waiting for the host's
+    facts; the host loop never discards owed time (`controlled host backlog ... no simulation
+    time discarded`, four ticks a redraw), so once the throttle eased it ran at up to four
+    times speed until caught up. The catch-up is the port's own host loop, not co-op's; whether
+    a co-op seat should sprint, or the pacing slow the leader instead, is undecided. Facts were
+    produced up to 1660 ticks ahead of those processed there; what that lead does to the
+    joiner's own input in a catch-up is not measured. Logs as item 72's.
 
 ## Session ([topic](topics/session.md))
 
