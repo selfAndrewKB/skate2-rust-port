@@ -7,7 +7,9 @@ role co-op, tutorials proven by everyone, each player's own skater in the scenes
 port's netcode, never beside it ([rules](plan/rules.md)).
 
 **Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.20.0-round-pace`**
-(2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
+(2026-11-17): M22, the campaign round's pace (the original's ±4 % from the round's lead over
+its own skater) and the "Waiting for Skaters" notice; M21 and M20 before it ([versions](plan/versions.md)).
+Earlier (2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
 puppets to the others, the owned skaters' names carrying their owner (protocol 124), each
 console spawning its share of the allowance (open item 53); M11.2, a car's or a pedestrian's
 push claims the prop it moves for its console (67); M11.1, the owned pro's puppet sounds (its frames carry the actor's audio
