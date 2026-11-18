@@ -113,7 +113,10 @@ tagged ([versions](plan/versions.md)).
 - Fixes worth sending upstream branch from `main`, not from `coop`, so the PR carries nothing
   co-op-specific.
 
-Remotes: `origin` = the fork, `upstream` = skate6743/skate2-rust-port.
+Remotes: `origin` = the fork, `upstream` = skate6743/skate2-rust-port. `private` =
+selfAndrewKB/Skate2Co-op (private, made 2026-11-18): `coop`, `main` and every tag, plus an
+`evidence` branch holding `../bench/evidence/` as of M22 (committed from a git directory outside
+the bench folder, so the bench itself stays plain files).
 
 ## Game data
 
