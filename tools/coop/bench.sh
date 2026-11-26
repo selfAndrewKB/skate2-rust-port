@@ -135,7 +135,7 @@ start_seat() {
         echo "seat $i: SKATE2_DIAGNOSTIC_ONLINE=$online ${SEAT_EXTRA:-} $extra (log $dir/seat.log)"
         # The seat's whole environment is kept beside its log (seat.env), so a switch that did
         # not take is never a guess.
-        (cd "$dir" && exec env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_DIAGNOSTIC_ONLINE="$online" $mute \
+        (cd "$dir" && exec env SKATE2_SAVE_ROOT="$dir" SKATE2_TRACE_ONLINE=1 SKATE2_TRACE_CAREER=1 SKATE2_TRACE_COOP=1 SKATE2_COOP_LOG=0 SKATE2_DIAGNOSTIC_ONLINE="$online" $mute \
             SKATE2_DIAGNOSTIC_PROFILE_NAME="Seat $i" $(window_env "$i") ${SEAT_EXTRA:-} $extra \
             sh -c 'env | grep "^SKATE2_" | sort > seat.env; exec "$0" "$@"' "$GAME" --live-skating --live-capture "$dir/capture.png" > seat.log 2>&1) < /dev/null > /dev/null 2>&1 &
         echo $! > "$dir/pid"

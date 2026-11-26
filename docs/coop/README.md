@@ -71,7 +71,7 @@ play decides (New Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.21.0` build (both machines on it: protocol 127, stream format 7), with `SKATE2_TRACE_COOP=1` so the seat logs carry the sync check: after a session, `tools/coop/sync_check_audit.py` on the two logs says whether the games parted and where (the "sync check: player P differs at tick T in PARTS" lines; open items 87 and 88 are the known ones). And M22's questions still stand: the feel at 62 Hz, objectives catching up after a slowdown, the "Waiting for Skaters" notice.
+Play on the `coop-v0.21.0` build (both machines on it: protocol 127, stream format 7), the co-op log on by default (each session's `coop_logs/coop-<time>.log` beside the saves, the newest 20 kept; `SKATE2_TRACE_COOP=0` silences it): after a session, `tools/coop/sync_check_audit.py` on the two machines' logs says whether the games parted and where (the "sync check: player P differs at tick T in PARTS" lines; open items 87 and 88 are the known ones). And M22's questions still stand: the feel at 62 Hz, objectives catching up after a slowdown, the "Waiting for Skaters" notice.
 The AI day's report says what changed and what it
 measured, its evening section the owned AI:
 [reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md); the night before it:
