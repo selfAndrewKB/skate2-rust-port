@@ -384,6 +384,24 @@ what it leaves, about four ticks a second, so a long gap takes minutes. The pair
 62 Hz on a near link, the original's online pace. [CONFIRMED on the bench, provisional]
 (`../bench/evidence/probe/2026-11-17-m22-pace.md`).
 
+**The round's sync check: the original's, told not kicked (2026-11-26, M23).** Nothing told
+when two consoles' scripts parted: play found it by eye (a photographer in two places, a
+joiner's dead objectives). The original's `SyncChecker` (`docs/online/lockstep.md` §9) hashes
+the world after every frame and sends a byte of it with the commands; the port's lockstep is
+the round's alone, so after every round tick each console hashes the scripts' state in five
+parts (the frames they took in, the activities' graphs, the objectives, the timers, the vars
+tables; nothing a console allocates in its own order, nothing local; `coop::round_hash`), and
+every 15 ticks its facts carry the newest checkpoint's parts, 16 bits each, named by the tick
+(protocol 127, about 50 B/s). A console compares a player's check with its own record of
+that tick as it runs the tick the check came with. A difference in the inputs is the
+network's, in any other part the simulation's; it is traced with the ticks around it and a
+field dump at a grid tick both consoles reach, and the round goes on: the original kicked, but
+a campaign is better told where it parted than ended. `tools/coop/sync_check_audit.py` names
+the first tick two seats parted at and the fields that differ. Rollback and fixed-point
+arithmetic were weighed and set aside: the round never predicts (M22 paces it), and the port
+reproduces the original's floats. [CONFIRMED on the bench, provisional]
+(`../bench/evidence/probe/2026-11-26-m23-sync-check.md`).
+
 **Story characters: the spawner's (2026-11-12, M14).** A pedestrian a challenge placed was
 every console's own (M5), so a mission's photographer or pro stood and walked differently on
 each screen (open item 70). Now the console whose tester box spawned it owns it for life and

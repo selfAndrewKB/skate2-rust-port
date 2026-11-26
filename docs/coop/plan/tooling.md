@@ -279,7 +279,14 @@ knocked-down seconds whose puppet was given no collision intent, each seat's lon
 puppet colliding) and its summed jerk;
 `tools/coop/pace_audit.py seat-N.log ...` (M22) gives each seat's round lead over its own
 skater (first, largest, last, and from when it stays under 45 ticks), the timer's changes and
-range, and every "waiting for players" notice shown and taken down; and
+range, and every "waiting for players" notice shown and taken down;
+`tools/coop/sync_check_audit.py seat-1.log seat-2.log` (M23) reads the round's sync check: each
+seat's checks and differences with the other (the parts and the first tick), the first tick
+whose whole parts differ between the seats from the windows a difference prints, and every
+field-dump tick both printed with the lines only one seat has (`SKATE2_COOP_SYNC_DUMP=<ticks>`
+dumps the activities, objectives, timers and vars every that many round ticks;
+`SKATE2_DIAGNOSTIC_DESYNC=<tick>` plants a divergence in the first activity's vars on the seat
+that carries it, the probe's known answer); and
 `tools/coop/sync_audit.py seat-1.log seat-2.log` pairs the seats' lines by world id and round
 tick and reports, per field, how many pairs agree within tolerance (position 0.5 m, yaw 5°,
 speed 0.5 m/s, flags, model and down exact), the worst gap and where, the divergences still

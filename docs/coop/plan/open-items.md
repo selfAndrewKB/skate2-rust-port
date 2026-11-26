@@ -657,3 +657,15 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     the run note in missions]. What a script could still see of an ambient skater is through
     the AI natives by slot (pins, speech, repositions) if a mission addressed a slot an ambient
     skater holds on one console; none of the crawled missions does.
+
+87. **A mission's asset load ends at each console's own tick** (M23's sync check, its first
+    finding): in the clean tutorial run (`../bench/evidence/probe/2026-11-26-m23-sync-check.md`)
+    both seats executed `m_1a_01_goto_slappys` at round tick 900 and entered `asset_load` at
+    901, then `challenge_running` at 946 on the joiner and 947 on the host: the load's end is the
+    streamer's, each console's own clock. The check of tick 945 differed in activities and vars
+    on both seats and every later check agreed; the inputs, objectives and timers never
+    differed. A mission's start (its timers, its first objectives) can so begin a tick apart,
+    more where a console loads slowly. The original's round loads at `ChallengeLoadState` and
+    meets at a sync point; a campaign mission executed mid-round has no such meeting. Not
+    fixed: what it costs in play, and whether the graph's leaving `asset_load` should wait for
+    every player's load as a note, are open.
