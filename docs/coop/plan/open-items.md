@@ -669,3 +669,17 @@ mission's graph from seat 1's line 43582 and seat 2's 46693).
     meets at a sync point; a campaign mission executed mid-round has no such meeting. Not
     fixed: what it costs in play, and whether the graph's leaving `asset_load` should wait for
     every player's load as a note, are open.
+
+88. **A replay frame number differs between the consoles** (M23's sync check, the regression
+    crawl `2026-11-26-crawl-m23`): the scripts of `m_4b_01_pro_navarrette_1` store
+    `EndFrame` and those of `m_7a_01_demo_dyrdek` `HighlightStart`, frame numbers of the replay
+    recorder, and they differ by about 370 between the seats (4127 and 3755; 2265 and 1894), so
+    the `vars` part differs from tick 3602 and 1739 to the run's end. The port's recorder counts
+    each console's own frames; the original's recorded the simulation's ticks, which its
+    lockstep made every console's. A highlight plays over each console's own recording, so each
+    console's value fits its own recording today, but a script that compares the number with
+    the round's time would decide differently on each console, and a part that differs for
+    good hides any later difference in it. Both missions stop on the bench as before M23
+    (`run_heat`, `run_round`); whether this is why is not known. Open: number the recorder's
+    frames by the round's tick in a campaign, or keep it and take these values out of the hash.
+

@@ -6,9 +6,10 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.20.0-round-pace`**
-(2026-11-17): M22, the campaign round's pace (the original's ±4 % from the round's lead over
-its own skater) and the "Waiting for Skaters" notice; M21 and M20 before it ([versions](plan/versions.md)).
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.21.0-sync-check`**
+(2026-11-26): M23, the campaign round's sync check (each console hashes the scripts' state
+after every round tick and the facts carry it, so a seat's log says where two games parted);
+M22 before it, the round's pace and the "Waiting for Skaters" notice ([versions](plan/versions.md)).
 Earlier (2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
 puppets to the others, the owned skaters' names carrying their owner (protocol 124), each
 console spawning its share of the allowance (open item 53); M11.2, a car's or a pedestrian's
@@ -70,7 +71,7 @@ play decides (New Career in a lobby, 41; a rejoin notice, 44).
 
 ## What's next
 
-Play on the `coop-v0.20.0` lobby build (both machines on it: protocol 126, stream format 7): whether the game feels right at the pace the pair settles on (62 Hz, the original's online pace, about 3 % quick), whether a mission's objectives still react late after a slowdown (they should catch up within a minute), and whether "Waiting for Skaters" shows on one screen while the other stalls and goes when it recovers; and the pedestrians as before.
+Play on the `coop-v0.21.0` build (both machines on it: protocol 127, stream format 7), with `SKATE2_TRACE_COOP=1` so the seat logs carry the sync check: after a session, `tools/coop/sync_check_audit.py` on the two logs says whether the games parted and where (the "sync check: player P differs at tick T in PARTS" lines; open items 87 and 88 are the known ones). And M22's questions still stand: the feel at 62 Hz, objectives catching up after a slowdown, the "Waiting for Skaters" notice.
 The AI day's report says what changed and what it
 measured, its evening section the owned AI:
 [reports/2026-11-11-ai-skaters.md](plan/reports/2026-11-11-ai-skaters.md); the night before it:
