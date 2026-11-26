@@ -129,24 +129,25 @@ impl PedestrianConstruction{
     /// Co-op fork (M21): every behaviour ended and the graph back to its start
     /// (`PedestrianGraph::end_all_and_reset`), after a held update that failed partway.
     pub(crate) fn reset_ai_graph(&mut self,services:&mut impl AiWorldServices)->Result<(),String>{
-        let Some(mut bindings)=self.ai_bindings.take() else {return Ok(());};
-        let mut graph=std::mem::take(&mut self.graph);
-        let mut instances=std::mem::take(&mut self.behaviours);
-        let mut backend=Backend{entity:self,bindings:&mut bindings,services,failure:None,context_instance:None};
-        let result=graph.end_all_and_reset(&mut instances,&mut backend);
-        let failure=backend.failure.take();
-        drop(backend);
-        self.graph=graph;self.behaviours=instances;self.ai_bindings=Some(bindings);
-        result.map_err(|error|failure.unwrap_or_else(||error.to_string()))
+        let Some(bindings)=self.ai_bindings.take() else {return Ok(());};
+        self.with_graph_runner(bindings,services,|graph,instances,backend|graph.end_all_and_reset(instances,backend))
     }
     /// Co-op fork (M16): the graph held at `state`, its owner's (`PedestrianGraph::update_delegate_held`).
     pub(crate) fn update_ai_graph_as(&mut self,dt:f32,services:&mut impl AiWorldServices,state:u16)->Result<bool,String>{
-        let mut bindings=self.ai_bindings.take().ok_or("pedestrian AI graph not loaded")?;
+        let bindings=self.ai_bindings.take().ok_or("pedestrian AI graph not loaded")?;
         let delegate=bindings.delegate;
+        self.with_graph_runner(bindings,services,|graph,instances,backend|graph.update_delegate_held(delegate,dt,instances,backend,state))
+    }
+    /// Co-op fork: `update_ai_graph`'s take-and-restore around one graph call, for the fork's
+    /// own graph runs. The graph and its instances move aside so the backend can borrow the
+    /// entity's other fields; they and the taken `bindings` go back whatever the call returns,
+    /// and a callback's own failure message wins over the graph's error.
+    fn with_graph_runner<S:AiWorldServices,T>(&mut self,mut bindings:PedestrianAiBindings,services:&mut S,
+        run:impl FnOnce(&mut PedestrianGraph,&mut super::PedestrianGraphBehaviours,&mut Backend<'_,S>)->Result<T,Error>)->Result<T,String>{
         let mut graph=std::mem::take(&mut self.graph);
         let mut instances=std::mem::take(&mut self.behaviours);
         let mut backend=Backend{entity:self,bindings:&mut bindings,services,failure:None,context_instance:None};
-        let result=graph.update_delegate_held(delegate,dt,&mut instances,&mut backend,state);
+        let result=run(&mut graph,&mut instances,&mut backend);
         let failure=backend.failure.take();
         drop(backend);
         self.graph=graph;self.behaviours=instances;self.ai_bindings=Some(bindings);
