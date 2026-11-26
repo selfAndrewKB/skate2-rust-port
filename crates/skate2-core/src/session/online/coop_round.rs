@@ -121,6 +121,16 @@ impl CoopRound {
         self.sync_dump_at = None;
     }
 
+    /// Co-op fork (M10): a player's facts at a tick into the round's: its frame, then the frames
+    /// of the AI skaters it owns (which stand there until its next facts), and its notes under
+    /// its player number.
+    pub(super) fn push_facts(&mut self, frames: &mut Vec<MissionFrame>, notes: &mut Vec<(i32, FactsNotes)>, index: usize, frame: MissionFrame, owned: Vec<MissionFrame>, note: FactsNotes) {
+        frames.push(frame);
+        self.standing_owned[index].clone_from(&owned);
+        frames.extend(owned);
+        notes.push((i32::try_from(index).unwrap_or(i32::MAX), note));
+    }
+
     /// Co-op fork (M11): player `player` (index `index`) left at `tick`: the AI skaters it owned
     /// stand at its last frames for the hand-off.
     pub(super) fn ai_owner_left(&mut self, player: i32, tick: u32, index: usize) {
@@ -180,12 +190,13 @@ impl Round {
     /// Co-op fork: the tick's prompts and (M9) outcomes, each player's applied once each in
     /// order, the presser's or decider's own pending ones done with once its own facts carried
     /// them; then (M23) a campaign round compares the tick's round checks.
-    #[expect(clippy::type_complexity, reason = "one tick's prompts and outcomes, by player")]
-    pub(super) fn take_coop_notes(&mut self, notes: &[(i32, FactsNotes)]) -> (Vec<(i32, skate2_net::protocol::Prompt)>, Vec<(i32, skate2_net::protocol::Outcome)>) {
+    /// Returns the notes without their players, for upstream's own reading of them.
+    #[expect(clippy::type_complexity, reason = "one tick's notes, and its prompts and outcomes by player")]
+    pub(super) fn take_coop_notes(&mut self, notes: Vec<(i32, FactsNotes)>) -> (Vec<FactsNotes>, Vec<(i32, skate2_net::protocol::Prompt)>, Vec<(i32, skate2_net::protocol::Outcome)>) {
         // Co-op fork: each player's prompts, applied once each in order; the presser's own
         // pending ones are done with once its own facts carried them.
         let mut prompts = Vec::new();
-        for (player, note) in notes {
+        for (player, note) in &notes {
             let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
             for &prompt in &note.prompts {
                 if prompt.seq > self.coop.prompts_applied[slot] {
@@ -201,7 +212,7 @@ impl Round {
         // Co-op fork (M9): each player's outcomes, applied once each in order, the decider's own
         // pending ones done with once its own facts carried them.
         let mut outcomes = Vec::new();
-        for (player, note) in notes {
+        for (player, note) in &notes {
             let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
             for &outcome in &note.outcomes {
                 if outcome.seq > self.coop.outcomes_applied[slot] {
@@ -215,9 +226,16 @@ impl Round {
             }
         }
         if self.coop.campaign {
-            self.compare_checks(notes);
+            self.compare_checks(&notes);
         }
-        (prompts, outcomes)
+        (notes.into_iter().map(|(_, note)| note).collect(), prompts, outcomes)
+    }
+
+    /// Co-op fork (M10): a player standing at a tick stands with the AI skaters it owns, at their
+    /// last frames.
+    pub(super) fn push_standing(&self, frames: &mut Vec<MissionFrame>, index: usize) {
+        frames.push(self.standing_frame(index));
+        frames.extend(self.coop.standing_owned[index].iter().cloned());
     }
 
     /// Co-op fork (M10): the owned challenge AI skaters' frames for the facts of `tick`: coded at

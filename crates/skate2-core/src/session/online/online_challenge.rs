@@ -736,20 +736,15 @@ impl Round {
                 continue;
             }
             if !self.contributes(index) {
-                frames.push(self.standing_frame(index));
-                frames.extend(self.coop.standing_owned[index].iter().cloned());
+                self.push_standing(&mut frames, index);
                 continue;
             }
             if player == self.local {
                 if let Some(local) = self.local_frames.get(&tick).cloned() {
                     own = Some(local.whole);
-                    frames.push(local.shared);
-                    self.coop.standing_owned[index].clone_from(&local.owned);
-                    frames.extend(local.owned);
-                    notes.push((player, local.notes));
+                    self.coop.push_facts(&mut frames, &mut notes, index, local.shared, local.owned, local.notes);
                 } else if self.local_ready(tick) {
-                    frames.push(self.standing_frame(index));
-                    frames.extend(self.coop.standing_owned[index].iter().cloned());
+                    self.push_standing(&mut frames, index);
                 } else {
                     return None;
                 }
@@ -759,29 +754,22 @@ impl Round {
             let scope = self.scope;
             let facts = self.others.entry(user_id).or_insert_with(|| PlayerFacts::new(scope));
             if let Some(facts) = facts.frames.get(&(stint, tick)) {
-                frames.push(facts.frame.clone());
-                frames.extend(facts.owned.iter().cloned());
-                notes.push((player, facts.notes.clone()));
-                let owned = facts.owned.clone();
-                self.coop.standing_owned[index] = owned;
+                self.coop.push_facts(&mut frames, &mut notes, index, facts.frame.clone(), facts.owned.clone(), facts.notes.clone());
             } else if facts.left {
                 disconnects.push(player);
                 self.coop.ai_owner_left(player, tick, index); // Co-op fork (M11)
             } else if facts.syncing.is_some_and(|(at, from)| at == stint && from <= tick) {
-                frames.push(self.standing_frame(index));
-                frames.extend(self.coop.standing_owned[index].iter().cloned());
+                self.push_standing(&mut frames, index);
             } else if facts.frames.range((stint, tick.saturating_add(1))..=(stint, u32::MAX)).next().is_some() {
                 // A player's facts arrive in order, so a later tick of the run without this one
                 // means the player began the run after it: it stands at this tick.
                 trace(format_args!("player {player} sent no facts for tick {tick} of run {stint}; it stands at it"));
-                frames.push(self.standing_frame(index));
-                frames.extend(self.coop.standing_owned[index].iter().cloned());
+                self.push_standing(&mut frames, index);
             } else {
                 return None;
             }
         }
-        let (prompts, outcomes) = self.take_coop_notes(&notes); // Co-op fork
-        let notes: Vec<FactsNotes> = notes.into_iter().map(|(_, note)| note).collect();
+        let (notes, prompts, outcomes) = self.take_coop_notes(notes); // Co-op fork
         for note in &notes {
             for &(voter, score) in &note.votes {
                 if let Some(frame) = frames.iter_mut().find(|frame| frame.player == i32::from(voter)) {
