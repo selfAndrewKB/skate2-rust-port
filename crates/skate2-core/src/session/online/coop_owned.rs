@@ -13,6 +13,10 @@ pub(super) const fn ends_at(tick: u32, interval: u32) -> bool {
     tick % interval == 0
 }
 
+/// Co-op fork (M10): an owned skater's frame as it goes out: its slot, its recipe, the look to
+/// send first (when that recipe's has not gone for the slot), and the frame.
+pub(super) type OwnedNetFrame = (u8, u64, Option<Vec<u8>>, NetFrame);
+
 /// Co-op fork (M10): the replay frames of the challenge AI skaters this console owns (the
 /// slots after the campaign's `humans` with a challenge controller), each as its own skater's
 /// go out: the header, the pose on a sample tick, the twist ratios, and the actor's audio record
@@ -28,11 +32,11 @@ pub(super) fn owned_ai_net_frames<T, C>(
     vault: &Arc<crate::attribute_runtime::AttributeRuntimeVault>,
     sent: &BTreeMap<u8, u64>,
     challenge: bool,
-) -> Result<Vec<(u8, u64, Option<Vec<u8>>, NetFrame)>, SelectedLiveError> {
+) -> Result<Vec<OwnedNetFrame>, SelectedLiveError> {
     let challenge_slots: Vec<u32> = inner
         .ai_skaters
         .iter()
-        .map(|skater| skater.player_index())
+        .map(crate::selected_session_boot_owner::party_skaters::PartySkater::player_index)
         .filter(|&slot| usize::try_from(slot).is_ok_and(|slot| slot >= humans))
         .filter(|&slot| (inner.ai.as_ref().and_then(|ai| ai.client_type(i32::try_from(slot).unwrap_or(-1))) == Some(crate::ai::actor::AiClientType::Challenge)) == challenge)
         .collect();

@@ -66,7 +66,7 @@ fn diagnostic_completes() -> &'static [(u32, Option<i32>)] {
             spec.split(';')
                 .filter_map(|entry| {
                     let (tick, player) = entry.split_once('@').map_or((entry, None), |(tick, player)| (tick, Some(player)));
-                    Some((tick.trim().parse().ok()?, player.map(|player| player.trim().parse().ok()).flatten()))
+                    Some((tick.trim().parse().ok()?, player.and_then(|player| player.trim().parse().ok())))
                 })
                 .collect()
         })
@@ -210,6 +210,7 @@ fn win_ats_of(spec: &str) -> Vec<WinAt> {
 /// orientation leaf (`cSignPost::Position`) is each console's, not the career's: two seats
 /// that completed the same mission at the same tick differed in its low bits alone (M4,
 /// `2026-11-10-m4d-*.log`), so it stays out of the blob and of the hash.
+#[expect(clippy::cast_possible_truncation, reason = "the blob's lengths are u32s; a leaf's name and tuples are far below 4 GiB")]
 fn progression_blob(leaves: &[Leaf]) -> Vec<u8> {
     let mut out = Vec::new();
     for (name, version, tuples) in leaves.iter().filter(|leaf| leaf.0 != crate::challenge::signpost_progress::POSITION) {
@@ -277,7 +278,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     }
 
     /// M8: the hash of the local file's progression leaves, as the server would compare them.
-    pub(in super::super) fn campaign_blob_hash(&self, leaves: &[(&'static str, u32, Vec<Vec<u8>>)]) -> u64 {
+    pub(in super::super) fn campaign_blob_hash(leaves: &[(&'static str, u32, Vec<Vec<u8>>)]) -> u64 {
         blob_hash(leaves)
     }
 
@@ -299,7 +300,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     pub(in super::super) fn coop_campaign_before_step(&mut self) -> Result<(), SelectedLiveError> {
         let Some(tick) = self.campaign_round_tick() else { return Ok(()) };
         if let Some((yes, delay)) = diagnostic_answer() {
-            let open = self.career.as_ref().is_some_and(|career| career.progression_dialog_open());
+            let open = self.career.as_ref().is_some_and(super::super::career::CareerSession::progression_dialog_open);
             let opened = &mut self.online.coop_dialog_opened;
             match (open, *opened) {
                 (true, None) => {

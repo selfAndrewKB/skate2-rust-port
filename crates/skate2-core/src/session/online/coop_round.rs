@@ -332,8 +332,9 @@ impl OnlinePlayers {
     /// Co-op fork (open item 45): a player past the humans is one of this console's own
     /// challenge AI skaters, whose row the AI manager creates in the profile's back end at the
     /// skater's slot (`AISkaterManager::post`); the row answers for it.
+    #[expect(clippy::cast_sign_loss, reason = "the player type's bits, read as the AI manager's unsigned kind")]
     pub(super) fn ai_row(&self, player: i32) -> Option<i32> {
-        (player >= self.count() && crate::ai::skater_manager::player_type::is_ai(self.settings.player_type(player).cast_unsigned())).then_some(player)
+        (player >= self.count() && crate::ai::skater_manager::player_type::is_ai(self.settings.player_type(player) as u32)).then_some(player)
     }
 
     /// The profile's row a player's settings live in: the local skater's or an AI skater's.
@@ -689,7 +690,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         ai.streamed_challenge_ai = false;
         let spawns = std::mem::take(&mut ai.streamed_spawns);
         let mut taken = Vec::with_capacity(spawns.len());
-        for (slot, command) in spawns {
+        for (_, command) in spawns {
             let crate::ai::skater_manager::AmbientCommand::Spawn { slot, client_type, recipe, mut transform, profile_name } = command else { continue };
             let last = standing.iter().find(|frame| usize::try_from(frame.player) == Ok(slot)).map(|frame| frame.position);
             if let Some(position) = last {

@@ -57,9 +57,9 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Co-op fork (M8): the server asks every member to reload: the career goes behind the fade
     /// and starts again from the server's save (held in `campaign_adopt`), as a game joined
     /// from play does; the round restarts once every member has loaded.
-    pub(super) fn online_campaign_reload(&mut self, session: u32) -> Result<(), SelectedLiveError> {
+    pub(super) fn online_campaign_reload(&mut self, session: u32) {
         if !self.online_campaign() {
-            return Ok(());
+            return;
         }
         crate::coop::trace(format_args!(
             "campaign: the server asks for a reload after round {session}: the career restarts from the server's save ({})",
@@ -70,7 +70,6 @@ impl<T, C> SelectedLiveSession<T, C> {
         ));
         self.online.start = Some(CAMPAIGN_START);
         self.frontend_fade.cover();
-        Ok(())
     }
 
     /// Co-op fork (M8): the connection was lost in a campaign. The career stays up but held

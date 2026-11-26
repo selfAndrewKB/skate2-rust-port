@@ -1019,7 +1019,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
             ServerMessage::GameReset { kind, seed, session, participants, activity } => self.online_game_reset(kind, seed, session, &participants, activity)?,
             ServerMessage::CampaignSave { slot, session, tick, hash, data } => self.online_campaign_save(slot, session, tick, hash, &data), // Co-op fork (M8)
-            ServerMessage::CampaignReload { session } => self.online_campaign_reload(session)?,
+            ServerMessage::CampaignReload { session } => self.online_campaign_reload(session),
             ServerMessage::GameProposal { kind, activity, user_id, timeout } => self.online_proposal(kind, activity, user_id, timeout)?,
             ServerMessage::Vote { user_id, score } => self.online_vote(user_id, score),
             ServerMessage::SyncPoint { round } => self.online_sync_point_released(round)?,

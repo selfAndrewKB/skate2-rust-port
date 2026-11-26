@@ -1011,10 +1011,11 @@ impl PlayersBackEnd for OnlinePlayers {
             None => usize::try_from(player).ok().and_then(|player| self.stance.lock().ok().map(|stance| stance.get(player).copied().unwrap_or(true))).unwrap_or(true),
         }
     }
+    #[expect(clippy::cast_possible_wrap, reason = "the peer's id bits, in the back end's signed field")]
     fn peer_id(&self, player: i32) -> i64 {
         match self.ai_row(player) {
             Some(row) => self.settings.peer_id(row),
-            None => usize::try_from(player).ok().and_then(|player| self.peers.get(player)).map_or(-1, |&peer| peer.cast_signed()),
+            None => usize::try_from(player).ok().and_then(|player| self.peers.get(player)).map_or(-1, |&peer| peer as i64),
         }
     }
     fn set_manuals_are_connectors(&self, player: i32, value: bool) {
