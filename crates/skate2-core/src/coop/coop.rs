@@ -15,6 +15,8 @@ pub mod prompts;
 pub mod round_hash;
 #[path = "rules.rs"]
 pub mod rules;
+#[path = "switches.rs"]
+mod switches;
 #[path = "sync_check.rs"]
 pub mod sync_check;
 #[path = "world_stream.rs"]
@@ -30,12 +32,36 @@ const KEPT_LOGS: usize = 20;
 /// nowhere, still leaves its log; `SKATE2_COOP_LOG=0` keeps them to stderr (the bench, whose seat
 /// logs are stderr already).
 pub fn trace(message: std::fmt::Arguments<'_>) {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    static FILE: std::sync::OnceLock<Option<std::sync::Mutex<std::io::LineWriter<std::fs::File>>>> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var("SKATE2_TRACE_COOP").map_or(true, |value| value.trim() != "0")) {
+    if on() {
+        emit(&format!("coop: {message}"));
+    }
+}
+
+/// A measurement or decision the tools read (M26): one line, `coop-event ` and a JSON object
+/// whose `e` names the kind, beside the trace's prose and switched with it. The tools in
+/// `tools/coop` read these with a JSON parser (`tools/coop/events.py`), never the prose, so
+/// rewording a trace line breaks no tool; a field a tool reads is renamed only with the tool.
+pub fn event(kind: &str, fields: serde_json::Value) {
+    if !on() {
         return;
     }
-    eprintln!("coop: {message}");
+    let mut record = serde_json::Map::new();
+    record.insert("e".to_owned(), serde_json::Value::from(kind));
+    if let serde_json::Value::Object(fields) = fields {
+        record.extend(fields);
+    }
+    emit(&format!("coop-event {}", serde_json::Value::Object(record)));
+}
+
+fn on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("SKATE2_TRACE_COOP").map_or(true, |value| value.trim() != "0"))
+}
+
+/// A line to stderr and to the session's co-op log.
+fn emit(line: &str) {
+    static FILE: std::sync::OnceLock<Option<std::sync::Mutex<std::io::LineWriter<std::fs::File>>>> = std::sync::OnceLock::new();
+    eprintln!("{line}");
     let file = FILE.get_or_init(|| {
         if std::env::var("SKATE2_COOP_LOG").is_ok_and(|value| value.trim() == "0") {
             return None;
@@ -48,7 +74,7 @@ pub fn trace(message: std::fmt::Arguments<'_>) {
     });
     if let Some(mut file) = file.as_ref().and_then(|file| file.lock().ok()) {
         use std::io::Write as _;
-        let _ = writeln!(file, "coop: {message}");
+        let _ = writeln!(file, "{line}");
     }
 }
 
