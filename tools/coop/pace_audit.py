@@ -9,30 +9,26 @@ stays under 45 (`kMaxSyncCommands`). Timer: the "pace at tick" changes, how many
 the first and last. Notice: each "waiting for players" shown and taken down, with its tick and
 the ticks waited.
 """
-import re
 import sys
 
-PRODUCED = re.compile(r"online: produced (\d+), processed (\d+)")
-PACE = re.compile(r"coop: pace at tick (\d+): timer (\d+) -> (\d+) Hz")
-SHOWN = re.compile(r"coop: waiting for players at tick (\d+)")
-DOWN = re.compile(r"coop: waiting for players over at tick (\d+) after (\d+) simulation ticks")
-FAULT = re.compile(r"panicked|controlled .*failed|Tick\(")
+import events
+
 WINDOW = 45
 
 
 def audit(path):
-    leads, changes, notices, faults = [], [], [], 0
-    for line in open(path, errors="replace"):
-        if m := PRODUCED.search(line):
-            leads.append((int(m.group(1)), int(m.group(1)) - int(m.group(2))))
-        elif m := PACE.search(line):
-            changes.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
-        elif m := SHOWN.search(line):
-            notices.append(("shown", int(m.group(1)), None))
-        elif m := DOWN.search(line):
-            notices.append(("down", int(m.group(1)), int(m.group(2))))
-        elif FAULT.search(line):
-            faults += 1
+    leads, changes, notices = [], [], []
+    for record in events.read(path, {"round_lead", "pace", "notice_shown", "notice_down"}):
+        kind = record["e"]
+        if kind == "round_lead":
+            leads.append((record["produced"], record["produced"] - record["processed"]))
+        elif kind == "pace":
+            changes.append((record["tick"], record["from_hz"], record["to_hz"]))
+        elif kind == "notice_shown":
+            notices.append(("shown", record["tick"], None))
+        else:
+            notices.append(("down", record["tick"], record["waited"]))
+    faults = len(events.faults(path))
     print(path)
     if leads:
         settled = next((produced for index, (produced, _) in enumerate(leads)

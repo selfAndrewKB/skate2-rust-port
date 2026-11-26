@@ -10,28 +10,17 @@ skipped. A `census <tick>: <id> plays <names>` line (M20's fix on) gives what it
 given, compared too where both copies have one.
 """
 import collections
-import re
+import events
 import sys
-
-LINE = re.compile(
-    r"census (\d+): ([0-9a-f]{8}) (own|puppet of \d+) e\d+ \S+ \S+ \S+ yaw \S+ v (\S+) .* (up|down) i q(\d+) (\S*)$")
-
-
-PLAYS = re.compile(r"census (\d+): ([0-9a-f]{8}) plays (\S*)$")
 
 
 def read(path):
     rows, plays = {}, {}
-    for line in open(path, errors="replace"):
-        line = line.rstrip()
-        m = LINE.search(line)
-        if m:
-            tick, wid, owner, v, _, queued, intents = m.groups()
-            rows[(int(tick), wid)] = (owner == "own", float(v), int(queued), intents)
-            continue
-        m = PLAYS.search(line)
-        if m:
-            plays[(int(m.group(1)), m.group(2))] = m.group(3)
+    for record in events.read(path, {"census", "plays"}):
+        if record["e"] == "plays":
+            plays[(record["tick"], record["wid"])] = record["intents"]
+        elif record.get("queued") is not None:
+            rows[(record["tick"], record["wid"])] = (record["owner"] is True, record["speed"], record["queued"], record["intents"])
     return rows, plays
 
 

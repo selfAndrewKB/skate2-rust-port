@@ -10,14 +10,8 @@ the puppet given another major intent than its owner. Stuck collisions: each sea
 of census seconds a puppet stayed colliding (flags bit 2), and the owners' knocked-down seconds
 whose puppet was given no collision intent. Pauses: each seat's puppet jerk windows ("puppet jerk at", M19), summed over the run.
 """
-import re
+import events
 import sys
-
-CENSUS = re.compile(
-    r"census (\d+): ([0-9a-f]{8}) (own|puppet of \d+) e\d+ (\S+) (\S+) (\S+) yaw \S+ v (\S+) f(\d+) ")
-JERK = re.compile(r"puppet jerk at \d+: (\d+) ticks, mean \S+ mm, (\d+) past 5 mm")
-PLAYS = re.compile(r"census (\d+): ([0-9a-f]{8}) plays (\S*)$")
-OWN_JERK = re.compile(r"own pedestrians' jerk at \d+: (\d+) ticks, mean \S+ mm, (\d+) past 5 mm")
 
 
 def read(path):
@@ -25,25 +19,18 @@ def read(path):
     jerk = [0, 0]
     own_jerk = [0, 0]
     plays = {}
-    for line in open(path, errors="replace"):
-        m = PLAYS.search(line.rstrip())
-        if m:
-            plays[(int(m.group(1)), m.group(2))] = m.group(3).split("/")[0]
-            continue
-        m = CENSUS.search(line)
-        if m:
-            tick, wid, owner, x, y, z, v, f = m.groups()
-            row = (float(x), float(y), float(z), float(v), int(f))
-            (own if owner == "own" else puppet)[(int(tick), wid)] = row
-            continue
-        # Each window counts the ticks since the last: summed over the run.
-        m = JERK.search(line)
-        if m:
-            jerk = [jerk[0] + int(m.group(1)), jerk[1] + int(m.group(2))]
-            continue
-        m = OWN_JERK.search(line)
-        if m:
-            own_jerk = [own_jerk[0] + int(m.group(1)), own_jerk[1] + int(m.group(2))]
+    for record in events.read(path, {"census", "plays", "puppet_jerk", "own_jerk"}):
+        kind = record["e"]
+        if kind == "plays":
+            plays[(record["tick"], record["wid"])] = record["intents"].split("/")[0]
+        elif kind == "census":
+            row = (record["x"], record["y"], record["z"], record["speed"], record["flags"])
+            (own if record["owner"] is True else puppet)[(record["tick"], record["wid"])] = row
+        elif kind == "puppet_jerk":
+            # Each window counts the ticks since the last: summed over the run.
+            jerk = [jerk[0] + record["ticks"], jerk[1] + record["past5"]]
+        else:
+            own_jerk = [own_jerk[0] + record["ticks"], own_jerk[1] + record["past5"]]
     return own, puppet, jerk, own_jerk, plays
 
 

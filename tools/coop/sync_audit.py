@@ -11,11 +11,10 @@ A census line:
 The inventory (`docs/coop/plan/sync-inventory.md`) says which fields are meant to agree:
 position, yaw, speed, flags, model, down and (since M16) the graph state are streamed or derived;
 the moods are local by design and reported as "not shared" rather than as divergence."""
-import re
+import events
 import sys
 from collections import defaultdict
 
-LINE = re.compile(r'coop: census (\d+): ([0-9a-f]{8}) (own|puppet of \d+) e(\d+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) yaw (-?[\d.]+) v ([\d.]+) f(\d+) m([0-9a-f]+) g(\d+) moods(\d+) (down|up)')
 # M16: the owner's graph state travels and the puppet's graph is held at it, so `graph` is shared
 # (exact); the colliding state is the puppet's own from the owner's flags, a tick or two apart.
 SHARED = {'position': 0.5, 'yaw': 5.0, 'speed': 0.5, 'flags': 0, 'model': 0, 'down': 0, 'graph': 0}
@@ -24,14 +23,12 @@ LOCAL = ['moods']
 
 def read(path):
     out = {}
-    for line in open(path, encoding='utf-8', errors='replace'):
-        m = LINE.search(line)
-        if not m:
-            continue
-        tick, wid, owner, epoch, x, y, z, yaw, speed, flags, model, graph, moods, down = m.groups()
-        out[(int(tick), wid)] = {
-            'owner': owner, 'epoch': int(epoch), 'position': (float(x), float(y), float(z)), 'yaw': float(yaw),
-            'speed': float(speed), 'flags': int(flags), 'model': model, 'graph': int(graph), 'moods': int(moods), 'down': down,
+    for record in events.read(path, {'census'}):
+        out[(record['tick'], record['wid'])] = {
+            'owner': 'own' if record['owner'] is True else f"puppet of {record['owner']}", 'epoch': record['epoch'],
+            'position': (record['x'], record['y'], record['z']), 'yaw': record['yaw'], 'speed': record['speed'],
+            'flags': record['flags'], 'model': record['model'], 'graph': record['graph'], 'moods': record['moods'],
+            'down': 'down' if record['down'] else 'up',
         }
     return out
 

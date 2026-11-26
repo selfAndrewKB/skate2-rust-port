@@ -11,38 +11,32 @@ first differing tick is where the state parted, to the tick, and its parts say w
 field-dump tick both seats printed ("sync dump @T part: line", from `SKATE2_COOP_SYNC_DUMP` or a
 difference) with the lines only one seat has: the fields that differ.
 """
-import re
 import sys
 from collections import defaultdict
 
-STANDING = re.compile(r"coop: sync check with ([0-9a-f]+): (\d+) checks, (\d+) differed, first difference (.+)$")
-DIFFERS = re.compile(r"coop: sync check: player (\d+) differs at tick (\d+) in (\S+) \(([^;]+);")
-UNKNOWN = re.compile(r"coop: sync check of player (\d+) at tick (\d+): no record")
-PARTS = re.compile(r"coop: sync parts @(\d+): \[([0-9a-f, ]+)\]")
-DUMP = re.compile(r"coop: sync dump @(\d+) (\w+): (.*)$")
-PLANTED = re.compile(r"coop: diagnostic: a divergence planted in (.+)'s vars at tick (\d+)")
-FAULT = re.compile(r"panicked|controlled .*failed|Tick\(")
+import events
+
 NAMES = ["inputs", "activities", "objectives", "timers", "vars"]
+KINDS = {"sync_standing", "sync_differs", "sync_unknown", "sync_parts", "sync_dump", "desync_planted"}
 
 
 def read(path):
-    seat = {"standing": {}, "differs": [], "unknown": 0, "parts": {}, "dumps": defaultdict(lambda: defaultdict(set)), "planted": None, "faults": 0}
-    for line in open(path, errors="replace"):
-        line = line.rstrip("\n")
-        if m := STANDING.search(line):
-            seat["standing"][m.group(1)] = (int(m.group(2)), int(m.group(3)), m.group(4))
-        elif m := DIFFERS.search(line):
-            seat["differs"].append((int(m.group(2)), int(m.group(1)), m.group(3), m.group(4)))
-        elif UNKNOWN.search(line):
+    seat = {"standing": {}, "differs": [], "unknown": 0, "parts": {}, "dumps": defaultdict(lambda: defaultdict(set)), "planted": None, "faults": len(events.faults(path))}
+    for record in events.read(path, KINDS):
+        kind = record["e"]
+        if kind == "sync_standing":
+            first = "none" if record["first_tick"] is None else f"tick {record['first_tick']} in {'+'.join(record['first_parts'])}"
+            seat["standing"][record["user"]] = (record["checked"], record["differed"], first)
+        elif kind == "sync_differs":
+            seat["differs"].append((record["tick"], record["player"], "+".join(record["parts"]), "the first difference" if record["first"] else "after agreeing again"))
+        elif kind == "sync_unknown":
             seat["unknown"] += 1
-        elif m := PARTS.search(line):
-            seat["parts"][int(m.group(1))] = [int(part, 16) for part in m.group(2).split(",")]
-        elif m := DUMP.search(line):
-            seat["dumps"][int(m.group(1))][m.group(2)].add(m.group(3))
-        elif m := PLANTED.search(line):
-            seat["planted"] = (m.group(1), int(m.group(2)))
-        elif FAULT.search(line):
-            seat["faults"] += 1
+        elif kind == "sync_parts":
+            seat["parts"][record["tick"]] = record["parts"]
+        elif kind == "sync_dump":
+            seat["dumps"][record["tick"]][record["part"]].add(record["line"])
+        else:
+            seat["planted"] = (record["activity"], record["tick"])
     return seat
 
 
