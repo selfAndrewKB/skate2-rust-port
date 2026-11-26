@@ -231,3 +231,43 @@ def unexpected(log):
     the windows' routine lines), normalized, counted: a finding each."""
     return Counter(normalize(line) for line in log
                    if UNEXPECTED.search(line) and not NOISE.search(line) and SCRIPT_ERROR not in line and 'ScriptError' not in line)
+
+
+def compare(path):
+    """For a log with both: each kind's structured records against what its legacy lines give,
+    in order (M26's proof that an event says what its prose says). Floats compare to the prose's
+    printed precision. Returns {kind: (events, legacy, first mismatch or None)}."""
+    structured = event_kinds(path)
+    out = {}
+    for kind in sorted(structured & set(LEGACY)):
+        from_events = [record for record in read(path, {kind}) if record.get('e') == kind]
+        pattern, fields = _COMPILED[kind]
+        from_prose = []
+        for line in _lines(path, None):
+            if line.find(PREFIX) < 0 and (m := pattern.search(line)):
+                from_prose.append(_convert(kind, m.groups(), fields))
+        mismatch = None
+        for index, (event, prose) in enumerate(zip(from_events, from_prose)):
+            for name, value in prose.items():
+                got = event.get(name)
+                same = abs(got - value) <= 0.051 * max(1.0, abs(value)) if isinstance(value, float) and isinstance(got, (int, float)) else got == value
+                if not same:
+                    mismatch = (index, name, value, got)
+                    break
+            if mismatch:
+                break
+        if mismatch is None and len(from_events) != len(from_prose):
+            mismatch = ('count', len(from_events), len(from_prose))
+        out[kind] = (len(from_events), len(from_prose), mismatch)
+    return out
+
+
+if __name__ == '__main__':
+    import sys
+    if len(sys.argv) != 3 or sys.argv[1] != '--compare':
+        sys.exit('usage: events.py --compare SEAT.log')
+    bad = 0
+    for kind, (n_events, n_prose, mismatch) in compare(sys.argv[2]).items():
+        bad += mismatch is not None
+        print(f'{kind}: {n_events} events, {n_prose} prose lines' + (f', MISMATCH {mismatch}' if mismatch else ', alike'))
+    sys.exit(1 if bad else 0)
