@@ -3,7 +3,7 @@
 //! fork adds to `Round`; the round's and the live session's campaign methods live here, and the
 //! upstream file calls them from marked one-line hooks.
 
-use super::*;
+use super::{Arc, BTreeMap, BTreeSet, EventText, FactsCoder, FactsNotes, FactsScope, MAX_PLAYERS, MissionFrame, Mutex, OnlineChallenge, OnlinePlayers, PlayersBackEnd, Presented, Round, SelectedLiveError, SelectedLiveSession, error, trace};
 
 /// Co-op fork (M11): how long the challenge AI skaters stand at their leaving owner's last
 /// frames before the next owner's facts must carry them (its lead over the lockstep is about
@@ -180,6 +180,7 @@ impl Round {
     /// Co-op fork: the tick's prompts and (M9) outcomes, each player's applied once each in
     /// order, the presser's or decider's own pending ones done with once its own facts carried
     /// them; then (M23) a campaign round compares the tick's round checks.
+    #[expect(clippy::type_complexity, reason = "one tick's prompts and outcomes, by player")]
     pub(super) fn take_coop_notes(&mut self, notes: &[(i32, FactsNotes)]) -> (Vec<(i32, skate2_net::protocol::Prompt)>, Vec<(i32, skate2_net::protocol::Outcome)>) {
         // Co-op fork: each player's prompts, applied once each in order; the presser's own
         // pending ones are done with once its own facts carried them.
@@ -221,6 +222,7 @@ impl Round {
 
     /// Co-op fork (M10): the owned challenge AI skaters' frames for the facts of `tick`: coded at
     /// their slots for the wire, their shared frames for the round, and the coded bytes.
+    #[expect(clippy::type_complexity, reason = "the wire's, the round's and the trace's share of the owned frames")]
     pub(super) fn encode_owned(&mut self, tick: u32, owned_frames: Vec<MissionFrame>) -> (Vec<(u8, Vec<u8>)>, Vec<MissionFrame>, usize) {
         let scope = self.scope;
         let mut owned = Vec::with_capacity(owned_frames.len());

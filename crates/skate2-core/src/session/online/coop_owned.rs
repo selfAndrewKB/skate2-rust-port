@@ -2,7 +2,7 @@
 //! frames as this console sends them, and their puppets' lifecycle where they arrive. Kept
 //! beside upstream's `selected_session_online.rs`, which calls it.
 
-use super::*;
+use super::{Arc, BTreeMap, NetFrame, SelectedLiveError, SelectedLiveSession, error, net_header, owned, remote_skater};
 
 /// Co-op fork (M12): an owned skater's puppet hides after this many local ticks without a
 /// frame (its owner despawned it, or left); the runs come every `INTERVAL` ticks at most.

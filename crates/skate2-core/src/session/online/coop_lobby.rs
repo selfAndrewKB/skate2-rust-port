@@ -2,7 +2,7 @@
 //! attached, entered, reloaded from the server's save (M8), and dropped and rejoined when the
 //! connection is lost. Kept beside upstream's `selected_session_online.rs`, which calls it.
 
-use super::*;
+use super::{ClientMessage, LossReason, MatchRequest, OnlineNotice, PlayNowMode, SelectedLiveError, SelectedLiveSession, challenge, coop_campaign, coop_world, error, trace};
 
 /// Co-op fork (M8): the campaign save the server holds, decoded for the career's load.
 pub(in super::super) struct AdoptedSave {

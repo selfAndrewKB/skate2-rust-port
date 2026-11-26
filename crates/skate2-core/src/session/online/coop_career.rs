@@ -3,7 +3,7 @@
 //! the round's facts, the campaign's teleport fallback, this console's AI skaters' frames, and
 //! the bench's diagnostics.
 
-use super::*;
+use super::{Arc, CareerSession, DialogOwner, Event, MemcardLeaf, MissionFrame, PausingState, PosterAccept, SelectedLiveError, SelectedLiveSession, dynamic_hull, error, hash_value32, signpost_progress, unlockables};
 
 impl CareerSession {
     /// Co-op fork, the ledger's "the one who did it": a prompt answered on this console. In a
