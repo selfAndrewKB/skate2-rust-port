@@ -2,7 +2,7 @@
 //! frames as this console sends them, and their puppets' lifecycle where they arrive. Kept
 //! beside upstream's `selected_session_online.rs`, which calls it.
 
-use super::{Arc, BTreeMap, NetFrame, SelectedLiveError, SelectedLiveSession, error, net_header, owned, remote_skater};
+use super::{Arc, BTreeMap, NetFrame, SelectedLiveError, SelectedLiveSession, audio_lanes, error, net_header, owned, pose_lanes, remote_skater};
 
 /// Co-op fork (M12): an owned skater's puppet hides after this many local ticks without a
 /// frame (its owner despawned it, or left); the runs come every `INTERVAL` ticks at most.
@@ -61,26 +61,13 @@ pub(super) fn owned_ai_net_frames<T, C>(
         };
         let header = net_header(&frame.header);
         let teleport = header[48] & 0x1000 != 0;
-        let pose = (sample || teleport).then(|| {
-            frame
-                .pose
-                .iter()
-                .map(|sqt| {
-                    let mut lanes = [0.0; 12];
-                    lanes[0..4].copy_from_slice(&sqt.scale);
-                    lanes[4..8].copy_from_slice(&sqt.rotation);
-                    lanes[8..12].copy_from_slice(&sqt.translation);
-                    lanes
-                })
-                .collect()
-        });
-        let root = [header[36], header[37], header[38]].map(f32::from_bits);
+        let pose = (sample || teleport).then(|| pose_lanes(&frame.pose));
         let audio = skater
             .actor
             .cached_physical_allocation()
             .ok()
             .and_then(|physical| physical.owner().phys_out().lock().ok().and_then(|output| output.try_audio_phys_out().ok()));
-        let (audio_floats, audio_words) = audio.map(|record| crate::online::audio_record::flatten(&crate::online::audio_record::relative_to_root(record, root))).unwrap_or_default();
+        let (audio_floats, audio_words) = audio.map(|record| audio_lanes(&header, record)).unwrap_or_default();
         frames.push((slot, recipe_id, recipe, NetFrame { tick, header, pose, twist: frame.twist_ratios, camera: Vec::new(), audio_floats, audio_words, hud: Vec::new() }));
     }
     Ok(frames)
