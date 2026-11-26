@@ -11,6 +11,10 @@ mod online_challenge;
 mod coop_campaign;
 #[path = "online/coop_world.rs"]
 mod coop_world;
+#[path = "online/coop_lobby.rs"]
+mod coop_lobby;
+#[path = "online/coop_owned.rs"]
+mod coop_owned;
 #[path = "online/online_dmos.rs"]
 mod online_dmos;
 #[path = "online/lobby_hud.rs"]
@@ -40,6 +44,9 @@ use skate2_net::protocol::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+// Co-op fork: the campaign lobby's and the owned AI skaters' items, in their own files.
+use coop_lobby::{AdoptedSave, CAMPAIGN_START};
+use coop_owned::{OWNED_STALE_TICKS, ends_at, owned_ai_net_frames};
 
 fn error(e: impl std::fmt::Display) -> SelectedLiveError {
     SelectedLiveError::failed(SelectedLiveStage::Visual, format!("online: {e}"))
@@ -251,14 +258,6 @@ impl OnlineGame {
     }
 }
 
-/// Co-op fork (M8): the campaign save the server holds, decoded for the career's load.
-pub(super) struct AdoptedSave {
-    pub(super) session: u32,
-    pub(super) tick: u32,
-    pub(super) hash: u64,
-    pub(super) leaves: Vec<coop_campaign::Leaf>,
-}
-
 /// The session's online state.
 #[derive(Default)]
 pub(super) struct Online {
@@ -432,88 +431,6 @@ impl Online {
 }
 
 const GM_ONLINE_FREE_SKATE: u32 = 4;
-/// Co-op fork: a campaign lobby's "start", which `start_online_campaign` never reads: the career
-/// places its own skater.
-const CAMPAIGN_START: [f32; 16] = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
-
-/// Co-op fork (M12): an owned skater's puppet hides after this many local ticks without a
-/// frame (its owner despawned it, or left); the runs come every `INTERVAL` ticks at most.
-const OWNED_STALE_TICKS: u32 = 180;
-
-/// Whether a run of replay frames ends at `tick` for runs of `interval` ticks.
-const fn ends_at(tick: u32, interval: u32) -> bool {
-    tick % interval == 0
-}
-
-/// Co-op fork (M10): the replay frames of the challenge AI skaters this console owns (the
-/// slots after the campaign's `humans` with a challenge controller), each as its own skater's
-/// go out: the header, the pose on a sample tick, the twist ratios, and the actor's audio record
-/// (its wheels and landings, relative to its root as the player's own travels; M11.1); no
-/// camera and no trick HUD (a puppet has none to show); a teleporting tick is a sample, as the
-/// local skater's is. With each the skater's recipe and, when the look of that recipe has not
-/// gone for the slot yet (`sent`), the look to send first.
-fn owned_ai_net_frames<T, C>(
-    inner: &mut super::SelectedSession<T, C>,
-    humans: usize,
-    tick: u32,
-    sample: bool,
-    vault: &Arc<crate::attribute_runtime::AttributeRuntimeVault>,
-    sent: &BTreeMap<u8, u64>,
-    challenge: bool,
-) -> Result<Vec<(u8, u64, Option<Vec<u8>>, NetFrame)>, SelectedLiveError> {
-    let challenge_slots: Vec<u32> = inner
-        .ai_skaters
-        .iter()
-        .map(|skater| skater.player_index())
-        .filter(|&slot| usize::try_from(slot).is_ok_and(|slot| slot >= humans))
-        .filter(|&slot| (inner.ai.as_ref().and_then(|ai| ai.client_type(i32::try_from(slot).unwrap_or(-1))) == Some(crate::ai::actor::AiClientType::Challenge)) == challenge)
-        .collect();
-    let mut frames = Vec::with_capacity(challenge_slots.len());
-    for skater in inner.ai_skaters.iter_mut().filter(|skater| challenge_slots.contains(&skater.player_index())) {
-        let Ok(slot) = u8::try_from(skater.player_index()) else { continue };
-        if skater.presentation_runtime.borrowed() {
-            continue;
-        }
-        let Some(frame) = skater.presentation_runtime.submitted_frame(&skater.presentation, vault).map_err(error)? else { continue };
-        let recipe_id = skater.recipe_load.asset_id().unwrap_or(0);
-        let recipe = if sent.get(&slot) == Some(&recipe_id) {
-            None
-        } else {
-            match remote_skater::encode_character(&frame) {
-                Ok(data) => Some(data),
-                Err(e) => {
-                    crate::coop::trace(format_args!("owned AI skater at slot {slot}: its look cannot be sent: {e}"));
-                    continue;
-                }
-            }
-        };
-        let header = net_header(&frame.header);
-        let teleport = header[48] & 0x1000 != 0;
-        let pose = (sample || teleport).then(|| {
-            frame
-                .pose
-                .iter()
-                .map(|sqt| {
-                    let mut lanes = [0.0; 12];
-                    lanes[0..4].copy_from_slice(&sqt.scale);
-                    lanes[4..8].copy_from_slice(&sqt.rotation);
-                    lanes[8..12].copy_from_slice(&sqt.translation);
-                    lanes
-                })
-                .collect()
-        });
-        let root = [header[36], header[37], header[38]].map(f32::from_bits);
-        let audio = skater
-            .actor
-            .cached_physical_allocation()
-            .ok()
-            .and_then(|physical| physical.owner().phys_out().lock().ok().and_then(|output| output.try_audio_phys_out().ok()));
-        let (audio_floats, audio_words) = audio.map(|record| crate::online::audio_record::flatten(&crate::online::audio_record::relative_to_root(record, root))).unwrap_or_default();
-        frames.push((slot, recipe_id, recipe, NetFrame { tick, header, pose, twist: frame.twist_ratios, camera: Vec::new(), audio_floats, audio_words, hud: Vec::new() }));
-    }
-    Ok(frames)
-}
-
 /// A presentation frame's header as replay frames carry it, without `peerId` (words 40 and 41):
 /// each console writes the sender's id there on receipt.
 fn net_header(header: &[u8]) -> [u32; HEADER_WORDS] {
@@ -606,16 +523,7 @@ impl<T, C> SelectedLiveSession<T, C> {
 
     /// Everything the client heard since the last frame.
     pub(super) fn update_online(&mut self) -> Result<(), SelectedLiveError> {
-        // Co-op fork (M8): a rejoin whose sign-in failed (the server not back yet) tries again
-        // every three seconds until it is.
-        if self.online.campaign_rejoin
-            && self.online.client.is_none()
-            && self.online.campaign_rejoin_at.is_some_and(|at| self.completed_frames >= at)
-        {
-            self.online.campaign_rejoin_at = None;
-            crate::coop::trace(format_args!("campaign: signing in again to rejoin"));
-            self.online_sign_in();
-        }
+        self.campaign_rejoin_retry(); // Co-op fork (M8)
         let events = self.online.client.as_ref().map(Client::poll).unwrap_or_default();
         for event in events {
             match event {
@@ -624,12 +532,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     self.online.sign_in = SignIn::SignedIn;
                     self.online.user_id = Some(user_id);
                     self.online_send_content()?;
-                    // Co-op fork (M8): back after a lost connection: the campaign lobby again.
-                    if std::mem::take(&mut self.online.campaign_rejoin) {
-                        let key = skate2_net::protocol::campaign::KEY;
-                        crate::coop::trace(format_args!("campaign: signed in again, rejoining the campaign lobby"));
-                        self.online_play_now(MatchRequest { mode: PlayNowMode::Campaign, ranked: false, challenge_type: challenge::CAMPAIGN, challenge_key: None, private: false, create: false, fallback_key: key });
-                    }
+                    self.campaign_rejoin_signed_in(); // Co-op fork (M8)
                 }
                 ClientEvent::Disconnected(reason) => {
                     trace(format_args!("disconnected: {reason:?} (build {})", skate2_net::crypto::Build::current().id()));
@@ -782,12 +685,6 @@ impl<T, C> SelectedLiveSession<T, C> {
         // PC port: or one of the linked Skate 3 data's games of the type.
         Ok(challenges.iter().any(|challenge| challenge.key == attributes.challenge_key)
             || Self::skate3_online_spot(attributes.challenge_key).is_some_and(|spot| spot.net_type == attributes.challenge_type))
-    }
-
-    /// Co-op fork: the online game is a campaign lobby (`docs/coop/design.md`): the career plays
-    /// with the game attached rather than the online free skate.
-    pub(super) fn online_campaign(&self) -> bool {
-        self.online.game.as_ref().is_some_and(|game| game.attributes.challenge_type == challenge::CAMPAIGN)
     }
 
     /// PC port: the online challenges this build has, every type's, sent once signed in so the
@@ -1055,13 +952,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         let mut parts = spec.split(':');
         let create = parts.next() == Some("create");
         let challenge_type = parts.next().and_then(|text| text.parse().ok()).unwrap_or(challenge::SKATE);
-        // Co-op fork: `create:9` or `join:9` is the campaign lobby, at its one key.
-        if challenge_type == challenge::CAMPAIGN {
-            let key = skate2_net::protocol::campaign::KEY;
-            trace(format_args!("diagnostic {} of the campaign lobby", if create { "create" } else { "join" }));
-            self.online.diagnostic_requested = true;
-            self.online_play_now(MatchRequest { mode: PlayNowMode::Campaign, ranked: false, challenge_type, challenge_key: create.then_some(key), private: false, create, fallback_key: key });
-            return Ok(());
+        if self.diagnostic_campaign_lobby(challenge_type, create) {
+            return Ok(()); // Co-op fork: `create:9` or `join:9` is the campaign lobby
         }
         let challenges = self.online_challenge_list_all(challenge_type)?;
         let named = parts.next().map(crate::challenge::keys::hash64);
@@ -1126,17 +1018,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
             }
             ServerMessage::GameReset { kind, seed, session, participants, activity } => self.online_game_reset(kind, seed, session, &participants, activity)?,
-            ServerMessage::CampaignSave { slot, session, tick, hash, data } => match coop_campaign::progression_leaves(&data) {
-                Some(leaves) => {
-                    crate::coop::trace(format_args!(
-                        "campaign: the server's save from slot {slot} at session {session} round tick {tick}: {} B, hash {hash:016x}, {} leaves, held for the career's load",
-                        data.len(),
-                        leaves.len()
-                    ));
-                    self.online.campaign_adopt = Some(AdoptedSave { session, tick, hash, leaves });
-                }
-                None => crate::coop::trace(format_args!("campaign: the server's save from slot {slot} ({} B, hash {hash:016x}) does not decode: ignored, the local file loads", data.len())),
-            },
+            ServerMessage::CampaignSave { slot, session, tick, hash, data } => self.online_campaign_save(slot, session, tick, hash, &data), // Co-op fork (M8)
             ServerMessage::CampaignReload { session } => self.online_campaign_reload(session)?,
             ServerMessage::GameProposal { kind, activity, user_id, timeout } => self.online_proposal(kind, activity, user_id, timeout)?,
             ServerMessage::Vote { user_id, score } => self.online_vote(user_id, score),
@@ -1523,98 +1405,6 @@ impl<T, C> SelectedLiveSession<T, C> {
             self.online_recipe(user_id, data)?;
         }
         Ok(())
-    }
-
-    /// Co-op fork: a campaign lobby entered from the main menu or the single player hub. The
-    /// career starts as New Career or Continue Career would, with the online game attached;
-    /// nothing of the online free skate (its area, its frozen hulls, its hub) applies, the
-    /// career's own stand. `start_career` then enters the game (`online_campaign_entered`).
-    pub(super) fn start_online_campaign(&mut self) -> Result<(), SelectedLiveError> {
-        // A reload (M8) or a rejoin starts over: no round, no shared world, the scripts held.
-        self.end_campaign_ai_streams();
-        if self.online.round.take().is_some()
-            && let Some(input) = self.inner.bound_input.as_ref()
-        {
-            input.try_set_online_pause(false).map_err(error)?;
-        }
-        self.online.coop = coop_world::CoopWorld::default();
-        self.online.campaign_hold = false;
-        self.online.coop_dialog_opened = None;
-        self.online.coop_running_since = None;
-        if let Some(game) = self.online.game.as_mut() {
-            game.entered = false;
-        }
-        let new_career = Self::profile_is_new()?;
-        trace(format_args!("campaign lobby: the career starts as {}", if new_career { "New Career" } else { "Continue Career" }));
-        if new_career {
-            // EnterGame's flow message 28: the intro movies, then Create-a-Skater, then the career.
-            self.begin_new_career_intro();
-        } else {
-            self.enter_single_player()?;
-            self.career_start_pending = true;
-        }
-        Ok(())
-    }
-
-    /// Co-op fork (M8): the server asks every member to reload: the career goes behind the fade
-    /// and starts again from the server's save (held in `campaign_adopt`), as a game joined
-    /// from play does; the round restarts once every member has loaded.
-    fn online_campaign_reload(&mut self, session: u32) -> Result<(), SelectedLiveError> {
-        if !self.online_campaign() {
-            return Ok(());
-        }
-        crate::coop::trace(format_args!(
-            "campaign: the server asks for a reload after round {session}: the career restarts from the server's save ({})",
-            match self.online.campaign_adopt.as_ref() {
-                Some(adopt) => format!("session {} tick {}, hash {:016x}", adopt.session, adopt.tick, adopt.hash),
-                None => "none held: the local file".to_owned(),
-            }
-        ));
-        self.online.start = Some(CAMPAIGN_START);
-        self.frontend_fade.cover();
-        Ok(())
-    }
-
-    /// Co-op fork (M8): the connection was lost in a campaign. The career stays up but held
-    /// (its scripts do not tick without the round), the game's state goes, and the next sign-in
-    /// rejoins the campaign lobby, whose join brings the server's save and a reload for all.
-    fn online_campaign_dropped(&mut self, loss: LossReason) -> Result<(), SelectedLiveError> {
-        crate::coop::trace(format_args!("campaign: the connection was lost; the career waits, signing in again to rejoin"));
-        self.end_campaign_ai_streams();
-        if self.online.round.take().is_some()
-            && let Some(input) = self.inner.bound_input.as_ref()
-        {
-            input.try_set_online_pause(false).map_err(error)?;
-        }
-        self.online.campaign_hold = true;
-        self.online.coop = coop_world::CoopWorld::default();
-        self.online.game = None;
-        self.online.chat = None;
-        self.online.start = None;
-        self.online.event_log.clear();
-        self.online.notices.push(OnlineNotice::Disconnected(loss));
-        self.online.campaign_rejoin = true;
-        self.online.campaign_rejoin_at = Some(self.completed_frames + 60);
-        Ok(())
-    }
-
-    /// Co-op fork: the career is up in a campaign lobby: the game counts as entered (the
-    /// skater's frames flow, the other players' skaters show) and the recipes held meanwhile
-    /// build.
-    pub(super) fn online_campaign_entered(&mut self) -> Result<(), SelectedLiveError> {
-        if !self.online_campaign() {
-            return Ok(());
-        }
-        trace(format_args!("campaign lobby: entered with the career"));
-        if let Some(game) = self.online.game.as_mut() {
-            game.entered = true;
-        }
-        // The career's scripts wait for the server's round start (M2): every console then
-        // runs them from the same tick on the same facts.
-        self.online.campaign_hold = true;
-        self.online.send(ClientMessage::ChallengeLoaded);
-        trace(format_args!("campaign lobby: career loaded, told the server; the scripts wait for the round's start"));
-        self.online_build_held_recipes()
     }
 
     /// `StateOnlineGame::OnMessage(MT_GameChange)` 0x8276b060: the host's change of challenge
@@ -2244,53 +2034,6 @@ impl<T, C> SelectedLiveSession<T, C> {
             !playing || self.online_spot_hidden(user_id) || game.remotes.get(&user_id).is_some_and(RemoteSkater::turn_wait)
         } else {
             playing && !self.options_menu.show_ghost_players()
-        }
-    }
-
-    /// Co-op fork (M10): an owned challenge AI skater's puppet shows no more: its owner
-    /// destroyed the skater (the round's frames stopped naming its slot).
-    pub(super) fn online_hide_owned_puppet(&mut self, owner: u8, slot: i32) {
-        if let Some(remote) = u8::try_from(slot).ok().and_then(|slot| self.online.game.as_mut()?.remotes.get_mut(&owned::skater_id(owner, slot))) {
-            crate::coop::trace(format_args!("owned AI skater at slot {slot} of player {owner}: its puppet hides"));
-            remote.hide();
-        }
-    }
-
-    /// Co-op fork (M11): this console takes an owned AI skater over: its puppet goes, its actor
-    /// comes (the hand-off, open item 65).
-    pub(super) fn online_drop_owned_puppet(&mut self, slot: i32) {
-        let Ok(slot) = u8::try_from(slot) else { return };
-        self.online.owned_runs.remove(&slot);
-        self.online.owned_teleported.remove(&slot);
-        if let Some(game) = self.online.game.as_mut() {
-            // The old owner's puppet of the slot, whoever it was.
-            game.remotes.retain(|&id, _| owned::slot_of_id(id).is_none_or(|(_, owned)| owned != slot));
-            game.owned_sent.remove(&slot);
-        }
-    }
-
-    /// Co-op fork (M10): an owned skater's slot was destroyed, the round's frames say: its
-    /// unsent frames go (a destroyed skater's run never completes), and the look of the next
-    /// skater at the slot goes at its first frame, whatever its recipe (M11.1: on the
-    /// destruction alone; the creation's clearing sent every look twice).
-    pub(super) fn online_owned_slot_changed(&mut self, slot: i32) {
-        let Ok(slot) = u8::try_from(slot) else { return };
-        self.online.owned_runs.remove(&slot);
-        self.online.owned_teleported.remove(&slot);
-        if let Some(game) = self.online.game.as_mut() {
-            game.owned_sent.remove(&slot);
-        }
-    }
-
-    /// Co-op fork (M10): the owned skaters' puppets and the record of the looks sent go with
-    /// the campaign's round.
-    pub(super) fn online_drop_owned_puppets(&mut self) {
-        self.online.owned_runs.clear();
-        self.online.owned_teleported.clear();
-        self.online.owned_sound.clear();
-        if let Some(game) = self.online.game.as_mut() {
-            game.remotes.retain(|&user_id, _| owned::slot_of_id(user_id).is_none());
-            game.owned_sent.clear();
         }
     }
 
