@@ -36,10 +36,15 @@ type R = LuaResult<Vec<Value>>;
 /// The `SKATE2_TRACE_AI` line of the manager's decisions: the characters a challenge picks,
 /// the draw behind a random pick, the recipes it asks for.
 pub(crate) fn trace(message: std::fmt::Arguments<'_>) {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *ON.get_or_init(|| std::env::var_os("SKATE2_TRACE_AI").is_some()) {
+    if trace_on() {
         eprintln!("ai: {message}");
     }
+}
+
+/// Whether `SKATE2_TRACE_AI` is set: the trace's switch, which its events (`coop::event`) share.
+fn trace_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SKATE2_TRACE_AI").is_some())
 }
 
 /// `ai_characters`.
@@ -500,6 +505,12 @@ pub(crate) fn select_characters(world: &mut World, activity: usize, no_asset_loa
         num_competitors(world, activity),
         if no_asset_load { ", no asset load" } else { "" }
     ));
+    if trace_on() {
+        crate::coop::event(
+            "select_characters",
+            serde_json::json!({"activity": format!("{:#018x}", world.activities.activities[activity].key), "competitors": num_competitors(world, activity), "characters": picks}),
+        );
+    }
     let party = party_play(world);
     let mut manager = link.manager();
     let commands = manager.enter_ai_based_challenge(party);
@@ -534,6 +545,9 @@ pub(crate) fn select_demo_characters(world: &mut World, no_asset_load: bool) -> 
     }
     let recipes = challenge_recipe_vector(world);
     trace(format_args!("SelectDemoCharacters: {count} competitors, characters {picks:x?} as players 1 on, recipes {recipes:x?}"));
+    if trace_on() {
+        crate::coop::event("demo_characters", serde_json::json!({"competitors": count}));
+    }
     let party = party_play(world);
     let mut manager = link.manager();
     let commands = manager.enter_ai_based_challenge(party);

@@ -638,6 +638,10 @@ pub fn set_status(world: &mut World, group: u32, index: usize, state: Status) {
     if o.state != state {
         if campaign {
             crate::coop::trace(format_args!("objective {:016x} of player {player}: {:?} -> {state:?}", o.key, o.state));
+            crate::coop::event(
+                "objective",
+                serde_json::json!({"objective": format!("{:016x}", o.key), "player": player, "before": format!("{:?}", o.state), "after": format!("{state:?}")}),
+            );
         }
         if state == Status::Active {
             o.failed_sent = false;
@@ -733,12 +737,11 @@ fn presentation_plays(world: &World, group: u32, index: usize, status: Status) -
         Status::Complete => count == rule.threshold(siblings.len()),
         _ => count == 1,
     };
-    crate::coop::trace(format_args!(
-        "{name}: the {status:?} presentation of objective {index} from player {}: {count} of {} copies: {}",
-        g.player,
-        siblings.len(),
-        if plays { "plays" } else { "withheld" }
-    ));
+    let what = format!("{name}: the {status:?} presentation of objective {index} from player {}: {count} of {} copies", g.player, siblings.len());
+    crate::coop::trace(format_args!("{what}: {}", if plays { "plays" } else { "withheld" }));
+    if !plays {
+        crate::coop::event("withheld", serde_json::json!({"what": what}));
+    }
     plays
 }
 
@@ -782,12 +785,11 @@ fn script_hears(world: &World, class_name: &str, handle: usize, index: usize) ->
     // The activations and failures come every tick from a script that resets its objectives
     // each tick (the go-to missions'); only the completions are worth a line.
     if class_name == "cMsgObjectiveComplete" {
-        crate::coop::trace(format_args!(
-            "{name}: {class_name} of objective {index} from player {}: {count} of {} copies under {rule:?}: {}",
-            g.player,
-            siblings.len(),
-            if send { "the script hears it" } else { "withheld" }
-        ));
+        let what = format!("{name}: {class_name} of objective {index} from player {}: {count} of {} copies under {rule:?}", g.player, siblings.len());
+        crate::coop::trace(format_args!("{what}: {}", if send { "the script hears it" } else { "withheld" }));
+        if !send {
+            crate::coop::event("withheld", serde_json::json!({"what": what}));
+        }
     }
     send.then_some(first)
 }
@@ -1621,6 +1623,7 @@ pub fn receive(lua: &mut Lua<World>, world: &mut World, event: &Event) {
         let ids: Vec<u32> = world.objectives.groups.iter().filter(|g| g.evaluate && g.player == player).map(|g| g.id).collect();
         if world.coop.is_some() && enter {
             crate::coop::trace(format_args!("trigger {volume:x} entered by player {player}: groups {ids:?}"));
+            crate::coop::event("trigger", serde_json::json!({"trigger": format!("{volume:x}"), "player": player}));
         }
         for group in ids {
             if enter {

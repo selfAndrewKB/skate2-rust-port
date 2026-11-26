@@ -149,8 +149,13 @@ pub enum Compared {
 /// The names of the parts in `mask`.
 #[must_use]
 pub fn part_names(mask: u8) -> String {
-    let names: Vec<&str> = Part::ALL.iter().enumerate().filter(|(index, _)| mask & (1 << index) != 0).map(|(_, part)| part.name()).collect();
-    names.join("+")
+    part_list(mask).join("+")
+}
+
+/// The parts a mask names, in their order.
+#[must_use]
+pub fn part_list(mask: u8) -> Vec<&'static str> {
+    Part::ALL.iter().enumerate().filter(|(index, _)| mask & (1 << index) != 0).map(|(_, part)| part.name()).collect()
 }
 
 /// One player's standing with this console.

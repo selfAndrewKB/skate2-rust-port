@@ -665,6 +665,13 @@ fn make_objectives_helper(world: &mut World, call: &NativeCall, name: &str) -> R
     let players: Vec<i32> = match super::coop_rule(world, activity) {
         Some((rule, players, name)) => {
             crate::coop::trace(format_args!("rule: {name} ({key:016x}) is {rule:?}: objectives for players {players:?}"));
+            crate::coop::event(
+                "rule",
+                serde_json::json!({
+                    "activity": name, "key": format!("{key:016x}"), "rule": format!("{rule:?}"),
+                    "players": players.iter().map(i32::to_string).collect::<Vec<_>>().join(", "),
+                }),
+            );
             players
         }
         None => vec![player],

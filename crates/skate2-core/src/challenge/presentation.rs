@@ -312,6 +312,7 @@ pub fn play_next(world: &mut World, group: u32) {
             let handle = g.handle;
             if world.coop.is_some() {
                 crate::coop::trace(format_args!("presentation group {group} finished: the script hears it"));
+                crate::coop::event("presentation_finished", serde_json::json!({"group": group}));
             }
             world.send(Event::Challenge(Message::new(
                 "cMsgPresentationEventGroupFinished",
@@ -337,6 +338,7 @@ pub fn play_next(world: &mut World, group: u32) {
                 event.arg2,
                 if continues { "played on" } else { "waiting for its end" }
             ));
+            crate::coop::event("presentation", serde_json::json!({"group": group, "event": counter, "events": total, "event_kind": event.kind}));
         }
         if !continues {
             return;

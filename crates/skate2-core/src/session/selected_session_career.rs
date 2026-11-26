@@ -3380,6 +3380,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 Output::PlayNis { scene, transition, .. } => {
                     if let Some(online) = career.system.world().online.as_ref().filter(|_| career.system.world().coop.is_some()) {
                         crate::coop::trace(format_args!("scene {scene} starts at tick {}", online.tick));
+                        crate::coop::event("scene_start", serde_json::json!({"scene": &scene, "tick": online.tick}));
                     }
                     career.nis.run_basic_nis(&scene, transition, false, true);
                 }

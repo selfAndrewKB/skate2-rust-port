@@ -22,7 +22,7 @@
 
 use super::{SelectedLiveError, SelectedLiveSession, error};
 use crate::coop::ownership::{self, Kind, Owner};
-use crate::coop::trace;
+use crate::coop::{event, trace};
 use crate::coop::world_stream::{self as stream, Contact, Descriptor, EntityState, PropState, WorldRun, flags};
 use crate::living_world_grind_services::dmo_models::NULL_ASSET_ID;
 use crate::pedestrian_graph::colliding::{CollisionDirection, CollisionForce};
@@ -30,6 +30,7 @@ use crate::pedestrian_puppet::PuppetDrive;
 use skate2_net::frames::INTERVAL;
 use skate2_net::protocol::MAX_WORLD;
 use std::collections::{BTreeMap, BTreeSet};
+use serde_json::json;
 use std::sync::Arc;
 
 /// How far from the local skater an owned pedestrian is streamed (metres).
@@ -748,6 +749,7 @@ fn follow_owner_knockdown(stats: &mut Stats, puppet: &mut Tracked, pedestrian: &
                 trace(format_args!("puppet {:08x}: its owner is up, the reported knockdown unconfirmed for {CONFIRM_GRACE_TICKS} ticks: standing up at {tick}", sample.id));
             } else {
                 trace(format_args!("puppet {:08x}: its owner is up while this copy lies knocked down: standing up at {tick}", sample.id));
+                event("knocked_down", json!({}));
             }
         }
     }
@@ -771,6 +773,7 @@ fn trace_puppet_jerk(living_owner: &LivingWorld, tick: u32) -> Result<(), String
         }
         if ticks > 0 {
             trace(format_args!("puppet jerk at {tick}: {ticks} ticks, mean {:.2} mm, {over} past 5 mm ({:.2} %), {over_flat} along the ground (M19)", 1000. * stray / ticks as f64, 100. * over as f64 / ticks as f64));
+            event("puppet_jerk", json!({"tick": tick, "ticks": ticks, "past5": over}));
         }
     }
     Ok(())
@@ -1060,6 +1063,7 @@ impl CoopWorld {
                 drive.was_colliding = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) || PuppetDrive::colliding(pedestrian.collision.as_ref());
                 pedestrian.puppet = Some(drive);
                 trace(format_args!("own pedestrian {id:08x} demoted: another console claimed it at {tick}"));
+                event("demoted", json!({}));
             }
         }
     }
@@ -1139,6 +1143,7 @@ impl CoopWorld {
             pedestrian.record_accepted_full_collision(CollisionForce::Knockdown, direction, cvars)?;
             puppet.knockdown_due = None;
             trace(format_args!("puppet {id:08x}: knocked down by its owner ({direction:?}) at {tick}"));
+            event("knocked_down", json!({}));
         }
         Ok(())
     }
@@ -1372,10 +1377,14 @@ impl CoopWorld {
             known.knockdown_due = None;
             let old = known.owner;
             known.owner = ownership::decide(known.kind, id, Some(old), Owner::Local, &format!("handed to this console: its player is nearer (epoch {})", known.epoch));
+            if old != Owner::Local {
+                event("handed_over", json!({}));
+            }
             known.runs = 0;
             known.nearer = (0, 0);
             self.locals.insert(known.entity, id);
             trace(format_args!("puppet {id:08x} promoted: entity {:#x} runs its own graph from {tick}", known.entity));
+            event("promoted", json!({}));
         }
         Ok(())
     }
@@ -1465,12 +1474,13 @@ impl CoopWorld {
                 let speed = (core.velocity[0].powi(2) + core.velocity[1].powi(2) + core.velocity[2].powi(2)).sqrt();
                 let down = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
                 // M20: the intents its motion graph is given, and how many packets wait.
-                let intents = pedestrian.intent_queue.as_ref().map_or_else(|| "none".to_owned(), |queue| {
+                let queue = pedestrian.intent_queue.as_ref().map(|queue| {
                     let names = queue.active_stage().map_or_else(|_| "absent".to_owned(), |stage| {
                         stage.intents().iter().map(|name| name.decode().unwrap_or_else(|_| "?".to_owned())).collect::<Vec<_>>().join("/")
                     });
-                    format!("q{} {names}", queue.queued())
+                    (queue.queued(), names)
                 });
+                let intents = queue.as_ref().map_or_else(|| "none".to_owned(), |(queued, names)| format!("q{queued} {names}"));
                 let played = pedestrian.animation.as_ref().map_or_else(|| "none".to_owned(), |animation| {
                     animation.motion_intents.names().iter().map(|name| name.decode().unwrap_or_else(|_| "?".to_owned())).collect::<Vec<_>>().join("/")
                 });
@@ -1481,7 +1491,17 @@ impl CoopWorld {
                     pedestrian.graph.current, pedestrian.state.as_ref().map_or(0, |state| state.moods.len()),
                     if down { "down" } else { "up" }
                 ));
+                event("census", json!({
+                    "tick": round_tick, "wid": format!("{wid:08x}"),
+                    "owner": match tracked.owner { Owner::Local => json!(true), Owner::Remote(slot) => json!(slot) },
+                    "epoch": tracked.epoch, "x": core.transform[3][0], "y": core.transform[3][1], "z": core.transform[3][2],
+                    "yaw": stream::yaw_of(&core.transform).to_degrees(), "speed": speed, "flags": entity_flags(pedestrian),
+                    "model": format!("{:016x}", core.model_key), "graph": pedestrian.graph.current,
+                    "moods": pedestrian.state.as_ref().map_or(0, |state| state.moods.len()), "down": down,
+                    "queued": queue.as_ref().map(|(queued, _)| queued), "intents": queue.as_ref().map(|(_, names)| names),
+                }));
                 trace(format_args!("census {round_tick}: {wid:08x} plays {played}"));
+                event("plays", json!({"tick": round_tick, "wid": format!("{wid:08x}"), "intents": played}));
             }
         }
         Ok(())
@@ -1736,6 +1756,14 @@ impl CoopWorld {
                 self.props.values().filter(|prop| prop.owner == Owner::Local).count(), self.props.len(),
                 stats.contacts_sent, stats.contacts_applied, stats.confirmed, stats.refused, stats.stale
             ));
+            event("world_stream", json!({
+                "tick": tick, "runs": stats.runs, "entity_samples": stats.entities, "prop_samples": stats.props, "bytes": stats.bytes,
+                "bps": crate::coop::whole(stats.bytes as f64 / seconds), "bps_per_pedestrian": crate::coop::whole(per_entity),
+                "owned": run.entities.len(), "pedestrians": roster_size, "puppets": self.entities.values().filter(|known| known.owner != Owner::Local).count(),
+                "props_owned": self.props.values().filter(|prop| prop.owner == Owner::Local).count(), "props_known": self.props.len(),
+                "contacts_sent": stats.contacts_sent, "contacts_applied": stats.contacts_applied, "contacts_confirmed": stats.confirmed,
+                "contacts_refused": stats.refused, "ignored": stats.stale,
+            }));
             trace(format_args!("world stream at {tick}: {} samples withheld by the send-on-error rule (M17)", stats.withheld));
             trace(format_args!("world stream at {tick}: intents named in {} samples sent; puppet samples with their owner's intents {}, with intents not yet named {}; {} intent lists heard (M20)",
                 stats.intents_named, stats.intents_known, stats.intents_unknown, self.intent_names.len()));
@@ -1748,6 +1776,7 @@ impl CoopWorld {
             if own.own_ticks > 0 {
                 trace(format_args!("own pedestrians' jerk at {tick}: {} ticks, mean {:.2} mm, {} past 5 mm ({:.2} %), {} along the ground (M19's baseline)",
                     own.own_ticks, 1000. * own.own_jerk / own.own_ticks as f64, own.own_over, 100. * own.own_over as f64 / own.own_ticks as f64, own.own_over_flat));
+                event("own_jerk", json!({"tick": tick, "ticks": own.own_ticks, "past5": own.own_over}));
             }
             let audit = &stats.audit;
             if audit.samples > 0 {
@@ -1755,6 +1784,11 @@ impl CoopWorld {
                     "live audit at {tick}: {} samples; position within {AUDIT_POSITION} m {} (worst {:.2} m, {:08x}), yaw within {AUDIT_YAW_DEGREES}° {} (worst {:.0}°, {:08x}), speed within {AUDIT_SPEED} m/s {}, flags equal {}",
                     audit.samples, audit.position_ok, audit.worst_position.0, audit.worst_position.1, audit.yaw_ok, audit.worst_yaw.0, audit.worst_yaw.1, audit.speed_ok, audit.flags_ok
                 ));
+                event("live_audit", json!({
+                    "tick": tick, "samples": audit.samples, "pos_ok": audit.position_ok, "worst_pos_m": audit.worst_position.0,
+                    "yaw_ok": audit.yaw_ok, "worst_yaw_deg": crate::coop::whole(f64::from(audit.worst_yaw.0)),
+                    "speed_ok": audit.speed_ok, "flags_ok": audit.flags_ok,
+                }));
             }
             *stats = Stats { since: tick, ..Default::default() };
         }

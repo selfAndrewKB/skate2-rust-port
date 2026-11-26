@@ -2364,6 +2364,7 @@ impl NisSystem {
                     scene.characters.len(),
                     source.local_index()
                 ));
+                crate::coop::event("scene_characters", serde_json::json!({"scene": format!("{hash:08x}"), "characters": scene.characters.len()}));
             }
             let m = compute_transform(scene.frame.location, scene.frame.orientation, scene.frame.normal);
             let transform = std::array::from_fn(|i| m[i / 4][i % 4]);

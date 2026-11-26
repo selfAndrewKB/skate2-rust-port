@@ -4,7 +4,8 @@
 //! the progression save sent to the server, and the bench's deterministic inputs at a round tick.
 
 use super::{SelectedLiveError, SelectedLiveSession};
-use crate::coop::trace;
+use crate::coop::{event, trace};
+use serde_json::json;
 use skate2_net::protocol::ClientMessage;
 
 pub(super) type Leaf = (&'static str, u32, Vec<Vec<u8>>);
@@ -293,6 +294,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         let data = progression_blob(&all);
         let hash = fnv1a(&data);
         trace(format_args!("campaign save at session {session} round tick {tick}: {} B, hash {hash:016x}, to the server", data.len()));
+        event("campaign_save", json!({"session": session, "tick": tick, "bytes": data.len(), "hash": format!("{hash:016x}")}));
         self.online.send(ClientMessage::CampaignSave { session, tick, hash, data });
     }
 
@@ -348,6 +350,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             {
                 let executed = career.system.diagnostic_execute_challenge(name);
                 trace(format_args!("diagnostic: execute {name} at round tick {tick}: {executed}"));
+                event("execute", json!({"activity": name, "tick": tick, "result": executed}));
             }
         }
         for (at, name) in diagnostic_complete_challenges() {
@@ -356,6 +359,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             {
                 let completed = career.system.diagnostic_complete_challenge(name);
                 trace(format_args!("diagnostic: complete challenge {name} at round tick {tick}: {completed}"));
+                event("complete_challenge", json!({"activity": name, "tick": tick, "result": completed}));
             }
         }
     }
@@ -382,6 +386,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         if win_now && let Some(career) = self.career.as_mut() {
             let won = career.system.diagnostic_win_main_challenge();
             trace(format_args!("diagnostic: won the main challenge at round tick {tick}: {won} objectives completed"));
+            event("won", json!({"tick": tick, "objectives": won}));
         }
     }
 

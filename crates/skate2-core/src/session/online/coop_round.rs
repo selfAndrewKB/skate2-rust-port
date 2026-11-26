@@ -4,6 +4,7 @@
 //! upstream file calls them from marked one-line hooks.
 
 use super::{Arc, BTreeMap, BTreeSet, EventText, FactsCoder, FactsNotes, FactsScope, MAX_PLAYERS, MissionFrame, Mutex, OnlineChallenge, OnlinePlayers, PlayersBackEnd, Presented, Round, SelectedLiveError, SelectedLiveSession, error, trace};
+use serde_json::json;
 
 /// Co-op fork (M11): how long the challenge AI skaters stand at their leaving owner's last
 /// frames before the next owner's facts must carry them (its lead over the lockstep is about
@@ -305,13 +306,16 @@ impl Round {
     /// player prints this console's whole parts of the ticks around it and asks for the parts'
     /// field dump at a tick every console reaches alike ([`sync_dump_tick`]).
     pub(super) fn compare_checks(&mut self, notes: &[(i32, FactsNotes)]) {
-        use crate::coop::sync_check::{Compared, part_names};
+        use crate::coop::sync_check::{Compared, part_list, part_names};
         for (player, note) in notes {
             let Some(check) = note.check.filter(|_| *player != self.local) else { continue };
             let Some(&user_id) = usize::try_from(*player).ok().and_then(|index| self.players.get(index)) else { continue };
             match self.coop.sync_check.compare(user_id, check.tick, check.parts) {
                 Compared::Agrees | Compared::StillDiffers { .. } => {}
-                Compared::Unknown => crate::coop::trace(format_args!("sync check of player {player} at tick {}: no record of the tick here", check.tick)),
+                Compared::Unknown => {
+                    crate::coop::trace(format_args!("sync check of player {player} at tick {}: no record of the tick here", check.tick));
+                    crate::coop::event("sync_unknown", json!({"player": player, "tick": check.tick}));
+                }
                 Compared::Differs { mask, first } => {
                     let ours = self.coop.sync_check.parts_at(check.tick).unwrap_or_default();
                     crate::coop::trace(format_args!(
@@ -322,8 +326,10 @@ impl Round {
                         ours,
                         check.parts
                     ));
+                    crate::coop::event("sync_differs", json!({"player": player, "tick": check.tick, "parts": part_list(mask), "first": first}));
                     for (tick, parts) in self.coop.sync_check.window(check.tick) {
                         crate::coop::trace(format_args!("sync parts @{tick}: {parts:08x?}"));
+                        crate::coop::event("sync_parts", json!({"tick": tick, "parts": parts}));
                     }
                     if self.coop.sync_dump_at.is_none() {
                         let at = sync_dump_tick(check.tick);
@@ -339,9 +345,13 @@ impl Round {
         if !self.coop.campaign {
             return;
         }
-        for (user_id, checked, differed, first) in self.coop.sync_check.standings() {
-            let first = first.map_or_else(|| "none".to_owned(), |(tick, mask)| format!("tick {tick} in {}", crate::coop::sync_check::part_names(mask)));
+        for (user_id, checked, differed, first_at) in self.coop.sync_check.standings() {
+            let first = first_at.map_or_else(|| "none".to_owned(), |(tick, mask)| format!("tick {tick} in {}", crate::coop::sync_check::part_names(mask)));
             crate::coop::trace(format_args!("sync check with {user_id:016x}: {checked} checks, {differed} differed, first difference {first}"));
+            crate::coop::event("sync_standing", json!({
+                "user": format!("{user_id:016x}"), "checked": checked, "differed": differed,
+                "first_tick": first_at.map(|(tick, _)| tick), "first_parts": first_at.map(|(_, mask)| crate::coop::sync_check::part_list(mask)),
+            }));
         }
     }
 }
@@ -407,6 +417,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 match crate::coop::prompts::PromptAnswer::from_wire(prompt.kind, prompt.value) {
                     Some(answer) => {
                         crate::coop::trace(format_args!("prompt {answer:?} from player {player} applied at tick {tick}"));
+                        crate::coop::event("prompt_applied", json!({}));
                         career.apply_prompt(answer);
                     }
                     None => crate::coop::trace(format_args!("prompt kind {} from player {player} unknown at tick {tick}", prompt.kind)),
@@ -544,7 +555,10 @@ impl<T, C> SelectedLiveSession<T, C> {
         let tick = round.processed.saturating_sub(1);
         if PLANT_AT.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_DESYNC").ok().and_then(|value| value.trim().parse().ok())).is_some_and(|at| at == tick) {
             match crate::coop::round_hash::plant_divergence(&mut career.system) {
-                Some(name) => crate::coop::trace(format_args!("diagnostic: a divergence planted in {name}'s vars at tick {tick}")),
+                Some(name) => {
+                    crate::coop::trace(format_args!("diagnostic: a divergence planted in {name}'s vars at tick {tick}"));
+                    crate::coop::event("desync_planted", json!({"activity": name, "tick": tick}));
+                }
                 None => crate::coop::trace(format_args!("diagnostic: no activity's vars to plant a divergence in at tick {tick}")),
             }
         }
@@ -570,6 +584,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
             for line in crate::coop::round_hash::dump(&career.system, part) {
                 crate::coop::trace(format_args!("sync dump @{tick} {}: {line}", part.name()));
+                crate::coop::event("sync_dump", json!({"tick": tick, "part": part.name(), "line": line}));
             }
         }
     }
@@ -583,6 +598,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         round.coop.paced_frame = Some(frame);
         let (tick, before, paced_before) = (round.processed, round.coop.pace.hz(), round.coop.pace.paced());
         if let Some(paced) = round.coop.pace.update(lead, rtt) {
+            crate::coop::event("pace", json!({"tick": tick, "from_hz": before, "to_hz": paced.hz}));
             match paced.lead {
                 Some(lead) => crate::coop::trace(format_args!(
                     "pace at tick {tick}: timer {before} -> {} Hz, {lead} local facts not yet run (free/target {:.2}, target {:.1}, ping {:.0} ms)",
@@ -598,13 +614,17 @@ impl<T, C> SelectedLiveSession<T, C> {
         let shown = round.coop.stall.shown();
         let text = EventText::plain(WAITING_FOR_SKATERS);
         match notice {
-            Some(crate::coop::pace::Notice::Open) => crate::coop::trace(format_args!(
-                "waiting for players at tick {tick}: no round tick for {} simulation ticks, awaiting {}, notice shown",
-                crate::coop::pace::STALL_TICKS,
-                awaited.map_or_else(|| "no other player's facts".to_owned(), |user_id| format!("user {user_id}'s facts"))
-            )),
+            Some(crate::coop::pace::Notice::Open) => {
+                crate::coop::trace(format_args!(
+                    "waiting for players at tick {tick}: no round tick for {} simulation ticks, awaiting {}, notice shown",
+                    crate::coop::pace::STALL_TICKS,
+                    awaited.map_or_else(|| "no other player's facts".to_owned(), |user_id| format!("user {user_id}'s facts"))
+                ));
+                crate::coop::event("notice_shown", json!({"tick": tick}));
+            }
             Some(crate::coop::pace::Notice::Close(waited)) => {
                 crate::coop::trace(format_args!("waiting for players over at tick {tick} after {waited} simulation ticks{}, notice taken down", if resumed { " (this console's own pause in the round's updates)" } else { "" }));
+                crate::coop::event("notice_down", json!({"tick": tick, "waited": waited}));
                 self.online.event_log.retire(&text);
             }
             None => {}
