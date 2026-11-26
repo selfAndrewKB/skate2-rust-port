@@ -29,13 +29,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// career's own stand. `start_career` then enters the game (`online_campaign_entered`).
     pub(in super::super) fn start_online_campaign(&mut self) -> Result<(), SelectedLiveError> {
         // A reload (M8) or a rejoin starts over: no round, no shared world, the scripts held.
-        self.end_campaign_ai_streams();
-        if self.online.round.take().is_some()
-            && let Some(input) = self.inner.bound_input.as_ref()
-        {
-            input.try_set_online_pause(false).map_err(error)?;
-        }
-        self.online.coop = coop_world::CoopWorld::default();
+        self.end_campaign_round()?;
         self.online.campaign_hold = false;
         self.online.coop_dialog_opened = None;
         self.online.coop_running_since = None;
@@ -51,6 +45,20 @@ impl<T, C> SelectedLiveSession<T, C> {
             self.enter_single_player()?;
             self.career_start_pending = true;
         }
+        Ok(())
+    }
+
+    /// Co-op fork (M8): the campaign round and its shared world end, for a reload, a rejoin or a
+    /// lost connection: the owned AI skaters' streams stop, the round's online pause lifts and
+    /// the shared world starts over.
+    fn end_campaign_round(&mut self) -> Result<(), SelectedLiveError> {
+        self.end_campaign_ai_streams();
+        if self.online.round.take().is_some()
+            && let Some(input) = self.inner.bound_input.as_ref()
+        {
+            input.try_set_online_pause(false).map_err(error)?;
+        }
+        self.online.coop = coop_world::CoopWorld::default();
         Ok(())
     }
 
@@ -77,14 +85,8 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// rejoins the campaign lobby, whose join brings the server's save and a reload for all.
     pub(super) fn online_campaign_dropped(&mut self, loss: LossReason) -> Result<(), SelectedLiveError> {
         crate::coop::trace(format_args!("campaign: the connection was lost; the career waits, signing in again to rejoin"));
-        self.end_campaign_ai_streams();
-        if self.online.round.take().is_some()
-            && let Some(input) = self.inner.bound_input.as_ref()
-        {
-            input.try_set_online_pause(false).map_err(error)?;
-        }
+        self.end_campaign_round()?;
         self.online.campaign_hold = true;
-        self.online.coop = coop_world::CoopWorld::default();
         self.online.game = None;
         self.online.chat = None;
         self.online.start = None;

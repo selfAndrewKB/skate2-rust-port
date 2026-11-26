@@ -39,15 +39,21 @@ pub mod max_out;
 mod natives;
 pub mod objective_data;
 
+/// Co-op fork: every campaign player's state, from the facts, while a campaign round runs and
+/// the states are there; `None` otherwise, where the local player's own state is read.
+fn campaign_player_states(world: &system::World) -> Option<&[(i32, objectives::PlayerState)]> {
+    (world.coop.is_some() && !world.player_states.is_empty()).then_some(world.player_states.as_slice())
+}
+
 /// Co-op fork, the ledger's "nearest player who is up" kind for the boxes the world tests the
 /// skater against (sign-up boxes, global activities, discovery volumes, dynamic hulls): in a
 /// campaign every player's tester, read from the facts alike on every console; otherwise the
 /// local player's. A box any player stands in counts. Story characters are not among them:
 /// each console spawns its own where its own skater is (`characters.rs`, M5).
 pub(crate) fn tester_bases(world: &system::World) -> Vec<[f32; 3]> {
-    if world.coop.is_some() && !world.player_states.is_empty() {
+    if let Some(states) = campaign_player_states(world) {
         // The campaign's players' (the states are theirs alone, `player_states`' construction).
-        world.player_states.iter().filter_map(|(_, state)| state.tester_base).collect()
+        states.iter().filter_map(|(_, state)| state.tester_base).collect()
     } else {
         world.player.tester_base.into_iter().collect()
     }
@@ -65,8 +71,8 @@ pub(crate) fn any_player_chased(world: &system::World) -> bool {
 
 /// Co-op fork: whether any player the scripts read is in or just out of a Hall of Meat bail.
 pub(crate) fn any_player_hom_bailing(world: &system::World) -> bool {
-    if world.coop.is_some() && !world.player_states.is_empty() {
-        world.player_states.iter().any(|(_, state)| state.hom_bail_in_progress || state.hom_bail_completed)
+    if let Some(states) = campaign_player_states(world) {
+        states.iter().any(|(_, state)| state.hom_bail_in_progress || state.hom_bail_completed)
     } else {
         world.player.hom_bail_in_progress || world.player.hom_bail_completed
     }

@@ -439,10 +439,16 @@ impl<T, C> SelectedLiveSession<T, C> {
         })
     }
 
+    /// Co-op fork (M10): the player whose console owns the campaign's challenge AI skaters
+    /// (`CampaignWorld::ai_owner`); player 0 without a campaign career.
+    fn campaign_ai_owner(&self) -> i32 {
+        self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map_or(0, crate::coop::rules::CampaignWorld::ai_owner)
+    }
+
     /// Co-op fork (M10): the user id of the puppet a campaign's AI slot (after the players)
     /// shows here, followed as another player's skater is.
     pub(super) fn campaign_ai_puppet(&self, player: i32) -> Option<u64> {
-        let owner = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
+        let owner = self.campaign_ai_owner();
         Some(skate2_net::protocol::owned::skater_id(u8::try_from(owner).ok()?, u8::try_from(player).ok()?))
     }
 
@@ -660,7 +666,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 changed.push(slot);
             }
         }
-        let owner_index = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
+        let owner_index = self.campaign_ai_owner();
         for slot in hidden {
             self.online_hide_owned_puppet(u8::try_from(owner_index).unwrap_or(0), slot);
         }

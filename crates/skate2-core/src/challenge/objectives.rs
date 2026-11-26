@@ -1373,11 +1373,18 @@ fn evaluate_group(lua: &mut Lua<World>, world: &mut World, group: u32, triggers:
     }
     if all_complete_except_points(world, group) && triggers.group_objective_complete && completed.is_empty() {
         let player = world.objectives.group_index(group).map_or(0, |gi| world.objectives.groups[gi].player);
-        #[expect(clippy::cast_precision_loss, reason = "player id")]
-        let fields = vec![("ObjectiveGroup", Field::Pointer(handle)), ("PlayerID", Field::Number(player as f32)), ("CoopSlot", Field::Number(player as f32))];
+        let fields = group_message_fields(handle, player);
         world.send(Event::Challenge(Message::new("cMsgDidNotGetEnoughPoints", fields)));
     }
     completed
+}
+
+/// A group's message fields: the group and its player, as the scripts' `PlayerID` and (co-op
+/// fork) the campaign's `CoopSlot`, which names the human where `PlayerID` cannot
+/// (`runtime::campaign_subject`).
+#[expect(clippy::cast_precision_loss, reason = "player id")]
+fn group_message_fields(handle: usize, player: i32) -> Vec<(&'static str, Field)> {
+    vec![("ObjectiveGroup", Field::Pointer(handle)), ("PlayerID", Field::Number(player as f32)), ("CoopSlot", Field::Number(player as f32))]
 }
 
 /// `OnObjectiveCompleted` (`0x82d4c918`). Co-op fork: in a campaign the activity's groups are
@@ -2027,8 +2034,7 @@ fn trigger_exit(world: &mut World, group: u32, volume: u64) {
         if mode == 1 && state == Status::Active {
             if Triggers::read(&db, key).fail_on_boundary_exit {
                 set_status(world, group, i, Status::Failed);
-                #[expect(clippy::cast_precision_loss, reason = "player id")]
-                let fields = vec![("ObjectiveGroup", Field::Pointer(handle)), ("PlayerID", Field::Number(player as f32)), ("CoopSlot", Field::Number(player as f32))];
+                let fields = group_message_fields(handle, player);
                 world.send(Event::Challenge(Message::new("cMsgLeftObjectiveScoringBoundary", fields)));
             } else {
                 set_status(world, group, i, Status::Enabled);

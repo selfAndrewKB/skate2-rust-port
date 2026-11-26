@@ -3378,14 +3378,14 @@ impl<T, C> SelectedLiveSession<T, C> {
                 Output::ChallengeMapIcon { .. } => {}
                 // NISManager::RunBasicNIS(scene, transition, false, true).
                 Output::PlayNis { scene, transition, .. } => {
-                    if let Some(online) = career.system.world().online.as_ref().filter(|_| career.system.world().coop.is_some()) {
+                    if let Some(online) = coop_career::campaign_online(career.system.world()) {
                         crate::coop::trace(format_args!("scene {scene} starts at tick {}", online.tick));
                         crate::coop::event("scene_start", serde_json::json!({"scene": &scene, "tick": online.tick}));
                     }
                     career.nis.run_basic_nis(&scene, transition, false, true);
                 }
                 Output::RunNisDefinition { scene, ignore_breadcrumb, transition, hold_camera, skip_enabled, location, restore_streamer } => {
-                    if let Some(online) = career.system.world().online.as_ref().filter(|_| career.system.world().coop.is_some()) {
+                    if let Some(online) = coop_career::campaign_online(career.system.world()) {
                         crate::coop::trace(format_args!("scene {scene} (definition) starts at tick {}", online.tick));
                     }
                     // GetRestorePosition (0x828a1418): the local skater's position.
@@ -3506,7 +3506,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
                 // cSignPostUtil::HandleCaughtMessage: mMovieKey, then PushState(28).
                 Output::PlayMovie { key, movie, .. } => {
-                    if let Some(online) = career.system.world().online.as_ref().filter(|_| career.system.world().coop.is_some()) {
+                    if let Some(online) = coop_career::campaign_online(career.system.world()) {
                         crate::coop::trace(format_args!("movie {movie} ({key:016x}) starts at tick {}", online.tick));
                     }
                     career.movie.push(key);

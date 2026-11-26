@@ -615,6 +615,17 @@ impl SelectedTickAi for SessionAiFrame<'_> {
 }
 
 impl<T, C> SelectedSession<T, C> {
+    /// Co-op fork (M10): the AI skater in a player slot, if any, destroyed as `OnCommand`
+    /// destroys the slot's player before a spawn; a streamed challenge AI's spawn does it with
+    /// no actor to follow.
+    fn destroy_slot_skater(&mut self, player: u32) -> Result<(), String> {
+        if let Some(at) = self.ai_skaters.iter().position(|skater| skater.player_index() == player) {
+            let skater = self.ai_skaters.remove(at);
+            self.try_destroy_later_skaters(vec![skater])?;
+        }
+        Ok(())
+    }
+
     /// The AI skaters' presentation entities, as the later players'.
     pub(crate) fn ai_skater_visuals(&self) -> Result<Vec<crate::SelectedSkaterVisual<'_>>, String> {
         let player = self.player_recipe_id();
@@ -684,11 +695,7 @@ impl<T, C> SelectedSession<T, C> {
                     // (posted with the command) and no actor here; an ambient skater in its
                     // slot leaves as it would for the actor.
                     if client_type == AiClientType::Challenge && self.ai.as_ref().is_some_and(|ai| ai.streamed_challenge_ai) {
-                        let player = u32::try_from(slot).map_err(|e| error("spawn slot", e))?;
-                        if let Some(at) = self.ai_skaters.iter().position(|skater| skater.player_index() == player) {
-                            let skater = self.ai_skaters.remove(at);
-                            self.try_destroy_later_skaters(vec![skater])?;
-                        }
+                        self.destroy_slot_skater(u32::try_from(slot).map_err(|e| error("spawn slot", e))?)?;
                         crate::coop::trace(format_args!("challenge AI at slot {slot} (recipe {recipe:#018x}) is its owner's: no actor here"));
                         if let Some(ai) = self.ai.as_mut() {
                             ai.streamed_spawns.insert(slot, AmbientCommand::Spawn { slot, client_type, recipe, transform, profile_name });

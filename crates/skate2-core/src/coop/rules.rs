@@ -275,6 +275,13 @@ impl CampaignWorld {
         self.players.iter().copied().min().unwrap_or(0)
     }
 
+    /// The humans' seat count as a slot: the humans hold slots `0..humans()`, the AI skaters
+    /// the slots from it on (1 if the seat count does not fit a slot).
+    #[must_use]
+    pub fn humans(&self) -> i32 {
+        i32::try_from(self.seats).unwrap_or(1)
+    }
+
     /// M11 (open items 64, 65): a player left the round. The rules count the players left; the
     /// AI skaters' owner, if it was the leaver, is the next player, returned.
     pub fn remove_player(&mut self, player: i32) -> Option<i32> {

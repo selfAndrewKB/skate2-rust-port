@@ -332,11 +332,17 @@ fn as_the_scripts_hear(message: &Message) -> Message {
     Message { kind: message.kind, fields }
 }
 
+/// Co-op fork: the human a message names in a campaign ([`campaign_subject`]) and, when it
+/// names one, the message as the scripts hear it ([`as_the_scripts_hear`]).
+fn campaign_delivery(world: &World, message: &Message) -> (Option<i32>, Option<Message>) {
+    let named = campaign_subject(world, message);
+    (named, named.map(|_| as_the_scripts_hear(message)))
+}
+
 /// `cStateGraph::HandleLocalMessage` (`0x82ce4e38`): deliver to one graph
 /// with the activity as closure data.
 pub fn handle_local_message(lua: &mut Lua<World>, world: &mut World, graph: usize, message: &Message) {
-    let named = campaign_subject(world, message);
-    let heard = named.map(|_| as_the_scripts_hear(message));
+    let (named, heard) = campaign_delivery(world, message);
     let mut delivery = Delivery { message: heard.as_ref().unwrap_or(message), table: None, table_reference: None };
     world.closure = Some(graph);
     // A message naming no player (a state's exit or enter) is delivered under the subject in
@@ -355,8 +361,7 @@ pub fn route_message(lua: &mut Lua<World>, world: &mut World, message: &Message)
     if graphs.is_empty() {
         return;
     }
-    let named = campaign_subject(world, message);
-    let heard = named.map(|_| as_the_scripts_hear(message));
+    let (named, heard) = campaign_delivery(world, message);
     let mut delivery = Delivery { message: heard.as_ref().unwrap_or(message), table: None, table_reference: None };
     let previous = world.event_player;
     world.event_player = named.or(previous);

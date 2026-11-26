@@ -9,6 +9,12 @@ use super::{Arc, CareerSession, DialogOwner, Event, MemcardLeaf, MissionFrame, P
 /// distance and the point, the points, and the box they span.
 type ZoneScan = (f32, [f32; 2], u32, [f32; 4]);
 
+/// Co-op fork: the round's online state while the career plays a campaign; none in a plain
+/// career or an online challenge outside one.
+pub(super) fn campaign_online(world: &crate::challenge::system::World) -> Option<&crate::challenge::players::OnlineChallenge> {
+    world.online.as_ref().filter(|_| world.coop.is_some())
+}
+
 impl CareerSession {
     /// Co-op fork, the ledger's "the one who did it": a prompt answered on this console. In a
     /// campaign round it is queued for the next facts and applied at that tick everywhere
