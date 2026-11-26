@@ -861,7 +861,9 @@ impl ServerCore {
         }
         let ranked = play.ranked && !play.private && !free_skate && !campaign;
         // A matchmaking-shadowbanned player finds no game: a Join makes a game of its own.
-        let shadowbanned = self.matchmaking_shadowbans.contains(address);
+        // Co-op fork: not a campaign's search, whose game is the one shared career (a member
+        // rejoining it that found none would split the campaign in two).
+        let shadowbanned = !campaign && self.matchmaking_shadowbans.contains(address);
         if shadowbanned && !play.create && !play.private {
             (self.log)(&format!("{name} searched, matchmaking-shadowbanned: offered no game"));
         }
@@ -881,7 +883,7 @@ impl ServerCore {
                         && !game.members.is_empty()
                         && !game.full()
                         && !game.kicked.contains(&address)
-                        && !self.shadowbanned_member(game)
+                        && (campaign || !self.shadowbanned_member(game))
                         && game.activity.is_none()
                         && content.is_none_or(|content| content.contains(&attributes.challenge_key))
                         && match play.mode {
@@ -2179,17 +2181,17 @@ impl ServerCore {
         }
         // A game that stops sending replay frames, without saying it has none to send, is
         // frozen or paused: `KR_KickedForInactivity`, after as long as its place in the game
-        // allows (`Game::inactivity`). Co-op fork: a campaign member streams its career's hulls on
-        // the game thread, a hitch of seconds in which it sends nothing, so a campaign allows the
-        // longer silence.
+        // allows (`Game::inactivity`). Co-op fork: a campaign stays in the lobby phase on the
+        // server the whole session, where a member would have the lobby's idle minute; its round is
+        // a challenge in play, whose member streams its career's hulls on the game thread (a hitch
+        // of seconds), so a campaign member has `CAMPAIGN_INACTIVITY` and the challenge's reason.
         let inactive: Vec<(u32, String, Duration, u8)> = self
             .games
             .values()
             .flat_map(|game| {
                 let campaign = game.attributes.challenge_type == challenge::CAMPAIGN;
                 game.members.iter().map(move |member| {
-                    let (limit, reason) = game.inactivity(member.user_id);
-                    (member, (if campaign { limit.max(CAMPAIGN_INACTIVITY) } else { limit }, reason))
+                    (member, if campaign { (CAMPAIGN_INACTIVITY, leave::KICKED_FOR_INACTIVITY) } else { game.inactivity(member.user_id) })
                 })
             })
             .filter(|(member, (limit, _))| now.saturating_duration_since(member.alive) >= *limit)

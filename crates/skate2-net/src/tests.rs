@@ -2659,3 +2659,24 @@ fn a_campaign_round_starts_once_every_member_s_career_is_loaded() {
     assert_eq!(restarted[0].2.iter().filter(|&&id| id != 0).count(), 3, "three players in the restarted round");
     let _ = std::fs::remove_file(format!("campaign-{:016x}.save", campaign::KEY));
 }
+
+/// Co-op fork: a campaign member's game that says nothing has 15 seconds, the campaign's limit,
+/// and is kicked as a challenge's silent player is (the campaign's round waits on it), though the
+/// server keeps a campaign in its lobby phase, whose limit would be a minute.
+#[test]
+fn a_campaign_s_silent_member_is_kicked_after_fifteen_seconds() {
+    let mut net = Net::new();
+    let host = net.add("Host");
+    let guest = net.add("Guest");
+    net.run(100);
+    net.send(host, &campaign_lobby(true));
+    net.run(100);
+    net.send(guest, &campaign_lobby(false));
+    net.run(200);
+    net.frozen.push(guest);
+    net.run(14_000);
+    assert!(!left(&net.messages(host)), "fourteen seconds are within a campaign's limit");
+    net.run(2_000);
+    assert!(left_for(&net.messages(host), leave::KICKED_FOR_INACTIVITY));
+    assert!(kicked_for(&net.messages(guest), leave::KICKED_FOR_INACTIVITY));
+}
