@@ -299,6 +299,16 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Before a campaign round's tick runs the scripts: the bench's inputs, at the round tick.
     pub(in super::super) fn coop_campaign_before_step(&mut self) -> Result<(), SelectedLiveError> {
         let Some(tick) = self.campaign_round_tick() else { return Ok(()) };
+        self.diagnostic_answer_dialog(tick);
+        self.diagnostic_challenge_steps(tick);
+        self.diagnostic_win_main_challenge(tick);
+        self.diagnostic_skater_steps(tick);
+        self.diagnostic_scans(tick)
+    }
+
+    /// `SKATE2_DIAGNOSTIC_COOP_ANSWER`: the progression dialog's opening noted at round tick
+    /// `tick`, and answered once its delay has run.
+    fn diagnostic_answer_dialog(&mut self, tick: u32) {
         if let Some((yes, delay)) = diagnostic_answer() {
             let open = self.career.as_ref().is_some_and(super::super::career::CareerSession::progression_dialog_open);
             let opened = &mut self.online.coop_dialog_opened;
@@ -319,6 +329,11 @@ impl<T, C> SelectedLiveSession<T, C> {
                 _ => {}
             }
         }
+    }
+
+    /// The bench's challenge steps due at round tick `tick`: preloads, executions and
+    /// completions by challenge name, in that order.
+    fn diagnostic_challenge_steps(&mut self, tick: u32) {
         for (at, name) in diagnostic_preload() {
             if *at == tick
                 && let Some(career) = self.career.as_mut()
@@ -343,6 +358,11 @@ impl<T, C> SelectedLiveSession<T, C> {
                 trace(format_args!("diagnostic: complete challenge {name} at round tick {tick}: {completed}"));
             }
         }
+    }
+
+    /// The bench's main-challenge wins: the tick the main challenge started running noted, then
+    /// the win due at round tick `tick` (at a tick, or a delay after it started running).
+    fn diagnostic_win_main_challenge(&mut self, tick: u32) {
         if !diagnostic_wins().is_empty()
             && let Some(career) = self.career.as_ref()
         {
@@ -363,6 +383,11 @@ impl<T, C> SelectedLiveSession<T, C> {
             let won = career.system.diagnostic_win_main_challenge();
             trace(format_args!("diagnostic: won the main challenge at round tick {tick}: {won} objectives completed"));
         }
+    }
+
+    /// The bench's steps on the local skater due at round tick `tick`: prompts answered,
+    /// teleports, leaving the game, bails, and objectives completed, in that order.
+    fn diagnostic_skater_steps(&mut self, tick: u32) {
         for &(at, answer) in diagnostic_prompts() {
             if at == tick
                 && let Some(career) = self.career.as_mut()
@@ -391,6 +416,11 @@ impl<T, C> SelectedLiveSession<T, C> {
                 trace(format_args!("diagnostic: completed the active objectives of {} at round tick {tick}: {completed:?}", player.map_or("every player".to_owned(), |player| format!("player {player}"))));
             }
         }
+    }
+
+    /// The bench's scans due at round tick `tick`: the security zones, then the triggers, sign-up
+    /// boxes, skater frames and objective volumes.
+    fn diagnostic_scans(&mut self, tick: u32) -> Result<(), SelectedLiveError> {
         if let Some(at) = diagnostic_zones()
             && tick == at
         {
