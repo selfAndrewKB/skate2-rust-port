@@ -11,18 +11,27 @@ reworded trace line breaks nothing. Two things are still read from prose, here a
   `diagnostic: …`): `UPSTREAM` patterns, the only prose read for a log of any age.
 
 A log with any `coop-event` line is read from its events alone (its prose is not matched), so
-an event and its legacy line are never both counted.
+an event and its legacy line are never both counted: a kind the tools read from a log of today
+needs its event from the game, under the same name and fields.
+
+Besides the records, the diagnostics that are searches over the prose by nature (a seat that went
+down, the career script's errors, the words that mark something unported) are here too, so the
+tools (the audits, crawl.py, crawl_ledger.py) hold no log pattern of their own.
 
     for record in events.read(path, {'census', 'plays'}):
         record['e'], record['tick'], ...
+    events.read(path, {'graph'}, stop=events.CRAWL_STOP)   # a crawl seat log, without its teardown
 """
 import json
 import re
+from collections import Counter
 
 PREFIX = 'coop-event '
 
 # Each kind: (pattern, fields): the pattern's groups in order, each `name` or `name:type`
-# (`int`, `float`, `hex` kept as text, `own` = the census owner: True for `own`, else the slot).
+# (`int`, `float`, `bool` = True for `true`, `hexlist` = a bracketed list of hex numbers, `hex` kept
+# as text, `own` = the census owner: True for `own`, else the slot). A kind with no fields is a
+# line counted.
 LEGACY = {
     'census': (r'coop: census (\d+): ([0-9a-f]{8}) (own|puppet of \d+) e(\d+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) yaw (-?[\d.]+) v ([\d.]+) f(\d+) m([0-9a-f]+) g(\d+) moods(\d+) (down|up)(?: i (?:q(\d+) (\S*)|none))?$',
                ['tick:int', 'wid', 'owner:own', 'epoch:int', 'x:float', 'y:float', 'z:float', 'yaw:float', 'speed:float', 'flags:int', 'model', 'graph:int', 'moods:int', 'down:down', 'queued:int', 'intents']),
@@ -39,15 +48,61 @@ LEGACY = {
     'sync_parts': (r'coop: sync parts @(\d+): \[([0-9a-f, ]+)\]', ['tick:int', 'parts:hexlist']),
     'sync_dump': (r'coop: sync dump @(\d+) (\w+): (.*)$', ['tick:int', 'part', 'line']),
     'desync_planted': (r"coop: diagnostic: a divergence planted in (.+)'s vars at tick (\d+)", ['activity', 'tick:int']),
+    # the crawl's drivers and what the campaign did with them (crawl.py, crawl_ledger.py); a
+    # completion's result is logged since coop-v0.9.1 (None before: the 2026-11-10 crawl)
+    'complete_challenge': (r'coop: diagnostic: complete challenge (\S+) at round tick (\d+)(?:: (\w+))?', ['activity', 'tick:int', 'result:bool']),
+    'execute': (r'coop: diagnostic: execute (\S+) at round tick (\d+): (\w+)', ['activity', 'tick:int', 'result:bool']),
+    'won': (r'coop: diagnostic: won the main challenge at round tick (\d+): (\d+) objectives completed', ['tick:int', 'objectives:int']),
+    'campaign_save': (r'coop: campaign save at session (\d+) round tick (\d+): (\d+) B, hash ([0-9a-f]+)', ['session:int', 'tick:int', 'bytes:int', 'hash']),
+    'rule': (r'coop: rule: (\S+) \(([0-9a-f]+)\) is (\w+(?: \{[^}]*\})?): objectives for players \[([^\]]*)\]', ['activity', 'key', 'rule', 'players']),
+    'objective': (r'coop: objective ([0-9a-f]+) of player (\d+): (\w+) -> (\w+)', ['objective', 'player:int', 'before', 'after']),
+    'withheld': (r'coop: (.+): withheld$', ['what']),
+    'presentation': (r'coop: presentation group (\d+): event (\d+) of (\d+), kind (\d+)', ['group:int', 'event:int', 'events:int', 'event_kind:int']),
+    'presentation_finished': (r'coop: presentation group (\d+) finished', ['group:int']),
+    'scene_start': (r'coop: scene (\S+) starts at tick (\d+)', ['scene', 'tick:int']),
+    'scene_characters': (r'coop: scene (\S+) instanced (\d+) characters', ['scene', 'characters:int']),
+    'trigger': (r'coop: trigger ([0-9a-f]+) entered by player (\d+)', ['trigger', 'player:int']),
+    'prompt_applied': (r'coop: (?:prompt|note) .*applied|answer .* applied', []),
+    # the AI manager's decisions (SKATE2_TRACE_AI, since 2026-11-11; the fork's, under `ai: `)
+    'demo_characters': (r'ai: SelectDemoCharacters: (\d+) competitors', ['competitors:int']),
+    'select_characters': (r'ai: SelectCharacters for activity (0x[0-9a-f]+): (\d+) competitors, characters \[([^\]]*)\]', ['activity', 'competitors:int', 'characters:hexlist']),
+    # synchronization windows
+    'live_audit': (r'coop: live audit at (\d+): (\d+) samples; position within [\d.]+ m (\d+) \(worst ([\d.]+) m, \w+\), yaw within \d+° (\d+) \(worst (\d+)°, \w+\), speed within [\d.]+ m/s (\d+), flags equal (\d+)',
+                   ['tick:int', 'samples:int', 'pos_ok:int', 'worst_pos_m:float', 'yaw_ok:int', 'worst_yaw_deg:int', 'speed_ok:int', 'flags_ok:int']),
+    # `refused` is logged since the stand-up fix (None before)
+    'world_stream': (r'coop: world stream at (\d+): (\d+) runs, (\d+) entity samples, (\d+) prop samples, (\d+) B \((\d+) B/s, (\d+) B/s per streamed pedestrian\), (\d+) owned in range of (\d+) pedestrians here, (\d+) puppets, (\d+) props owned of (\d+) known, contacts sent (\d+) applied (\d+) confirmed (\d+)(?: refused (\d+))?, (\d+) records ignored',
+                     ['tick:int', 'runs:int', 'entity_samples:int', 'prop_samples:int', 'bytes:int', 'bps:int', 'bps_per_pedestrian:int', 'owned:int', 'pedestrians:int', 'puppets:int',
+                      'props_owned:int', 'props_known:int', 'contacts_sent:int', 'contacts_applied:int', 'contacts_confirmed:int', 'contacts_refused:int', 'ignored:int']),
+    # ownership and puppets, counted
+    'handed_over': (r'coop: .*handed to', []),
+    'promoted': (r'coop: .*promoted', []),
+    'demoted': (r'coop: .*demoted', []),
+    'knocked_down': (r'coop: .*knocked down', []),
+    # the dedicated server's log: the campaign round's start and each save it heard
+    'server_round': (r'^(?=.*started with).*?(campaign round.*)$', ['line']),
+    'server_save': (r'^(?=.*campaign save from).*?(campaign save.*)$', ['line']),
 }
 
 # Upstream's own lines: read as prose in every log, their wording being upstream's.
 UPSTREAM = {
     'graph': (r'career graph (\S+?)(?: @(\d+))?: (?:enter (\w+)|(.*))$', ['activity', 'tick:int', 'state', 'what']),
     'clock_dropped': (r'clock: a stall let (\d+) ticks go', ['ticks:int']),
+    'ai_player': (r'career: AI player (\d+) character (0x[0-9a-f]+) names .* => \("([^"]*)"', ['player:int', 'character', 'name']),
+    'round_stall': (r'online: round at tick (\d+): (\d+) ready, stalled (\d+) of the last (\d+) ticks', ['tick:int', 'ready:int', 'stalled:int', 'window:int']),
+    'remote_skater': (r'online: (\w+): (\d+) of (\d+) ticks at or past the newest sample, delay ([\d.]+), pace ([\d.]+), (\d+) teleport frames', ['user', 'held:int', 'shown:int', 'delay:float', 'pace:float', 'teleports:int']),
+    'server_build': (r'build ([0-9a-f]{8})', ['build']),
 }
 
+# The crawl's marker, written into each seat log when a mission's run ends (crawl.py): what
+# follows is the bench's teardown.
+CRAWL_STOP = 'crawl: stop'
+
 FAULT = re.compile(r'panicked|controlled .*failed|Tick\(')
+DROPPED = re.compile(r'panicked|kicked')
+SCRIPT_ERROR = 'career script error'
+TELEPORT_UNKNOWN = 'teleport to unknown location'
+NOISE = re.compile(r'controlled frame|unlit diffuse|CONTROLLED FIRST|first-test boot|coop: world stream at|coop: live audit|DMO models')
+UNEXPECTED = re.compile(r'unknown|unported|unsupported|unhandled|not ported|not implemented|unimplemented|script error|ScriptError|TODO|ignored|provisional', re.I)
 _COMPILED = {kind: (re.compile(pattern), fields) for kind, (pattern, fields) in {**LEGACY, **UPSTREAM}.items()}
 
 
@@ -61,6 +116,8 @@ def _convert(kind, groups, fields):
             record[name] = int(value)
         elif kind_of == 'float':
             record[name] = float(value)
+        elif kind_of == 'bool':
+            record[name] = value == 'true'
         elif kind_of == 'own':
             record[name] = True if value == 'own' else int(value.rsplit(' ', 1)[1])
         elif kind_of == 'down':
@@ -70,42 +127,93 @@ def _convert(kind, groups, fields):
         elif kind_of == 'parts':
             record[name] = value.split('+')
         elif kind_of == 'hexlist':
-            record[name] = [int(part, 16) for part in value.split(',')]
+            record[name] = [int(part, 16) for part in value.split(',') if part.strip()]
         else:
             record[name] = value
     return record
 
 
-def has_events(path):
-    with open(path, encoding='utf-8', errors='replace') as log:
-        return any(line.startswith(PREFIX) or f' {PREFIX}' in line for line in log)
-
-
-def read(path, kinds=None):
-    """The log's records of `kinds` (all when None), in order: its events if it has any, else its
-    legacy lines; upstream's lines always."""
-    structured = has_events(path)
+def _lines(path, stop=None):
+    """The log's lines, up to the first that starts with `stop` (all when None)."""
     with open(path, encoding='utf-8', errors='replace') as log:
         for line in log:
             line = line.rstrip('\n')
-            at = line.find(PREFIX)
-            if at >= 0:
-                try:
-                    record = json.loads(line[at + len(PREFIX):])
-                except ValueError:
-                    continue
-                if kinds is None or record.get('e') in kinds:
-                    yield record
-                continue
-            for kind, (pattern, fields) in _COMPILED.items():
-                if (kinds is not None and kind not in kinds) or (structured and kind in LEGACY):
-                    continue
-                if m := pattern.search(line):
-                    yield _convert(kind, m.groups(), fields)
-                    break
+            if stop is not None and line.startswith(stop):
+                return
+            yield line
 
+
+def lines(path, stop=None):
+    """The log's lines as a list (none when it cannot be read), up to `stop` as `read` takes it."""
+    try:
+        return list(_lines(path, stop))
+    except OSError:
+        return []
+
+
+def has_events(path, stop=None):
+    return any(line.startswith(PREFIX) or f' {PREFIX}' in line for line in _lines(path, stop))
+
+
+def read(path, kinds=None, stop=None):
+    """The log's records of `kinds` (all when None), in order: its events if it has any, else its
+    legacy lines; upstream's lines always. A line yields a record for every kind it matches.
+    `stop`: a line prefix; the log is read up to the first line that starts with it."""
+    structured = has_events(path, stop)
+    active = [(kind, pattern, fields) for kind, (pattern, fields) in _COMPILED.items()
+              if (kinds is None or kind in kinds) and not (structured and kind in LEGACY)]
+    for line in _lines(path, stop):
+        at = line.find(PREFIX)
+        if at >= 0:
+            try:
+                record = json.loads(line[at + len(PREFIX):])
+            except ValueError:
+                continue
+            if kinds is None or record.get('e') in kinds:
+                yield record
+            continue
+        for kind, pattern, fields in active:
+            if m := pattern.search(line):
+                yield _convert(kind, m.groups(), fields)
+
+
+# Diagnostics over the prose: searches for words, not fields, so they read every log's text
+# whatever its age. Each takes the log's lines (`lines`), cut where the caller cuts them.
 
 def faults(path):
     """The log's fault lines (a panic, a failed controlled frame)."""
     with open(path, encoding='utf-8', errors='replace') as log:
         return [line.rstrip('\n') for line in log if FAULT.search(line)]
+
+
+def dropped(log, tail=0):
+    """The lines that say a seat went down: a panic, a kick, a disconnect; a disconnect in the last
+    `tail` lines is not counted (a log without a stop marker ends in the teardown's). The crawl's
+    own stop line is never one."""
+    return [line for index, line in enumerate(log) if CRAWL_STOP not in line
+            and (DROPPED.search(line) or ('disconnected' in line and len(log) - index > tail))]
+
+
+def normalize(line):
+    """A line with its numbers and hashes blanked, so the same message counts once."""
+    line = re.sub(r'0x[0-9a-f]+|\b[0-9a-f]{8,}\b', '#', line)
+    line = re.sub(r'(?<=[ (:])-?\d+(\.\d+)?', 'N', line)
+    return line[:200]
+
+
+def script_errors(log):
+    """The career script's errors (upstream's `career script error in <context>: <error>`), each
+    from its context on, normalized, counted."""
+    return Counter(normalize(re.sub(r'^.*career script error in ', '', line)) for line in log if SCRIPT_ERROR in line)
+
+
+def teleports_unknown(log):
+    """The lines naming a teleport to a location the port does not know (upstream's `career: …`)."""
+    return [line for line in log if TELEPORT_UNKNOWN in line]
+
+
+def unexpected(log):
+    """Lines with a word that marks something unported or unknown (besides the script errors and
+    the windows' routine lines), normalized, counted: a finding each."""
+    return Counter(normalize(line) for line in log
+                   if UNEXPECTED.search(line) and not NOISE.search(line) and SCRIPT_ERROR not in line and 'ScriptError' not in line)

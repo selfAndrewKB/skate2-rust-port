@@ -20,7 +20,6 @@ script looping between two states for 30 s after the win) stops the mission earl
 Needs SKATE2_CAREER_DB (the extracted career database). A mission takes one to three minutes."""
 import argparse
 import os
-import re
 import subprocess
 import sys
 import time
@@ -38,6 +37,9 @@ WIN_AT = os.environ.get('CRAWL_WIN_AT', 'running+300')
 WIN_SEAT = os.environ.get('CRAWL_WIN_SEAT')
 WAIT_S, SETTLE_S, LOOP_S = int(os.environ.get('CRAWL_WAIT_S', 170)), 10, 30  # CRAWL_WAIT_S: a longer deadline for a mission with a long intro scene
 GLOBAL_FIELD = '122db7b0f026dbec'  # challenge_global_data.Global
+
+sys.path.insert(0, str(ROOT / 'tools/coop'))
+import events  # noqa: E402
 
 
 def missions():
@@ -64,15 +66,43 @@ def bench(*args, env=None):
     return subprocess.run(['./tools/coop/bench.sh', *args], cwd=ROOT, env=full, capture_output=True, text=True).stdout
 
 
-def grep(path, pattern):
+def records(path, kinds):
+    """The log's records of `kinds` (`events.read`); none while the log is not there yet."""
     try:
-        return [line.rstrip('\n') for line in open(path, encoding='utf-8', errors='replace') if re.search(pattern, line)]
+        return list(events.read(path, kinds))
     except OSError:
         return []
 
 
+def graph(log, name=None):
+    """The `career graph … @tick: enter state` records (of `name`'s graph when given), in order."""
+    return [r for r in records(log, {'graph'}) if r['tick'] is not None and r['state'] is not None and (name is None or r['activity'] == name)]
+
+
 def states(log, name):
-    return [m.group(1) for m in (re.search(rf'career graph {re.escape(name)} @\d+: enter (\w+)', l) for l in grep(log, f'career graph {re.escape(name)} @')) if m]
+    return [r['state'] for r in graph(log, name)]
+
+
+def ended(state):
+    """The main challenge's end: `challenge_cleanup`, or `complete` (a challenge that completes on
+    execute: film team)."""
+    return state.startswith('challenge_cleanup') or state == 'complete'
+
+
+def entry(record):
+    """A graph record as its line reads after `career graph `."""
+    at = '' if record['tick'] is None else f" @{record['tick']}"
+    return f"{record['activity']}{at}: enter {record['state']}"
+
+
+def done(log, name, kind):
+    """The mission's run is over on this seat: its end phase (a main challenge's graph ended, a
+    completion by name), or the seat went down."""
+    if kind == 'main':
+        over = any(ended(r['state']) for r in graph(log, name))
+    else:
+        over = any(r['result'] is True for r in records(log, {'complete_challenge'}))
+    return over or bool(events.dropped(events.lines(log)))
 
 
 def run_one(name, kind, keep):
@@ -89,13 +119,10 @@ def run_one(name, kind, keep):
             seat_extra[f'SEAT_EXTRA_{WIN_SEAT}'] = f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}'
         else:
             extra.append(f'SKATE2_DIAGNOSTIC_COOP_WIN={WIN_AT}')
-        done = rf'career graph {re.escape(name)} @\d+: enter (?:challenge_cleanup|complete\b)|panicked|kicked|disconnected'  # `complete`: a challenge that completes on execute (film team)
     elif kind == 'location':
         extra += [f'SKATE2_DIAGNOSTIC_COOP_EXECUTE={EXECUTE_AT}:{name}', f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={COMPLETE_AT}:{name}']
-        done = 'diagnostic: complete challenge .*: true|panicked|kicked|disconnected'
     else:
         extra += [f'SKATE2_DIAGNOSTIC_COOP_COMPLETE_CHALLENGE={COMPLETE_AT}:{name}']
-        done = 'diagnostic: complete challenge .*: true|panicked|kicked|disconnected'
     env = {'SEAT_ONLINE_1': 'create:9', 'SEAT_ONLINE_2': 'join:9', 'CAPTURE_COUNT': '0', 'SEAT_EXTRA': ' '.join(extra), **seat_extra}
     if keep:
         env['BENCH_KEEP'] = '1'
@@ -105,12 +132,12 @@ def run_one(name, kind, keep):
     reason, loop_since, loop_seen = 'deadline', None, 0
     while time.time() < deadline:
         time.sleep(5)
-        if all(grep(log, done) for log in logs):
+        if all(done(log, name, kind) for log in logs):
             reason = 'done'
             break
         # the known stall: both scripts cycling between two states after the win
         tails = [states(log, name)[-8:] for log in logs]
-        if all(len(t) == 8 and len(set(t)) <= 2 for t in tails) and all(grep(log, 'diagnostic: won the main challenge|diagnostic: complete challenge') for log in logs):
+        if all(len(t) == 8 and len(set(t)) <= 2 for t in tails) and all(records(log, {'won', 'complete_challenge'}) for log in logs):
             seen = sum(len(states(log, name)) for log in logs)
             if loop_since is None:
                 loop_since, loop_seen = time.time(), seen
@@ -124,27 +151,12 @@ def run_one(name, kind, keep):
     for log in logs:
         try:
             with open(log, 'a', encoding='utf-8') as f:
-                f.write(f'crawl: stop ({reason}) after {WAIT_S if reason == "deadline" else int(time.time() - deadline + WAIT_S)} s\n')
+                f.write(f'{events.CRAWL_STOP} ({reason}) after {WAIT_S if reason == "deadline" else int(time.time() - deadline + WAIT_S)} s\n')
         except OSError:
             pass
     result = {'name': name, 'kind': kind, 'reason': reason}
     for s, log in zip((1, 2), logs):
-        executed = grep(log, f'diagnostic: execute {re.escape(name)} at round tick')
-        won = grep(log, 'diagnostic: won the main challenge')
-        completed = grep(log, f'diagnostic: complete challenge {re.escape(name)} at round tick \\d+: true')
-        cleanup = grep(log, rf'career graph {re.escape(name)} @\d+: enter (?:challenge_cleanup|complete\b)')
-        saved = grep(log, 'campaign save at')
-        failed = [l for l in grep(log, 'panicked|kicked|disconnected') if 'crawl: stop' not in l][:1]
-        last = grep(log, 'career graph .* enter ')
-        result[s] = {
-            'executed': bool(executed) and executed[-1].rstrip().endswith('true'),
-            'won': won[-1].split(': ')[-1] if won else '',
-            'completed': bool(completed),
-            'cleanup': bool(cleanup),
-            'save': saved[-1].split('hash ')[-1].split(',')[0] if saved else '',
-            'failed': failed[0][:120] if failed else '',
-            'last_state': last[-1].split('career graph ')[-1][:80] if last else '',
-        }
+        result[s] = seat_result(log, name)
     saves = [result[s]['save'] for s in (1, 2)]
     result['agree'] = all(saves) and len(set(saves)) == 1
     bench('stop')
@@ -158,6 +170,31 @@ def run_one(name, kind, keep):
         except OSError as error:
             print(f'crawl: {src} not kept as {dst}: {error}', file=sys.stderr)
     return result
+
+
+def seat_result(log, name):
+    """What the seat's log says of the mission: executed, won, completed, its end phase, its save,
+    the first line that says it went down, the last graph state."""
+    rec = {kind: [] for kind in ('execute', 'won', 'complete_challenge', 'campaign_save', 'graph')}
+    for record in records(log, set(rec)):
+        rec[record['e']].append(record)
+    executed = [r for r in rec['execute'] if r['activity'] == name]
+    won = rec['won']
+    completed = [r for r in rec['complete_challenge'] if r['activity'] == name and r['result'] is True]
+    entered = [r for r in rec['graph'] if r['state'] is not None]
+    cleanup = [r for r in entered if r['activity'] == name and r['tick'] is not None and ended(r['state'])]
+    saved = rec['campaign_save']
+    failed = events.dropped(events.lines(log))[:1]
+    last = entered[-1] if entered else None
+    return {
+        'executed': bool(executed) and executed[-1]['result'],
+        'won': f"{won[-1]['objectives']} objectives completed" if won else '',
+        'completed': bool(completed),
+        'cleanup': bool(cleanup),
+        'save': saved[-1]['hash'] if saved else '',
+        'failed': failed[0][:120] if failed else '',
+        'last_state': entry(last)[:80] if last else '',
+    }
 
 
 def verdict(r):
