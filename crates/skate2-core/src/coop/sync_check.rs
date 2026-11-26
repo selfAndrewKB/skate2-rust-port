@@ -58,8 +58,10 @@ pub const CHECK_INTERVAL: u32 = 15;
 /// The checkpoints a console keeps its own parts of: a player's check may name a tick this far
 /// behind the tick it came with (its lead after a long stall).
 const KEPT_CHECKPOINTS: usize = 240;
-/// The ticks whose full parts a console keeps, for the window it prints at a difference.
-const KEPT_TICKS: usize = CHECK_INTERVAL as usize * 2;
+/// The ticks whose full parts a console keeps, for the window it prints at a difference: a
+/// player's check of a tick arrives with the player's facts, as much as its lead and a check
+/// interval later (the lead goes past 300 ticks after a long stall).
+const KEPT_TICKS: usize = 600;
 
 /// FNV-1a, 32 bits: the round's hashes are alike on every console that holds the same state.
 #[derive(Clone, Copy, Debug)]
@@ -226,9 +228,17 @@ impl SyncCheck {
         self.peers.iter().map(|(&user_id, peer)| (user_id, peer.checked, peer.differed, peer.first)).collect()
     }
 
-    /// The ticks this console keeps whole, oldest first, for the window printed at a difference.
-    pub fn kept_ticks(&self) -> impl Iterator<Item = &(u32, Parts)> {
-        self.ticks.iter()
+    /// The ticks this console keeps whole from the checkpoint before `tick` (which agreed, at a
+    /// first difference) through `tick`: where the state parted, to the tick.
+    pub fn window(&self, tick: u32) -> impl Iterator<Item = &(u32, Parts)> {
+        let from = tick.saturating_sub(CHECK_INTERVAL);
+        self.ticks.iter().filter(move |(at, _)| (from..=tick).contains(at))
+    }
+
+    /// A sync point: every console goes on from a new run of ticks, so a checkpoint from before
+    /// it is not sent (a peer that stopped earlier has no record of it).
+    pub fn sync_point(&mut self) {
+        self.unsent = None;
     }
 }
 
@@ -286,6 +296,19 @@ mod tests {
         assert_eq!(check.compare(1, 0, wrong), Compared::Differs { mask: 1, first: true });
         assert_eq!(check.compare(1, 15, parts(1).map(wire_part)), Compared::Agrees);
         assert_eq!(check.compare(1, 0, wrong), Compared::Differs { mask: 1, first: false });
+    }
+
+    #[test]
+    fn the_window_runs_from_the_checkpoint_before_to_the_tick() {
+        let mut check = SyncCheck::default();
+        for tick in 0..100 {
+            check.record(tick, parts(tick));
+        }
+        let window: Vec<u32> = check.window(45).map(|(tick, _)| *tick).collect();
+        assert_eq!(window, (30..=45).collect::<Vec<_>>());
+        check.record(105, parts(1));
+        check.sync_point();
+        assert_eq!(check.take_unsent(), None);
     }
 
     #[test]

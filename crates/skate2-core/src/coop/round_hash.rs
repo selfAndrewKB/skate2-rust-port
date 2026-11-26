@@ -85,8 +85,9 @@ fn objectives(world: &World) -> u32 {
                 fnv.i32(objective.player);
                 fnv.u32(objective.state as u32);
                 fnv.u32(objective.total_points);
+                // Not `num_pushes`: `cMsgSkaterPushed` reaches only the pushing skater's own
+                // console (its frame's local push flags, which the inputs leave out too).
                 fnv.u32(objective.last_sequence_points);
-                fnv.u32(objective.num_pushes);
                 fnv.bool(objective.in_scoring_boundary);
             }
             fnv.finish()
@@ -100,8 +101,8 @@ fn objectives(world: &World) -> u32 {
     fnv.finish()
 }
 
-/// The timers as a set (their ids are allocation's), each by its ticks, kind, pause, expiry,
-/// owning activity's key and subject.
+/// The timers as a set (their ids are allocation's), each by its ticks, kind, pause, owning
+/// activity's key and subject.
 fn timers(world: &World) -> u32 {
     let activities = &world.activities.activities;
     let mut timers: Vec<u32> = world
@@ -209,8 +210,8 @@ pub fn dump(system: &ChallengeSystem, part: Part) -> Vec<String> {
                 .flat_map(|group| {
                     group.objectives.iter().map(move |objective| {
                         format!(
-                            "{:016x} player {} objective {:016x} {:?} points {} last {} pushes {} boundary {}",
-                            group.challenge, group.player, objective.key, objective.state, objective.total_points, objective.last_sequence_points, objective.num_pushes, objective.in_scoring_boundary
+                            "{:016x} player {} objective {:016x} {:?} points {} last {} boundary {}",
+                            group.challenge, group.player, objective.key, objective.state, objective.total_points, objective.last_sequence_points, objective.in_scoring_boundary
                         )
                     })
                 })

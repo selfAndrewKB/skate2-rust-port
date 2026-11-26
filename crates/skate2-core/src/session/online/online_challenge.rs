@@ -366,9 +366,10 @@ pub(super) struct Round {
     /// `SKATE2_TRACE_ONLINE_INPUTS`: a running hash of the ticks' frames.
     input_hash: u64,
     /// Co-op fork (M23): the campaign round's sync check (`crate::coop::sync_check`) and the
-    /// tick whose field dump a difference asked for.
+    /// grid ticks whose field dumps a difference asked for (two, so seats that heard of it a
+    /// grid apart still dump at one tick alike) and the parts.
     sync_check: crate::coop::sync_check::SyncCheck,
-    sync_dump_at: Option<(u32, u8)>,
+    sync_dump_at: Option<([u32; 2], u8)>,
     /// The scenes' and speech lines' events this console saw, numbered (`Presented`), until a
     /// tick delivers them, each with whether this console announced it while leading; the
     /// counts seen and delivered (delivered alike on every console).
@@ -911,11 +912,12 @@ impl Round {
                         ours,
                         check.parts
                     ));
-                    for (tick, parts) in self.sync_check.kept_ticks() {
+                    for (tick, parts) in self.sync_check.window(check.tick) {
                         crate::coop::trace(format_args!("sync parts @{tick}: {parts:08x?}"));
                     }
                     if self.sync_dump_at.is_none() {
-                        self.sync_dump_at = Some((sync_dump_tick(check.tick), mask));
+                        let at = sync_dump_tick(check.tick);
+                        self.sync_dump_at = Some(([at, at + SYNC_DUMP_GRID], mask));
                     }
                 }
             }
@@ -1800,8 +1802,6 @@ impl<T, C> SelectedLiveSession<T, C> {
         Ok(())
     }
 
-    /// Co-op fork (M22): one simulation tick of a campaign round's pace and stall notice, from
-    /// the lead before the round ran and whether a round tick ran.
     /// Co-op fork (M23): the campaign round's parts after the tick the scripts just ran, whose
     /// frames hashed to `inputs`, for the sync check; the parts' field dumps the bench asked for
     /// (`SKATE2_COOP_SYNC_DUMP=<ticks>`, every that many ticks) or a difference did; and
@@ -1823,10 +1823,10 @@ impl<T, C> SelectedLiveSession<T, C> {
         parts[0] = inputs;
         round.sync_check.record(tick, parts);
         let every = DUMP_EVERY.get_or_init(|| std::env::var("SKATE2_COOP_SYNC_DUMP").ok().and_then(|value| value.trim().parse().ok()).filter(|&every: &u32| every > 0));
-        let asked = round.sync_dump_at.filter(|&(at, _)| tick >= at);
+        let asked = round.sync_dump_at.filter(|&(at, _)| tick >= at[0]).map(|(at, mask)| (at[0], mask));
         let mask = match (asked, every.is_some_and(|every| tick % every == 0)) {
             (Some((at, mask)), periodic) => {
-                round.sync_dump_at = None;
+                round.sync_dump_at = round.sync_dump_at.and_then(|(at, mask)| (at[1] != u32::MAX && at[1] > tick).then_some(([at[1], u32::MAX], mask)));
                 if at != tick {
                     crate::coop::trace(format_args!("sync dump asked for tick {at} comes at tick {tick}: the round here was past it"));
                 }
@@ -1845,6 +1845,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
     }
 
+    /// Co-op fork (M22): one simulation tick of a campaign round's pace and stall notice, from
+    /// the lead before the round ran and whether a round tick ran.
     fn update_campaign_pace(&mut self, lead: Option<u32>, ran: bool) {
         let (rtt, frame) = (self.online.round_trip, self.completed_frames);
         let Some(round) = self.online.round.as_mut().filter(|round| round.campaign) else { return };
@@ -2192,7 +2194,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         self.online_round_ai_messages(&frames, humans, tick);
                     }
-                    let inputs = crate::coop::round_hash::inputs(&frames);
+                    let inputs = if self.online.round.as_ref().is_some_and(|round| round.campaign) { crate::coop::round_hash::inputs(&frames) } else { 0 };
                     self.career_step(Some((frames, local, own)))?;
                     self.record_round_check(inputs);
                     self.take_held_presentation();
@@ -2600,6 +2602,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         // highlight, for one); all go on from the same tick, the next run of ticks.
         state.syncs += 1;
         state.base = state.syncs << 20;
+        state.sync_check.sync_point();
+        state.sync_dump_at = None;
         state.processed = state.base;
         state.produced = state.base;
         state.local_frames.clear();
