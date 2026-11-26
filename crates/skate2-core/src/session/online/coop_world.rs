@@ -144,6 +144,7 @@ fn measured_velocity(trail: &std::collections::VecDeque<[f32; 3]>) -> Option<[f3
         return None;
     }
     let (first, last) = (trail.front()?, trail.back()?);
+    #[expect(clippy::cast_precision_loss, reason = "a trail of a few ticks")]
     let seconds = (trail.len() - 1) as f32 / 60.;
     let velocity = [0, 1, 2].map(|lane| (last[lane] - first[lane]) / seconds);
     (velocity.iter().map(|value| value * value).sum::<f32>() < 100.).then_some(velocity)
@@ -410,7 +411,7 @@ fn hand_prop_of(pedestrian: &crate::living_world_pedestrian_entity::PedestrianCo
     if pedestrian.held_hand_prop.is_none() && !pending {
         return 0;
     }
-    pedestrian.hand_prop_attributes.as_ref().and_then(|attributes| attributes.collection_key()).unwrap_or(0)
+    pedestrian.hand_prop_attributes.as_ref().and_then(crate::attribute_runtime::AttributeRuntimeInstance::collection_key).unwrap_or(0)
 }
 
 /// M19: a puppet's prop thrown away on its owner's word (the puppet's own throws are held back).
@@ -503,7 +504,7 @@ fn entity_flags(pedestrian: &crate::living_world_pedestrian_entity::PedestrianCo
             entity_flags |= flags::STANDING_HIT;
         }
     }
-    entity_flags | (((pedestrian.collision_info.direction as u32 as u8) << flags::DIRECTION_SHIFT) & flags::DIRECTION_MASK)
+    entity_flags | (((pedestrian.collision_info.direction as u8) << flags::DIRECTION_SHIFT) & flags::DIRECTION_MASK)
 }
 
 impl<T, C> SelectedLiveSession<T, C> {
@@ -531,12 +532,11 @@ impl<T, C> SelectedLiveSession<T, C> {
         // M20: the run's lateness against its owner's punctual runs.
         let local = self.completed_frames;
         let difference = i64::from(local) - i64::from(tick);
-        let late = match coop.clocks.get_mut(&owner) {
-            Some(clock) => clock.late(difference, local),
-            None => {
-                coop.clocks.insert(owner, Clock::new(difference, local));
-                0
-            }
+        let late = if let Some(clock) = coop.clocks.get_mut(&owner) {
+            clock.late(difference, local)
+        } else {
+            coop.clocks.insert(owner, Clock::new(difference, local));
+            0
         };
         if !run.entities.is_empty() {
             coop.stats.late_samples += 1;
@@ -626,6 +626,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
             let old = coop.props.get(&prop.locator).map(|known| known.owner);
             if old != Some(Owner::Remote(owner)) {
+                #[expect(clippy::cast_possible_truncation, reason = "the trace names a prop by its locator's low 32 bits")]
                 ownership::decide(Kind::Prop, prop.locator as u32, old, Owner::Remote(owner), &format!("its skater touched it last (claim {})", prop.claim));
             }
             // The record keeps its sample count across samples (the convergence trace's
@@ -665,7 +666,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // Every player's tester from the facts (the same instant on every console: the
         // processed tick's), for the handoff rule; the local one among them, so the rule
         // never compares a live position with a two-second-old one.
-        let (peers, own_facts): (Vec<(u8, [f32; 4])>, Option<[f32; 4]>) = self
+        let (peers, own_facts) = self
             .career
             .as_ref()
             .map(|career| {
@@ -674,7 +675,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 let peers = frames.iter()
                     .filter(|frame| !frame.local && frame.tester_valid)
                     .filter_map(|frame| Some((u8::try_from(frame.player).ok()?, at(frame))))
-                    .collect();
+                    .collect::<Vec<_>>();
                 let own = frames.iter().find(|frame| frame.local && frame.tester_valid).map(at);
                 (peers, own)
             })
@@ -974,6 +975,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                             }
                             continue;
                         }
+                        #[expect(clippy::cast_possible_truncation, reason = "the trace names a prop by its locator's low 32 bits")]
                         ownership::decide(Kind::Prop, locator as u32, old, ownership::owner(Kind::Prop, Owner::Local), &format!("this console's skater touched it last (players {players:#b}{}, claim {claim})", if world_push { ", a car's or a pedestrian's push" } else { "" }));
                         object.coop_puppet = false;
                         coop.props.insert(locator, PropOwner { owner: Owner::Local, claim, touched: tick, sent: None, runs: 0, sampled: 0, moving: false, waited: 0 });
@@ -1110,7 +1112,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         // M16: as a skater's hit, the contact alone goes to the owner; nothing
                         // plays here until the owner's flags and graph state say so.
                         if let Some(drive) = pedestrian.puppet.as_mut() {
-                            drive.pending_contact = Some((CollisionForce::Knockdown as u32 as u8, CollisionDirection::Front as u32 as u8, [0., 0., 6.], [0., 0., 0.]));
+                            drive.pending_contact = Some((CollisionForce::Knockdown as u8, CollisionDirection::Front as u8, [0., 0., 6.], [0., 0., 0.]));
                         }
                         trace(format_args!("diagnostic: shoved puppet {id:08x} at {:.1} m: contact to its owner at {tick}, its word awaited", d2.max(0.).sqrt()));
                     } else if tick == at {
@@ -1280,7 +1282,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let graph = pedestrian.graph.current;
                         // M20: the intents its motion graph is given, sent by hash; named on a
                         // change and with a descriptor.
-                        let stage = pedestrian.intent_queue.as_ref().map(|queue| queue.active_intents()).unwrap_or_default();
+                        let stage = pedestrian.intent_queue.as_ref().map(crate::pedestrian_intent_packet::queue::IntentQueue::active_intents).unwrap_or_default();
                         let intents = if stage.is_empty() { 0 } else { crate::pedestrian_puppet::intents_hash(&stage) };
                         let hand_prop = hand_prop_of(pedestrian);
                         // M19: a hand prop taken or dropped is a descriptor's news, sent at once.
@@ -1288,6 +1290,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         let due = match tracked.sent {
                             None => true,
                             Some(last) => {
+                                #[expect(clippy::cast_precision_loss, reason = "ticks between two samples of a run")]
                                 let dt = tick.saturating_sub(last.tick) as f32 / 60.;
                                 let predicted = [last.position[0] + last.velocity[0] * dt, last.position[1] + last.velocity[1] * dt, last.position[2] + last.velocity[2] * dt];
                                 let off = (0..3).map(|lane| (position[lane] - predicted[lane]).powi(2)).sum::<f32>().sqrt();
@@ -1339,13 +1342,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                     }
                     // The handoffs still to say: the record names the new owner, with the
                     // descriptor so a console that never saw the entity spawns it.
-                    for (&wid, left) in coop.handoffs.iter_mut() {
+                    for (&wid, left) in &mut coop.handoffs {
                         *left -= 1;
                         let Some(tracked) = coop.entities.get(&wid) else { continue };
                         let Owner::Remote(slot) = tracked.owner else { continue };
                         let Some(pedestrian) = roster.get(tracked.entity) else { continue };
                         let Some(core) = pedestrian.core.as_ref() else { continue };
-                        let handoff_stage = pedestrian.intent_queue.as_ref().map(|queue| queue.active_intents()).unwrap_or_default();
+                        let handoff_stage = pedestrian.intent_queue.as_ref().map(crate::pedestrian_intent_packet::queue::IntentQueue::active_intents).unwrap_or_default();
                         let handoff_velocity = coop.own_trail.get(&tracked.entity).and_then(measured_velocity).unwrap_or([core.velocity[0], core.velocity[1], core.velocity[2]]);
                         let handoff_intents = if handoff_stage.is_empty() { 0 } else { crate::pedestrian_puppet::intents_hash(&handoff_stage) };
                         owned.push((-1., EntityState {
@@ -1394,7 +1397,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     let living = living_owner.lock().map_err(|_| "LivingWorld lock")?;
                     let objects = living.dmo_objects.as_deref().ok_or("DMO roster absent")?;
                     let ids = objects.ids();
-                    for (&locator, owner) in coop.props.iter_mut() {
+                    for (&locator, owner) in &mut coop.props {
                         if owner.owner != Owner::Local || run.props.len() >= stream::MOST_PROPS {
                             continue;
                         }
@@ -1438,6 +1441,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 stats.bytes += bytes.len() as u64;
                 stats.entities += included as u64;
                 stats.props += run.props.len() as u64;
+                #[expect(clippy::cast_precision_loss, reason = "the trace's counters as floats for its rates and means")]
                 if tick.saturating_sub(stats.since) >= MEASURE_TICKS {
                     let seconds = f64::from(tick.saturating_sub(stats.since)) / 60.;
                     let per_entity = if stats.entities == 0 { 0. } else { stats.bytes as f64 / seconds / (stats.entities as f64 / f64::from(stats.runs.max(1))) };

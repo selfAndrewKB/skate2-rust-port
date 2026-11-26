@@ -64,6 +64,7 @@ where N::Error:std::fmt::Debug {
             let Some((_point,position,orientation))=prop.prepare_pedestrian_spawn()? else{continue;};
             let offset=prop.pedestrian_spawn_offset.ok_or("Prop spawn offset absent")?;
             let source_key=prop.core.as_ref().ok_or("Prop core absent")?.entity_key;
+            #[expect(clippy::cast_possible_truncation, reason = "a count of live pedestrians, a few hundred at most")]
             let count=PedestrianCensusServices::<N>::count(self) as u32;
             // Co-op fork (M6): a prop's spawn point nearer another player is that player's.
             if crate::living_world_grind_services::census::pedestrian::nearer_a_peer(position,center,&census.peers){continue;}
@@ -167,7 +168,7 @@ impl SelectedRecipeFrame<'_> {
 
     /// Co-op fork (M6): the same spawn with the look given (the owner's model key and recipe
     /// id), so a puppet is its owner's copy, not the recipe manager's own draw.
-    #[expect(clippy::too_many_arguments, reason = "the census spawn's own list")]
+    #[expect(clippy::too_many_arguments, clippy::fn_params_excessive_bools, reason = "the census spawn's own list")]
     pub(crate) fn spawn_census_pedestrian_as(&self,world:&mut PhysicalAssemblyWorld,
         cvars:&InputCvarReferences,ground:&crate::static_ground_pool::StaticGroundPool,
         entity_key:u64,look:Option<(u64,u64)>,transform:crate::living_world_rain::geometry::Transform,initial:bool,

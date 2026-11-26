@@ -179,12 +179,14 @@ impl PuppetDrive {
 
     /// The share of a blend of `ticks` still to come at an age (the step on the arrival tick
     /// already moves one share of the way, so the walk never stops).
+    #[expect(clippy::cast_precision_loss, reason = "tick counts of a blend, far under 2^24")]
     fn remaining(age: u32, ticks: u32) -> f32 {
         1. - ((age + 1).min(ticks) as f32) / ticks as f32
     }
 
     /// How far into the new path at an age: a smoothstep, flat at both ends, so the speed is
     /// the old path's at the start and the new path's at the end.
+    #[expect(clippy::cast_precision_loss, reason = "tick counts of a blend, far under 2^24")]
     fn into_new_path(age: u32) -> f32 {
         let s = ((age + 1).min(POSITION_BLEND_TICKS) as f32) / POSITION_BLEND_TICKS as f32;
         if linear_blend() { s } else { s * s * (3. - 2. * s) }
@@ -207,6 +209,7 @@ impl PuppetDrive {
     /// M19: until M19 the step stood still on a sample's arrival tick and caught up over the
     /// next three (0, 0.7, 1.3 and 2 times the walk), and snapped back the whole coast when a
     /// sample was 72 ticks late: the stutter the player saw.
+    #[expect(clippy::cast_precision_loss, reason = "tick counts capped at the coast, far under 2^24")]
     pub(crate) fn step(&mut self, dt: f32) -> Transform {
         let coasted = self.age.min(COAST_TICKS) as f32 * dt;
         let sample_coasted = (self.age + self.late).min(COAST_TICKS) as f32 * dt;

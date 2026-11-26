@@ -59,7 +59,7 @@ impl super::SelectedRecipeFrame<'_> {
                     // While the puppet collides (a knockdown or a standing hit from the owner's
                     // flags) its own graph plays the collision, as M6 had it; the colliding
                     // state itself is never held.
-                    let held = entity.puppet.as_ref().filter(|drive| !colliding_now && was_colliding != Some(true))
+                    let held = entity.puppet.as_ref().filter(|_| !colliding_now && was_colliding != Some(true))
                         .and_then(|drive| drive.graph.filter(|state| !drive.unheld.contains(state)));
                     if entity.ai_bindings.is_some() {
                         match held {
@@ -488,15 +488,14 @@ impl super::SelectedRecipeFrame<'_> {
                 .get_mut(target.entity).ok_or("pedestrian current target disappeared")?;
             // Co-op fork (M6): a puppet's walk, run or stand is its owner's velocity; its
             // own intents only while it collides.
-            match entity.puppet.as_ref().filter(|_| !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref())) {
-                Some(_) => entity.update_puppet_intent()?,
-                None => {
-                    // M20: a colliding puppet runs its own intents; its owner's go in again after.
-                    if let Some(drive) = entity.puppet.as_mut() {
-                        drive.applied_intents = None;
-                    }
-                    entity.update_intent(&mesh, cvars, &mut HostReckoningNumeric)?
+            if entity.puppet.is_some() && !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref()) {
+                entity.update_puppet_intent()?;
+            } else {
+                // M20: a colliding puppet runs its own intents; its owner's go in again after.
+                if let Some(drive) = entity.puppet.as_mut() {
+                    drive.applied_intents = None;
                 }
+                entity.update_intent(&mesh, cvars, &mut HostReckoningNumeric)?;
             }
         }
         Ok(())
