@@ -10,9 +10,9 @@ reworded trace line breaks nothing. Two things are still read from prose, here a
 - upstream's own lines, whose wording is upstream's (`career graph … enter …`, `ai: …`,
   `diagnostic: …`): `UPSTREAM` patterns, the only prose read for a log of any age.
 
-A log with any `coop-event` line is read from its events alone (its prose is not matched), so
-an event and its legacy line are never both counted: a kind the tools read from a log of today
-needs its event from the game, under the same name and fields.
+Kind by kind: a kind the log has any `coop-event` of is read from its events alone (its legacy
+line is not matched), so an event and its legacy line are never both counted; a kind with no
+event in the log is read from its legacy line, so a kind the game does not emit yet still reads.
 
 Besides the records, the diagnostics that are searches over the prose by nature (a seat that went
 down, the career script's errors, the words that mark something unported) are here too, so the
@@ -151,17 +151,31 @@ def lines(path, stop=None):
         return []
 
 
+def event_kinds(path, stop=None):
+    """The kinds the log has structured records of."""
+    kinds = set()
+    for line in _lines(path, stop):
+        at = line.find(PREFIX)
+        if at >= 0:
+            try:
+                kinds.add(json.loads(line[at + len(PREFIX):]).get('e'))
+            except ValueError:
+                continue
+    return kinds
+
+
 def has_events(path, stop=None):
-    return any(line.startswith(PREFIX) or f' {PREFIX}' in line for line in _lines(path, stop))
+    return bool(event_kinds(path, stop))
 
 
 def read(path, kinds=None, stop=None):
-    """The log's records of `kinds` (all when None), in order: its events if it has any, else its
-    legacy lines; upstream's lines always. A line yields a record for every kind it matches.
-    `stop`: a line prefix; the log is read up to the first line that starts with it."""
-    structured = has_events(path, stop)
+    """The log's records of `kinds` (all when None), in order: each kind from its events where the
+    log has any of it, else from its legacy lines; upstream's lines always. A line yields a record
+    for every kind it matches. `stop`: a line prefix; the log is read up to the first line that
+    starts with it."""
+    structured = event_kinds(path, stop)
     active = [(kind, pattern, fields) for kind, (pattern, fields) in _COMPILED.items()
-              if (kinds is None or kind in kinds) and not (structured and kind in LEGACY)]
+              if (kinds is None or kind in kinds) and not (kind in structured and kind in LEGACY)]
     for line in _lines(path, stop):
         at = line.find(PREFIX)
         if at >= 0:

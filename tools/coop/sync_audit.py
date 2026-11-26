@@ -63,7 +63,7 @@ def audit(path_a, path_b):
         wids_b = {w for tt, w in b if tt == t}
         only_a += len(wids_a - wids_b)
         only_b += len(wids_b - wids_a)
-        for w in wids_a & wids_b:
+        for w in sorted(wids_a & wids_b):
             paired += 1
             ra, rb = a[(t, w)], b[(t, w)]
             if (ra['owner'] == 'own') == (rb['owner'] == 'own'):
