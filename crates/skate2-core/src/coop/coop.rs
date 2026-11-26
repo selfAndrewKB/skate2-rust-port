@@ -89,7 +89,7 @@ fn open_log() -> std::io::Result<std::fs::File> {
     std::fs::create_dir_all(&folder)?;
     let mut logs: Vec<std::path::PathBuf> = std::fs::read_dir(&folder)?
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.starts_with("coop-") && name.ends_with(".log")))
+        .filter(|path| path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.starts_with("coop-") && std::path::Path::new(name).extension().is_some_and(|extension| extension.eq_ignore_ascii_case("log"))))
         .collect();
     logs.sort();
     for old in logs.iter().take((logs.len() + 1).saturating_sub(KEPT_LOGS)) {

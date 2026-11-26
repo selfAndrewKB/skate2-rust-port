@@ -625,6 +625,7 @@ impl Impairment {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "the client thread's loop: sign-in, the send and receive turns and the meter, upstream's shape with the fork's channels")]
 fn run_client(server: &str, nickname: &str, game_version: &str, player_id: u64, commands: &Receiver<Command>, events: &Sender<ClientEvent>, meter: Arc<Mutex<ChannelBytes>>) -> Result<(), String> {
     let addr = resolve(server)?;
     let socket = UdpSocket::bind(("0.0.0.0", 0)).map_err(|error| error.to_string())?;

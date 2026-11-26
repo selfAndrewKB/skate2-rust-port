@@ -81,7 +81,7 @@ impl OnlineConfig {
         {
             return id;
         }
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |time| time.as_nanos() as u64);
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |time| u64::try_from(time.as_nanos() & u128::from(u64::MAX)).unwrap_or(0));
         let id = (nanos ^ u64::from(std::process::id()).rotate_left(40) ^ 0x9e37_79b9_7f4a_7c15).max(1);
         self.player_id = format!("{id:016x}");
         if let Err(error) = self.save() {
@@ -165,7 +165,7 @@ fn parse(text: &str) -> Option<OnlineConfig> {
         } else if key == "show_ghost_players" && matches!(reader.peek()?, b't' | b'f') {
             config.show_ghost_players = reader.boolean()?;
         } else if key == "player_id" && reader.peek()? == b'"' {
-            config.player_id = reader.string()?.trim().to_owned();
+            reader.string()?.trim().clone_into(&mut config.player_id);
         } else if key == "skate_during_turn_wait" && matches!(reader.peek()?, b't' | b'f') {
             config.skate_during_turn_wait = reader.boolean()?;
         } else {
