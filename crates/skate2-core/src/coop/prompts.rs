@@ -35,6 +35,7 @@ pub enum PromptAnswer {
 }
 
 impl PromptAnswer {
+    #[must_use]
     pub fn to_wire(self) -> (u8, i32) {
         match self {
             Self::Yes => (1, 0),
@@ -52,6 +53,7 @@ impl PromptAnswer {
         }
     }
 
+    #[must_use]
     pub fn from_wire(kind: u8, value: i32) -> Option<Self> {
         Some(match kind {
             1 => Self::Yes,
@@ -71,6 +73,7 @@ impl PromptAnswer {
     }
 
     /// The bench's names (`SKATE2_DIAGNOSTIC_COOP_PROMPT`).
+    #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         Some(match text.trim() {
             "yes" => Self::Yes,
@@ -88,10 +91,8 @@ impl PromptAnswer {
                     Self::Option(option.parse().ok()?)
                 } else if let Some(choice) = other.strip_prefix("choice:") {
                     Self::SignUpChoice(Some(choice.parse().ok()?))
-                } else if let Some(service) = other.strip_prefix("service:") {
-                    Self::Service(service.parse().ok()?)
                 } else {
-                    return None;
+                    Self::Service(other.strip_prefix("service:")?.parse().ok()?)
                 }
             }
         })

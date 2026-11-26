@@ -115,6 +115,7 @@ pub(crate) trait PedestrianGraphBackend {
 #[derive(Default)]
 pub(crate) struct PedestrianGraphBehaviours { active: Vec<u16> }
 impl PedestrianGraphBehaviours {
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool { self.active.is_empty() }
 }
 
@@ -128,7 +129,7 @@ pub(crate) struct GeneratedDeclarations {
     pub(crate) active_capacity: usize,
 }
 impl PedestrianGraph {
-    /// Co-op fork (M21): every active behaviour ended, the last first (EndAllBehaviours82934830's
+    /// Co-op fork (M21): every active behaviour ended, the last first (`EndAllBehaviours82934830`'s
     /// order), and the graph back to its start (no current state, no state active). A held
     /// update that failed partway (a state a puppet cannot enter: the field test's
     /// `WaitForTakedownDecision`) left its states and behaviours half applied, and the
@@ -305,15 +306,12 @@ impl PedestrianGraph {
             let section = declarations.states[usize::from(state)].behaviours;
             for occurrence in section.index..section.index + section.count {
                 if !backend.enabled(occurrence)? { continue; }
-                let position = match instances.active.binary_search(&occurrence) {
-                    Err(position) => position,
-                    Ok(_) => {
-                        // Co-op fork, diagnostic (M20): the behaviour still active as its state
-                        // is entered again.
-                        crate::coop::trace(format_args!("pedestrian graph: state {state} ({}) entered with its behaviour {occurrence} ({}) still active (current {}, active {:?})",
-                            declarations.states[usize::from(state)].name, declarations.behaviours[usize::from(occurrence)].name, self.current, instances.active));
-                        return Err(Error::InvalidActiveSet);
-                    }
+                let Err(position) = instances.active.binary_search(&occurrence) else {
+                    // Co-op fork, diagnostic (M20): the behaviour still active as its state
+                    // is entered again.
+                    crate::coop::trace(format_args!("pedestrian graph: state {state} ({}) entered with its behaviour {occurrence} ({}) still active (current {}, active {:?})",
+                        declarations.states[usize::from(state)].name, declarations.behaviours[usize::from(occurrence)].name, self.current, instances.active));
+                    return Err(Error::InvalidActiveSet);
                 };
                 if instances.active.len() == declarations.active_capacity { return Err(Error::Capacity); }
                 backend.create_instance(self, occurrence)?;

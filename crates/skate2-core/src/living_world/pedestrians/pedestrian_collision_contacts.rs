@@ -356,7 +356,7 @@ impl crate::living_world_pedestrian_entity::PedestrianConstruction {
         // owner's flags never confirmed it (63 corrections against 38 confirmations in the
         // field test).
         if let Some(puppet) = self.puppet.as_mut() {
-            puppet.pending_contact = Some((force as u32 as u8, direction as u32 as u8,
+            puppet.pending_contact = Some((force as u8, direction as u8,
                 [velocity[0], velocity[1], velocity[2]], [omega[0], omega[1], omega[2]]));
             return Ok(());
         }

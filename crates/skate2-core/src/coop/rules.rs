@@ -31,6 +31,7 @@ pub enum Rule {
 impl Rule {
     /// How many of `copies` player copies must be complete for the activity to be: every one,
     /// or the first. A completion is heard exactly once, when the count reaches this.
+    #[must_use]
     pub fn threshold(self, copies: usize) -> usize {
         match self {
             Self::Everyone | Self::Compete { every_human_must_win: true } => copies,
@@ -39,11 +40,13 @@ impl Rule {
     }
 
     /// Whether an activity with `complete` of `copies` player copies complete is complete.
+    #[must_use]
     pub fn completes(self, complete: usize, copies: usize) -> bool {
         complete >= self.threshold(copies)
     }
 
     /// Whether an activity with `failed` of `copies` player copies failed is failed.
+    #[must_use]
     pub fn fails(self, failed: usize, copies: usize) -> bool {
         match self {
             Self::Everyone | Self::Compete { every_human_must_win: true } => failed >= 1,
@@ -52,6 +55,7 @@ impl Rule {
     }
 
     /// Whether the copies' points add up (each copy's points objective reads the sum).
+    #[must_use]
     pub fn points_combined(self) -> bool {
         matches!(self, Self::Combined)
     }
@@ -119,6 +123,7 @@ impl RuleTable {
     /// result wins; best trick (8), Own the Spot (9) and Hall of Meat (31, 33) the best single
     /// run; the rest (go-to, follow, favours, photo, film, services) anyone's. The opening
     /// missions (`m_1a_*`) stay everyone's by prefix, whatever their family says.
+    #[must_use]
     pub fn builtin() -> Self {
         let compete = Rule::Compete { every_human_must_win: false };
         let families = [
@@ -156,6 +161,7 @@ impl RuleTable {
     /// `SKATE2_COOP_RULES=<file>`; the built-in table when neither exists. A file that does not
     /// parse is reported and the built-in table used, so a typo never splits the consoles
     /// silently.
+    #[must_use]
     pub fn load() -> (Self, Option<String>) {
         let path = match std::env::var_os("SKATE2_COOP_RULES") {
             Some(path) => std::path::PathBuf::from(path),
@@ -178,6 +184,7 @@ impl RuleTable {
     }
 
     /// The rule for a challenge: by key, then name prefix, then family, then the default.
+    #[must_use]
     pub fn rule_for(&self, key: u64, name: &str, family: i32) -> Rule {
         if let Some(&rule) = self.challenges.get(&key) {
             return rule;
@@ -189,6 +196,7 @@ impl RuleTable {
     }
 
     /// One number every console can compare in its log.
+    #[must_use]
     pub fn hash(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         (&self.default, &self.families, &self.prefixes, &self.challenges).hash(&mut hasher);
@@ -197,6 +205,10 @@ impl RuleTable {
 
     /// `{"default": "Anyone", "families": {"34": "Everyone"}, "prefixes": {"m_1a_": "Everyone"},
     /// "challenges": {"0123456789abcdef": "Everyone"}}`; every key is optional.
+    ///
+    /// # Errors
+    ///
+    /// The text is not a JSON object, or has an unknown field, an unknown rule or a malformed key.
     pub fn parse(text: &str) -> Result<Self, String> {
         let value = json::parse(text)?;
         let json::Value::Object(fields) = value else { return Err("the rules file is not an object".into()) };
@@ -208,7 +220,7 @@ impl RuleTable {
         };
         let mut table = Self::builtin();
         table.prefixes.clear();
-        table.source = "file".to_owned();
+        "file".clone_into(&mut table.source);
         for (key, value) in &fields {
             match key.as_str() {
                 "default" => table.default = rule_of(value, "default")?,
@@ -287,6 +299,11 @@ pub mod json {
         Null,
     }
 
+    /// The JSON value the whole text holds.
+    ///
+    /// # Errors
+    ///
+    /// The text is not well-formed JSON, or has text after the value.
     pub fn parse(text: &str) -> Result<Value, String> {
         let mut p = Parser { bytes: text.as_bytes(), at: 0 };
         let value = p.value()?;

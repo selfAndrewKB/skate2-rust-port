@@ -38,6 +38,7 @@ pub enum Kind {
 
 impl Kind {
     /// The kinds the run's entity list carries (a prop has its own list).
+    #[must_use]
     pub fn from_wire(kind: u8) -> Option<Self> {
         match kind {
             0 => Some(Self::Pedestrian),
@@ -65,16 +66,17 @@ pub enum Rule {
 }
 
 /// The rule for a kind. One table, read here and nowhere else.
+#[must_use]
 pub fn rule(kind: Kind) -> Rule {
     match kind {
-        Kind::Pedestrian => Rule::Spawner,
-        Kind::StoryCharacter => Rule::Spawner,
+        Kind::Pedestrian | Kind::StoryCharacter => Rule::Spawner,
         Kind::SecurityGuard => Rule::Chasee,
         Kind::Prop => Rule::LastToucher,
     }
 }
 
 /// Whether a claim of `claim` by `slot` beats the known one.
+#[must_use]
 pub fn claim_wins(known: Option<(u32, u8)>, claim: u32, slot: u8) -> bool {
     match known {
         None => true,
@@ -83,6 +85,7 @@ pub fn claim_wins(known: Option<(u32, u8)>, claim: u32, slot: u8) -> bool {
 }
 
 /// The owner an entity gets under its kind's rule.
+#[must_use]
 pub fn owner(kind: Kind, spawner: Owner) -> Owner {
     match rule(kind) {
         Rule::Spawner | Rule::Chasee | Rule::LastToucher => spawner,
@@ -91,6 +94,7 @@ pub fn owner(kind: Kind, spawner: Owner) -> Owner {
 }
 
 /// Whether the owner streams a kind to the others.
+#[must_use]
 pub fn streamed(kind: Kind) -> bool {
     match rule(kind) {
         Rule::Spawner | Rule::Chasee | Rule::LastToucher => true,
@@ -120,6 +124,7 @@ mod tests {
 }
 
 /// The funnel: every ownership decision passes here and is traced.
+#[expect(clippy::must_use_candidate, reason = "some callers pass a decision through only for its trace and keep the owner elsewhere")]
 pub fn decide(kind: Kind, id: u32, old: Option<Owner>, new: Owner, reason: &str) -> Owner {
     if old != Some(new) {
         trace(format_args!("ownership: {kind:?} {id:08x} {old:?} -> {new:?} ({reason})"));

@@ -332,6 +332,7 @@ impl PedestrianCensusFrame<'_> {
                         let delta: [f32; 4] = std::array::from_fn(|i| peer[i] - entry.position[i]);
                         (0..3).map(|i| delta[i] * delta[i]).sum::<f32>() < radius * radius
                     });
+                #[expect(clippy::neg_cmp_op_on_partial_ord, reason = "the original's comparisons, under which a NaN distance culls")]
                 if !within_a_peer
                     && if outside {
                         !(distance < 0.)

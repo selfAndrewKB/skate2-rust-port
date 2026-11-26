@@ -83,6 +83,7 @@ const FRAME_RATE: Rate = Rate { per_second: 90.0, burst: 60.0 };
 const WORLD_RATE: Rate = Rate { per_second: 90.0, burst: 60.0 };
 /// Co-op fork (M10): the owned skaters' runs a campaign member may send: up to `owned::MOST`
 /// streams at the replay frames' rate.
+#[expect(clippy::cast_precision_loss, reason = "`owned::MOST` is a handful of streams")]
 const OWNED_RATE: Rate = Rate { per_second: 90.0 * owned::MOST as f32, burst: 60.0 * owned::MOST as f32 };
 /// The reliable messages a connection may send: the game's facts every tick and a few others. A
 /// connection sending more is not running the game and is dropped (`leave::KICKED_FOR_FLOOD`).
@@ -242,6 +243,10 @@ enum GamePhase {
     NextChallenge { participants: Vec<u64>, until: Instant },
 }
 
+/// A campaign save as the server holds it: the member (by slot), the session and round tick it
+/// was made at, the hash, the bytes.
+type CampaignSave = (u8, u32, u32, u64, Arc<Vec<u8>>);
+
 /// Co-op fork: a campaign's state on the server (`docs/coop/plan/topics/progression.md`): the
 /// members whose career is loaded, the round once started, and the newest progression save a
 /// member autosaved, with every member's last hash so the log says whether they agree.
@@ -250,9 +255,8 @@ struct Campaign {
     loaded: BTreeSet<u64>,
     /// The session the campaign round started as.
     started: Option<u32>,
-    /// The newest save: the member (by slot), the session and round tick it was made at, the
-    /// hash, the bytes. Newest by session, then tick; a save read from the file is session 0.
-    save: Option<(u8, u32, u32, u64, Arc<Vec<u8>>)>,
+    /// The newest save. Newest by session, then tick; a save read from the file is session 0.
+    save: Option<CampaignSave>,
     /// Each member's last save: tick and hash.
     saves_seen: BTreeMap<u64, (u32, u64)>,
 }
@@ -1177,26 +1181,23 @@ impl ServerCore {
                 campaign.loaded.insert(user_id);
                 let total = game.members.len();
                 let loaded = campaign.loaded.len();
-                match campaign.started {
-                    Some(session) => {
-                        // Co-op fork (M8): a member loaded after the round started: every
-                        // member reloads from the newest save and the round restarts with
-                        // everyone once every member has loaded again.
-                        (self.log)(&format!("game {game_id}: {name} loaded its career after campaign round {session} started: every other member reloads from the newest save and the round restarts"));
-                        campaign.started = None;
-                        campaign.loaded.clear();
-                        campaign.loaded.insert(user_id);
-                        let save = campaign.save.clone();
-                        if let Some((owner, save_session, tick, hash, data)) = save {
-                            (self.log)(&format!("game {game_id}: the campaign save (session {save_session} tick {tick}, {} B, hash {hash:016x}) sent to every other member for the reload", data.len()));
-                            self.broadcast(game_id, &ServerMessage::CampaignSave { slot: owner, session: save_session, tick, hash, data: data.to_vec() }, Some(user_id));
-                        }
-                        self.broadcast(game_id, &ServerMessage::CampaignReload { session }, Some(user_id));
+                if let Some(session) = campaign.started {
+                    // Co-op fork (M8): a member loaded after the round started: every
+                    // member reloads from the newest save and the round restarts with
+                    // everyone once every member has loaded again.
+                    (self.log)(&format!("game {game_id}: {name} loaded its career after campaign round {session} started: every other member reloads from the newest save and the round restarts"));
+                    campaign.started = None;
+                    campaign.loaded.clear();
+                    campaign.loaded.insert(user_id);
+                    let save = campaign.save.clone();
+                    if let Some((owner, save_session, tick, hash, data)) = save {
+                        (self.log)(&format!("game {game_id}: the campaign save (session {save_session} tick {tick}, {} B, hash {hash:016x}) sent to every other member for the reload", data.len()));
+                        self.broadcast(game_id, &ServerMessage::CampaignSave { slot: owner, session: save_session, tick, hash, data: data.to_vec() }, Some(user_id));
                     }
-                    None => {
-                        (self.log)(&format!("game {game_id}: {name} loaded its career ({loaded} of {total})"));
-                        self.start_campaign(game_id, false);
-                    }
+                    self.broadcast(game_id, &ServerMessage::CampaignReload { session }, Some(user_id));
+                } else {
+                    (self.log)(&format!("game {game_id}: {name} loaded its career ({loaded} of {total})"));
+                    self.start_campaign(game_id, false);
                 }
                 true
             }

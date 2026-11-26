@@ -441,6 +441,7 @@ pub(crate) fn diagnostic_entries(world: &World) -> Vec<(String, [f32; 3])> {
         .flatten()
         .map(|&(activity, bounds)| {
             let name = world.activities.activities.get(activity).map(|a| a.name.clone()).unwrap_or_default();
+            #[expect(clippy::manual_midpoint, reason = "the bench's centre as it has always been computed; `f32::midpoint` is not guaranteed bit-identical")]
             let centre = [0, 1, 2].map(|i| (bounds.minimum[i] + bounds.maximum[i]) * 0.5);
             (name, centre)
         })

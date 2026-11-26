@@ -85,21 +85,18 @@ impl Pace {
         }
         let ping_ms = self.ping_ms.unwrap_or(0.0);
         self.paced = lead.is_some();
-        let target = (ping_ms * 60.0 / 1000.0 + 0.5).max(LEAST_TARGET).min(MOST_TARGET);
-        let (ratio, hz) = match lead {
-            Some(lead) => {
-                #[expect(clippy::cast_precision_loss, reason = "a lead of facts is far under 2^24")]
-                let free = MAX_SYNC_COMMANDS - lead as f32;
-                let ratio = free / target;
-                self.rate = (1.0 - SAMPLE_WEIGHT) * self.rate + SAMPLE_WEIGHT * ratio.clamp(SLOWEST, FASTEST);
-                #[expect(clippy::cast_possible_truncation, reason = "the rate stays within 0.96..1.04")]
-                let hz = (self.rate * 60.0 + 0.5) as i32;
-                (ratio, hz)
-            }
-            None => {
-                self.rate = 1.0;
-                (1.0, BASE_HZ)
-            }
+        let target = (ping_ms * 60.0 / 1000.0 + 0.5).clamp(LEAST_TARGET, MOST_TARGET);
+        let (ratio, hz) = if let Some(lead) = lead {
+            #[expect(clippy::cast_precision_loss, reason = "a lead of facts is far under 2^24")]
+            let free = MAX_SYNC_COMMANDS - lead as f32;
+            let ratio = free / target;
+            self.rate = (1.0 - SAMPLE_WEIGHT) * self.rate + SAMPLE_WEIGHT * ratio.clamp(SLOWEST, FASTEST);
+            #[expect(clippy::cast_possible_truncation, reason = "the rate stays within 0.96..1.04")]
+            let hz = (self.rate * 60.0 + 0.5) as i32;
+            (ratio, hz)
+        } else {
+            self.rate = 1.0;
+            (1.0, BASE_HZ)
         };
         (hz != self.hz).then(|| {
             self.hz = hz;

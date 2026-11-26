@@ -201,13 +201,13 @@ impl CollidingBehaviour {
                 let state = match instance.state { CollisionState::Standing => "standing", CollisionState::Falling => "falling", CollisionState::Recovering => "recovering", CollisionState::Complete => "complete" };
                 let id = packet(entity).ok();
                 let done = id.and_then(|id| complete(entity, id).ok());
-                let stage = id.and_then(|id| entity.intent_queue.as_ref()?.packet(id).ok()).map(|p| (p.active_stage_number(), p.state as u32));
+                let active_stage = id.and_then(|id| entity.intent_queue.as_ref()?.packet(id).ok()).map(|p| (p.active_stage_number(), p.state as u32));
                 let collision = entity.collision.as_ref().unwrap();
                 let animation = entity.animation.as_ref();
                 let major = animation.map(|a| (a.ai_input.major_intent_complete, a.motion_intents.valid, a.has_current_animation(), a.frame.offset_time));
                 let motion = animation.and_then(|a| a.motion.as_ref()).map(|m| (m.current, m.delegate.declarations().states.get(usize::from(m.current)).map_or("?", |st| st.name), m.last));
                 let losim = entity.core.as_ref().map(|c| c.current_losim);
-                crate::coop::trace(format_args!("puppet entity {:#x} colliding: {state}, timer {:.2}, required {}, forced {}, packet complete {done:?}, packet (stage, state) {stage:?}, (major complete, intents valid, has animation, offset) {major:?}, motion (current, name, last) {motion:?}, losim {losim:?}, flags1 {:#x}", entity.id, instance.recovery_timer, collision.required_to_begin_colliding, collision.forced_to_recover, entity.state.as_ref().map_or(0, |st| st.flags[1])));
+                crate::coop::trace(format_args!("puppet entity {:#x} colliding: {state}, timer {:.2}, required {}, forced {}, packet complete {done:?}, packet (stage, state) {active_stage:?}, (major complete, intents valid, has animation, offset) {major:?}, motion (current, name, last) {motion:?}, losim {losim:?}, flags1 {:#x}", entity.id, instance.recovery_timer, collision.required_to_begin_colliding, collision.forced_to_recover, entity.state.as_ref().map_or(0, |st| st.flags[1])));
             }
         }
         match instance.state {

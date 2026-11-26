@@ -241,15 +241,12 @@ impl<K> PedestrianMotionDelegate<K> {
             let section = declarations.states[usize::from(state)].behaviours;
             for occurrence in section.index..section.index + section.count {
                 if !backend.enabled(occurrence)? { continue; }
-                let position = match self.active.binary_search_by_key(&occurrence, |x| x.occurrence) {
-                    Err(position) => position,
-                    Ok(_) => {
-                        // Co-op fork, diagnostic (M20): the behaviour still active as its state
-                        // is entered again.
-                        crate::coop::trace(format_args!("pedestrian motion graph: state {state} ({}) entered with its behaviour {occurrence} still active (active {:?})",
-                            declarations.states[usize::from(state)].name, self.active.iter().map(|active| active.occurrence).collect::<Vec<_>>()));
-                        return Err(Error::InvalidActiveSet);
-                    }
+                let Err(position) = self.active.binary_search_by_key(&occurrence, |x| x.occurrence) else {
+                    // Co-op fork, diagnostic (M20): the behaviour still active as its state
+                    // is entered again.
+                    crate::coop::trace(format_args!("pedestrian motion graph: state {state} ({}) entered with its behaviour {occurrence} still active (active {:?})",
+                        declarations.states[usize::from(state)].name, self.active.iter().map(|active| active.occurrence).collect::<Vec<_>>()));
+                    return Err(Error::InvalidActiveSet);
                 };
                 if self.active.len() == declarations.active_capacity { return Err(Error::Capacity); }
                 let instance = backend.create_instance(occurrence)?;
