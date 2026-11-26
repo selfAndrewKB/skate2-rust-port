@@ -214,7 +214,7 @@ fn get_skater_count(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R 
     if let Some(campaign) = world.coop.as_ref() {
         // Co-op fork: the scripts' view is the career's: one human and this console's AI rows.
         let humans = i32::try_from(campaign.seats).unwrap_or(1);
-        let ai = (humans..9).filter(|&slot| crate::ai::skater_manager::player_type::is_ai(player_type(world, slot).cast_unsigned())).count();
+        let ai = (humans..9).filter(|&slot| crate::ai::skater_manager::player_type::is_ai(u32::from_ne_bytes(player_type(world, slot).to_ne_bytes()))).count();
         return Ok(vec![int(1 + i32::try_from(ai).unwrap_or(0))]);
     }
     Ok(vec![int(backend(world).map_or(0, PlayersBackEnd::num_players))])

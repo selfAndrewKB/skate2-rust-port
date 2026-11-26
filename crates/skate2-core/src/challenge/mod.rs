@@ -59,7 +59,7 @@ pub(crate) fn any_player_chased(world: &system::World) -> bool {
     if world.coop.is_some() && !world.skaters.is_empty() {
         world.skaters.iter().any(|frame| frame.being_chased)
     } else {
-        world.characters.facts().is_some_and(|facts| facts.chase_is_on())
+        world.characters.facts().is_some_and(characters::LivingWorldFacts::chase_is_on)
     }
 }
 

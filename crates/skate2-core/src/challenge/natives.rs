@@ -691,7 +691,7 @@ fn make_objectives_helper(world: &mut World, call: &NativeCall, name: &str) -> R
             super::objectives::add_objective(world, group, objective);
         }
         if points >= 0 {
-            super::objectives::add_points_objective(world, group, points.cast_unsigned());
+            super::objectives::add_points_objective(world, group, u32::from_ne_bytes(points.to_ne_bytes()));
         }
         if let Some(unique_trick_group) = unique_trick_group
             && let Some(i) = world.objectives.group_index(group)
@@ -771,7 +771,7 @@ fn objectives_change_points_requirement(_: &mut Lua<World>, world: &mut World, c
     let points = get_int_or(call, 1, 0);
     for group in objective_groups(world, call.arg(0)) {
         if let Some(g) = world.objectives.group_index(group) {
-            world.objectives.groups[g].points_requirement = points.cast_unsigned();
+            world.objectives.groups[g].points_requirement = u32::from_ne_bytes(points.to_ne_bytes());
         }
     }
     none()
@@ -863,7 +863,7 @@ fn objectives_get_highlight_definition(_: &mut Lua<World>, world: &mut World, ca
 fn objectives_add_points_objective(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) -> R {
     objective_group(world, call.arg(0)).ok_or_else(|| lua.error("Objectives.AddPointsObjective: expected an objective group".to_owned()))?;
     for group in objective_groups(world, call.arg(0)) {
-        super::objectives::add_points_objective(world, group, get_int(call, 1).cast_unsigned());
+        super::objectives::add_points_objective(world, group, u32::from_ne_bytes(get_int(call, 1).to_ne_bytes()));
     }
     none()
 }

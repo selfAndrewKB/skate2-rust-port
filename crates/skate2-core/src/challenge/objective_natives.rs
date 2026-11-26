@@ -261,7 +261,7 @@ fn get_sequence_points(_: &mut Lua<World>, world: &mut World, _: &NativeCall) ->
 /// Co-op fork (M7): under `Combined` every copy reads the copies' sum, so the players' points
 /// add up toward one requirement and the copies complete together.
 fn get_accumulated_points(_: &mut Lua<World>, world: &mut World, _: &NativeCall) -> R {
-    Ok(vec![int(combined_points(world).cast_signed())])
+    Ok(vec![int(i32::from_ne_bytes(combined_points(world).to_ne_bytes()))])
 }
 
 /// The closure objective's points, or under `Combined` the sum over every player's copy of it.
@@ -272,13 +272,12 @@ fn combined_points(world: &mut World) -> u32 {
     let own = o.total_points;
     let Some(gi) = world.objectives.group_index(closure.group) else { return own };
     let activity = world.objectives.groups[gi].activity;
-    let combined = match world.objectives.groups[gi].points_combined {
-        Some(combined) => combined,
-        None => {
-            let combined = crate::challenge::coop_rule(world, activity).is_some_and(|(rule, _, _)| rule.points_combined());
-            world.objectives.groups[gi].points_combined = Some(combined);
-            combined
-        }
+    let combined = if let Some(combined) = world.objectives.groups[gi].points_combined {
+        combined
+    } else {
+        let combined = crate::challenge::coop_rule(world, activity).is_some_and(|(rule, _, _)| rule.points_combined());
+        world.objectives.groups[gi].points_combined = Some(combined);
+        combined
     };
     if !combined {
         return own;

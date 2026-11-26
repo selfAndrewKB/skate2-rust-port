@@ -1312,6 +1312,7 @@ impl ChallengeSystem {
 
     /// Co-op fork (M8): the main challenge's key and the name of its graph's current state, for
     /// the bench's win that follows the mission's own `challenge_running`.
+    #[must_use]
     pub fn main_challenge_key_and_state(&self) -> Option<(u64, &str)> {
         let main = self.world.activities.main?;
         let graph = self.world.activities.graph(main);
@@ -1674,18 +1675,21 @@ impl ChallengeSystem {
     }
 
     /// Co-op fork, for the bench: every sign-up box, with its activity's name and centre.
+    #[must_use]
     pub fn diagnostic_sign_up_entries(&self) -> Vec<(String, [f32; 3])> {
         super::signup::diagnostic_entries(&self.world)
     }
 
     /// Co-op fork, for the bench: each skater frame the scripts saw this tick: player, local,
     /// tester validity and base.
+    #[must_use]
     pub fn diagnostic_skater_frames(&self) -> Vec<(i32, bool, bool, [f32; 3])> {
         self.world.skaters.iter().map(|frame| (frame.player, frame.local, frame.tester_valid, frame.tester_base)).collect()
     }
 
     /// Co-op fork, for the bench: every objective group's player and its objectives' trigger
     /// volume ids, to find where a go-to mission wants the skaters.
+    #[must_use]
     pub fn diagnostic_objective_volumes(&self) -> Vec<(i32, u64, Vec<u64>, Vec<String>)> {
         self.world
             .objectives
