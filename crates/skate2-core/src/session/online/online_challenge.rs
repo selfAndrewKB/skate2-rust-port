@@ -117,6 +117,16 @@ struct Spot {
     hidden: bool,
 }
 
+/// Co-op fork (M23): the tick a difference found at checkpoint `tick` dumps its parts' fields
+/// at: the next multiple of [`SYNC_DUMP_GRID`] at least a grid past it, which every console
+/// reaches after hearing of the difference unless its round trails by more than that.
+const fn sync_dump_tick(tick: u32) -> u32 {
+    (tick / SYNC_DUMP_GRID + 2) * SYNC_DUMP_GRID
+}
+
+/// Co-op fork (M23): the grid of ticks field dumps fall on.
+const SYNC_DUMP_GRID: u32 = 300;
+
 fn distance_xz(root: [f32; 3], xz: [f32; 2]) -> f32 {
     let (dx, dz) = (root[0] - xz[0], root[2] - xz[1]);
     (dx * dx + dz * dz).sqrt()
@@ -355,6 +365,10 @@ pub(super) struct Round {
     diagnostic_entered: Vec<(u64, u32)>,
     /// `SKATE2_TRACE_ONLINE_INPUTS`: a running hash of the ticks' frames.
     input_hash: u64,
+    /// Co-op fork (M23): the campaign round's sync check (`crate::coop::sync_check`) and the
+    /// tick whose field dump a difference asked for.
+    sync_check: crate::coop::sync_check::SyncCheck,
+    sync_dump_at: Option<(u32, u8)>,
     /// The scenes' and speech lines' events this console saw, numbered (`Presented`), until a
     /// tick delivers them, each with whether this console announced it while leading; the
     /// counts seen and delivered (delivered alike on every console).
@@ -441,6 +455,8 @@ impl Round {
             diagnostic_voted: false,
             diagnostic_entered: Vec::new(),
             input_hash: 0,
+            sync_check: crate::coop::sync_check::SyncCheck::default(),
+            sync_dump_at: None,
             presentation_log: Vec::new(),
             nis_seen: 0,
             speech_seen: BTreeMap::new(),
@@ -804,6 +820,9 @@ impl Round {
                 self.outcomes_pending.retain(|outcome| outcome.seq > applied);
             }
         }
+        if self.campaign {
+            self.compare_checks(&notes);
+        }
         let notes: Vec<FactsNotes> = notes.into_iter().map(|(_, note)| note).collect();
         for note in &notes {
             for &(voter, score) in &note.votes {
@@ -868,6 +887,50 @@ impl Round {
         self.processed += 1;
         self.ticks += 1;
         Some((frames, disconnects, own, presented, prompts, outcomes))
+    }
+
+    /// Co-op fork (M23): the other players' round checks that came with this tick's facts,
+    /// against this console's own record of the ticks they name. A first difference with a
+    /// player prints this console's whole parts of the ticks around it and asks for the parts'
+    /// field dump at a tick every console reaches alike ([`sync_dump_tick`]).
+    fn compare_checks(&mut self, notes: &[(i32, FactsNotes)]) {
+        use crate::coop::sync_check::{Compared, part_names};
+        for (player, note) in notes {
+            let Some(check) = note.check.filter(|_| *player != self.local) else { continue };
+            let Some(&user_id) = usize::try_from(*player).ok().and_then(|index| self.players.get(index)) else { continue };
+            match self.sync_check.compare(user_id, check.tick, check.parts) {
+                Compared::Agrees | Compared::StillDiffers { .. } => {}
+                Compared::Unknown => crate::coop::trace(format_args!("sync check of player {player} at tick {}: no record of the tick here", check.tick)),
+                Compared::Differs { mask, first } => {
+                    let ours = self.sync_check.parts_at(check.tick).unwrap_or_default();
+                    crate::coop::trace(format_args!(
+                        "sync check: player {player} differs at tick {} in {} ({}; ours {:08x?}, theirs {:04x?})",
+                        check.tick,
+                        part_names(mask),
+                        if first { "the first difference" } else { "after agreeing again" },
+                        ours,
+                        check.parts
+                    ));
+                    for (tick, parts) in self.sync_check.kept_ticks() {
+                        crate::coop::trace(format_args!("sync parts @{tick}: {parts:08x?}"));
+                    }
+                    if self.sync_dump_at.is_none() {
+                        self.sync_dump_at = Some((sync_dump_tick(check.tick), mask));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Co-op fork (M23): each player's sync checks this round, for the trace.
+    fn trace_sync_standings(&self) {
+        if !self.campaign {
+            return;
+        }
+        for (user_id, checked, differed, first) in self.sync_check.standings() {
+            let first = first.map_or_else(|| "none".to_owned(), |(tick, mask)| format!("tick {tick} in {}", crate::coop::sync_check::part_names(mask)));
+            crate::coop::trace(format_args!("sync check with {user_id:016x}: {checked} checks, {differed} differed, first difference {first}"));
+        }
     }
 
     /// The players pacing the next tick, after the challenge ran this one. A player who starts
@@ -1268,6 +1331,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         career.nis.set_skip_blocked(true);
         career.prompt_notes_on = true;
         self.retire_campaign_notice();
+        if let Some(previous) = self.online.round.as_ref() {
+            previous.trace_sync_standings();
+        }
         self.online.round = Some(round);
         self.online.campaign_hold = false;
         crate::coop::trace(format_args!(
@@ -1393,6 +1459,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     pub(super) fn end_online_round(&mut self) -> Result<(), SelectedLiveError> {
         self.retire_campaign_notice();
         let Some(round) = self.online.round.take() else { return Ok(()) };
+        round.trace_sync_standings();
         self.end_campaign_ai_streams();
         let (ticks, bytes) = round.facts_sent;
         trace(format_args!("facts sent: {ticks} of {} ticks, {bytes} bytes", round.ticks));
@@ -1735,6 +1802,49 @@ impl<T, C> SelectedLiveSession<T, C> {
 
     /// Co-op fork (M22): one simulation tick of a campaign round's pace and stall notice, from
     /// the lead before the round ran and whether a round tick ran.
+    /// Co-op fork (M23): the campaign round's parts after the tick the scripts just ran, whose
+    /// frames hashed to `inputs`, for the sync check; the parts' field dumps the bench asked for
+    /// (`SKATE2_COOP_SYNC_DUMP=<ticks>`, every that many ticks) or a difference did; and
+    /// `SKATE2_DIAGNOSTIC_DESYNC=<tick>`, a planted divergence of this console's vars at the tick.
+    fn record_round_check(&mut self, inputs: u32) {
+        use crate::coop::sync_check::{PARTS, Part};
+        static DUMP_EVERY: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+        static PLANT_AT: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+        let Some(round) = self.online.round.as_mut().filter(|round| round.campaign) else { return };
+        let Some(career) = self.career.as_mut() else { return };
+        let tick = round.processed.saturating_sub(1);
+        if PLANT_AT.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_DESYNC").ok().and_then(|value| value.trim().parse().ok())).is_some_and(|at| at == tick) {
+            match crate::coop::round_hash::plant_divergence(&mut career.system) {
+                Some(name) => crate::coop::trace(format_args!("diagnostic: a divergence planted in {name}'s vars at tick {tick}")),
+                None => crate::coop::trace(format_args!("diagnostic: no activity's vars to plant a divergence in at tick {tick}")),
+            }
+        }
+        let mut parts = crate::coop::round_hash::round_parts(&career.system);
+        parts[0] = inputs;
+        round.sync_check.record(tick, parts);
+        let every = DUMP_EVERY.get_or_init(|| std::env::var("SKATE2_COOP_SYNC_DUMP").ok().and_then(|value| value.trim().parse().ok()).filter(|&every: &u32| every > 0));
+        let asked = round.sync_dump_at.filter(|&(at, _)| tick >= at);
+        let mask = match (asked, every.is_some_and(|every| tick % every == 0)) {
+            (Some((at, mask)), periodic) => {
+                round.sync_dump_at = None;
+                if at != tick {
+                    crate::coop::trace(format_args!("sync dump asked for tick {at} comes at tick {tick}: the round here was past it"));
+                }
+                if periodic { u8::MAX } else { mask }
+            }
+            (None, true) => u8::MAX,
+            (None, false) => return,
+        };
+        for (index, part) in Part::ALL.into_iter().enumerate().take(PARTS) {
+            if mask & (1 << index) == 0 || part == Part::Inputs {
+                continue;
+            }
+            for line in crate::coop::round_hash::dump(&career.system, part) {
+                crate::coop::trace(format_args!("sync dump @{tick} {}: {line}", part.name()));
+            }
+        }
+    }
+
     fn update_campaign_pace(&mut self, lead: Option<u32>, ran: bool) {
         let (rtt, frame) = (self.online.round_trip, self.completed_frames);
         let Some(round) = self.online.round.as_mut().filter(|round| round.campaign) else { return };
@@ -1997,6 +2107,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     }
                     if completed % 600 == 0 && round.processed > 0 {
                         trace(format_args!("round at tick {}: {} ready, stalled {} of the last 600 ticks, timer {} Hz", round.processed, lead, std::mem::take(&mut round.stalls), round.pace.hz()));
+                        round.trace_sync_standings();
                     }
                     // Only a round with no tick ready waits at its next tick, which every console
                     // whose game matches the others' reaches with the same players pacing it.
@@ -2081,7 +2192,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                         }
                         self.online_round_ai_messages(&frames, humans, tick);
                     }
+                    let inputs = crate::coop::round_hash::inputs(&frames);
                     self.career_step(Some((frames, local, own)))?;
+                    self.record_round_check(inputs);
                     self.take_held_presentation();
                     let voting = self.career.as_ref().is_some_and(|career| career.system.world().voting.in_voting());
                     if let Some(contributors) = self.online_contributors()
@@ -2121,7 +2234,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         });
         let tick = round.processed.saturating_sub(1);
         for frame in frames {
-            let text = format!("{:?}", MissionFrame { local: false, is_pushing: false, is_physically_pushing: false, is_new_auto_pump: false, ..frame.clone() });
+            let text = crate::coop::round_hash::shared_text(frame);
             if range.as_ref().is_some_and(|range| range.contains(&tick)) {
                 trace(format_args!("inputs frame @{tick}: {text}"));
             }
@@ -2244,6 +2357,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         let tick = round.produced;
         let mut notes = round.notes();
         notes.presented = round.announce_presentation();
+        if round.campaign {
+            notes.check = round.sync_check.take_unsent().map(|(tick, parts)| skate2_net::protocol::RoundCheck { tick, parts });
+        }
         let stint = usize::try_from(round.local).ok().and_then(|local| round.stints.get(local)).copied().unwrap_or(0);
         let scope = round.scope;
         let mut owned = Vec::with_capacity(owned_frames.len());

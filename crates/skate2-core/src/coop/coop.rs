@@ -11,8 +11,12 @@ pub mod ownership;
 pub mod pace;
 #[path = "prompts.rs"]
 pub mod prompts;
+#[path = "round_hash.rs"]
+pub mod round_hash;
 #[path = "rules.rs"]
 pub mod rules;
+#[path = "sync_check.rs"]
+pub mod sync_check;
 #[path = "world_stream.rs"]
 pub mod world_stream;
 

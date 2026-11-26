@@ -35,6 +35,12 @@ pub struct TimerManager {
 }
 
 impl TimerManager {
+    /// Co-op fork (M23): every timer with its owning activity and subject, for the round's
+    /// sync check (`crate::coop::round_hash`).
+    pub(crate) fn sync_view(&self) -> impl Iterator<Item = (&Timer, Option<usize>, Option<i32>)> {
+        self.timers.values().map(|timer| (timer, timer.owner, timer.subject))
+    }
+
     /// `AddTimer` (`0x82db3a50`): ids count up from 1; time is in seconds,
     /// stored as 60 Hz ticks (`(int)(t * 60)`).
     #[expect(clippy::cast_possible_truncation, reason = "(int)(float)")]
