@@ -340,9 +340,7 @@ const CENSUS_EVERY: u32 = 60;
 fn diagnostic_shove_ticks() -> &'static [u32] {
     static TICKS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
     TICKS.get_or_init(|| {
-        let mut ticks = std::env::var("SKATE2_DIAGNOSTIC_COOP_SHOVE").ok().map_or_else(Vec::new, |ticks| {
-            ticks.split(',').filter_map(|tick| tick.trim().parse().ok()).collect::<Vec<u32>>()
-        });
+        let mut ticks = crate::coop::diagnostics::ticks("SKATE2_DIAGNOSTIC_COOP_SHOVE");
         ticks.sort_unstable();
         ticks
     })
@@ -356,14 +354,13 @@ fn diagnostic_shove_ticks() -> &'static [u32] {
 fn diagnostic_nudges() -> (&'static [u32], bool) {
     static NUDGES: std::sync::OnceLock<(Vec<u32>, bool)> = std::sync::OnceLock::new();
     let (ticks, round) = NUDGES.get_or_init(|| {
-        let parse = |ticks: String| {
-            let mut ticks = ticks.split(',').filter_map(|tick| tick.trim().parse().ok()).collect::<Vec<u32>>();
+        let sorted = |mut ticks: Vec<u32>| {
             ticks.sort_unstable();
             ticks
         };
         match std::env::var("SKATE2_DIAGNOSTIC_COOP_NUDGE_ROUND") {
-            Ok(ticks) => (parse(ticks), true),
-            Err(_) => (std::env::var("SKATE2_DIAGNOSTIC_COOP_NUDGE").ok().map_or_else(Vec::new, parse), false),
+            Ok(ticks) => (sorted(crate::coop::diagnostics::ticks_of(&ticks)), true),
+            Err(_) => (sorted(crate::coop::diagnostics::ticks("SKATE2_DIAGNOSTIC_COOP_NUDGE")), false),
         }
     });
     (ticks, *round)
@@ -374,17 +371,7 @@ fn diagnostic_nudges() -> (&'static [u32], bool) {
 /// mission's volumes; the career's own diagnostics run only under the career demo).
 fn diagnostic_teleports() -> &'static [(u32, [f32; 3])] {
     static SPEC: std::sync::OnceLock<Vec<(u32, [f32; 3])>> = std::sync::OnceLock::new();
-    SPEC.get_or_init(|| {
-        let Ok(spec) = std::env::var("SKATE2_DIAGNOSTIC_COOP_TELEPORT") else { return Vec::new() };
-        spec.split(';')
-            .filter_map(|entry| {
-                let (at, position) = entry.split_once(':')?;
-                let values: Vec<f32> = position.split(',').filter_map(|v| v.trim().parse().ok()).collect();
-                let [x, y, z] = values[..] else { return None };
-                Some((at.trim().parse().ok()?, [x, y, z]))
-            })
-            .collect()
-    })
+    SPEC.get_or_init(|| crate::coop::diagnostics::tick_positions("SKATE2_DIAGNOSTIC_COOP_TELEPORT"))
 }
 
 fn direction_of(flags: u8) -> CollisionDirection {

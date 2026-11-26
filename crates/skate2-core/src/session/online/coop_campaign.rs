@@ -47,7 +47,7 @@ fn diagnostic_triggers() -> Option<(u32, f32)> {
 /// tick, as a player quitting would (M11: the bench's way to an AI owner's departure).
 fn diagnostic_leave_tick() -> Option<u32> {
     static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_LEAVE").ok().and_then(|tick| tick.parse().ok()))
+    *TICK.get_or_init(|| crate::coop::diagnostics::tick("SKATE2_DIAGNOSTIC_COOP_LEAVE"))
 }
 
 /// `SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND=<tick>[,<tick>...]` (M13): at each round tick the local
@@ -55,9 +55,7 @@ fn diagnostic_leave_tick() -> Option<u32> {
 /// each player's copy of the objectives.
 fn diagnostic_bail_ticks() -> &'static [u32] {
     static TICKS: std::sync::OnceLock<Vec<u32>> = std::sync::OnceLock::new();
-    TICKS.get_or_init(|| {
-        std::env::var("SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND").ok().map_or_else(Vec::new, |ticks| ticks.split(',').filter_map(|tick| tick.trim().parse().ok()).collect())
-    })
+    TICKS.get_or_init(|| crate::coop::diagnostics::ticks("SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND"))
 }
 
 fn diagnostic_completes() -> &'static [(u32, Option<i32>)] {
@@ -79,17 +77,7 @@ fn diagnostic_completes() -> &'static [(u32, Option<i32>)] {
 /// started.
 fn diagnostic_round_teleports() -> &'static [(u32, [f32; 3])] {
     static SPEC: std::sync::OnceLock<Vec<(u32, [f32; 3])>> = std::sync::OnceLock::new();
-    SPEC.get_or_init(|| {
-        let Ok(spec) = std::env::var("SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND") else { return Vec::new() };
-        spec.split(';')
-            .filter_map(|entry| {
-                let (at, position) = entry.split_once(':')?;
-                let values: Vec<f32> = position.split(',').filter_map(|v| v.trim().parse().ok()).collect();
-                let [x, y, z] = values[..] else { return None };
-                Some((at.trim().parse().ok()?, [x, y, z]))
-            })
-            .collect()
-    })
+    SPEC.get_or_init(|| crate::coop::diagnostics::tick_positions("SKATE2_DIAGNOSTIC_COOP_TELEPORT_ROUND"))
 }
 
 /// `SKATE2_DIAGNOSTIC_COOP_PROMPT=<tick>:<answer>[;...]`: at that round tick this console answers
@@ -113,7 +101,7 @@ fn diagnostic_prompts() -> &'static [(u32, crate::coop::prompts::PromptAnswer)] 
 /// point of each named region traced, so the bench can teleport into one (M5).
 fn diagnostic_zones() -> Option<u32> {
     static TICK: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    *TICK.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_COOP_ZONES").ok().and_then(|tick| tick.trim().parse().ok()))
+    *TICK.get_or_init(|| crate::coop::diagnostics::tick_trimmed("SKATE2_DIAGNOSTIC_COOP_ZONES"))
 }
 
 /// `SKATE2_DIAGNOSTIC_COOP_EXECUTE=<tick>:<name>[;...]`: at each round tick the named challenge
