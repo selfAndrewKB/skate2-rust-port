@@ -320,7 +320,7 @@ impl super::SelectedRecipeFrame<'_> {
                         |entity, frame| {
                             // Co-op fork (M6): a puppet navigates nowhere; it goes where its
                             // owner's stream says.
-                            if entity.puppet.is_some() && !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref()) {
+                            if crate::pedestrian_puppet::PuppetDrive::follows_owner(entity) {
                                 return Ok(());
                             }
                             match phase {
@@ -476,7 +476,7 @@ impl super::SelectedRecipeFrame<'_> {
             crate::pedestrian_graph::backend::frame::with_entity(
                 &mut living, world, target.entity, cvars, &actors, &painter, self.vault, &avoid,
                 |entity, frame| {
-                    if entity.puppet.is_some() && !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref()) {
+                    if crate::pedestrian_puppet::PuppetDrive::follows_owner(entity) {
                         return Ok(());
                     }
                     frame.evaluate_all_navigation_modifiers(entity)
@@ -488,7 +488,7 @@ impl super::SelectedRecipeFrame<'_> {
                 .get_mut(target.entity).ok_or("pedestrian current target disappeared")?;
             // Co-op fork (M6): a puppet's walk, run or stand is its owner's velocity; its
             // own intents only while it collides.
-            if entity.puppet.is_some() && !crate::pedestrian_puppet::PuppetDrive::colliding(entity.collision.as_ref()) {
+            if crate::pedestrian_puppet::PuppetDrive::follows_owner(entity) {
                 entity.update_puppet_intent()?;
             } else {
                 // M20: a colliding puppet runs its own intents; its owner's go in again after.

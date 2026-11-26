@@ -125,6 +125,11 @@ fn linear_blend() -> bool {
     *LINEAR.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_PUPPET_BLEND").is_ok_and(|value| value == "linear"))
 }
 
+/// Whether the pedestrian lies knocked down (its state's knocked-down flag, byte 1 bit 2).
+pub(crate) fn knocked_down(pedestrian: &crate::living_world_pedestrian_entity::PedestrianConstruction) -> bool {
+    pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0)
+}
+
 impl PuppetDrive {
     pub(crate) fn new(target: Transform) -> Self {
         let yaw = crate::coop::world_stream::yaw_of(&target);
@@ -202,6 +207,12 @@ impl PuppetDrive {
     /// plays even as a puppet (a knockdown's animation).
     pub(crate) fn colliding(collision: Option<&crate::pedestrian_collision::PedestrianCollision>) -> bool {
         collision.is_some_and(|collision| collision.required_to_begin_colliding || collision.colliding)
+    }
+
+    /// Whether the entity is a puppet that follows its owner's stream this tick: a puppet not
+    /// [`Self::colliding`] (a colliding one runs its own graph, navigation and intents).
+    pub(crate) fn follows_owner(entity: &crate::living_world_pedestrian_entity::PedestrianConstruction) -> bool {
+        entity.puppet.is_some() && !Self::colliding(entity.collision.as_ref())
     }
 
     /// The transform the entity should reach this tick: the last sample carried on at its

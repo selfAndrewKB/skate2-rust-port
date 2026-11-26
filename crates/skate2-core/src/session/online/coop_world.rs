@@ -26,7 +26,7 @@ use crate::coop::{event, trace};
 use crate::coop::world_stream::{self as stream, Contact, Descriptor, EntityState, PropState, WorldRun, flags};
 use crate::living_world_grind_services::dmo_models::NULL_ASSET_ID;
 use crate::pedestrian_graph::colliding::{CollisionDirection, CollisionForce};
-use crate::pedestrian_puppet::PuppetDrive;
+use crate::pedestrian_puppet::{PuppetDrive, knocked_down};
 use skate2_net::frames::INTERVAL;
 use skate2_net::protocol::MAX_WORLD;
 use std::collections::{BTreeMap, BTreeSet};
@@ -483,7 +483,7 @@ fn sync_hand_prop(
 
 fn entity_flags(pedestrian: &crate::living_world_pedestrian_entity::PedestrianConstruction) -> u8 {
     let mut entity_flags = 0;
-    if pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) {
+    if knocked_down(pedestrian) {
         entity_flags |= flags::KNOCKED_DOWN;
     }
     if pedestrian.collision.as_ref().is_some_and(|collision| collision.colliding) {
@@ -715,7 +715,7 @@ fn follow_owner_knockdown(stats: &mut Stats, puppet: &mut Tracked, pedestrian: &
         // (the graph then leaves the colliding state and the behaviour's `End`
         // clears the knocked-down flag and releases the intent packet). A
         // prediction the owner never confirmed, past the grace, is a refusal.
-        let down_here = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
+        let down_here = knocked_down(pedestrian);
         let awaited_long_enough = puppet.awaiting.is_none_or(|at| tick.saturating_sub(at) > CONFIRM_GRACE_TICKS);
         if down_here && awaited_long_enough {
             // M16: whatever the collision's own state (its behaviour may have
@@ -1047,7 +1047,7 @@ impl CoopWorld {
                 let transform = core.transform;
                 let mut drive = PuppetDrive::new(transform);
                 // demoted during or right after a knockdown: the graph owes the exit tick
-                drive.was_colliding = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) || PuppetDrive::colliding(pedestrian.collision.as_ref());
+                drive.was_colliding = knocked_down(pedestrian) || PuppetDrive::colliding(pedestrian.collision.as_ref());
                 pedestrian.puppet = Some(drive);
                 trace(format_args!("own pedestrian {id:08x} demoted: another console claimed it at {tick}"));
                 event("demoted", json!({}));
@@ -1109,7 +1109,7 @@ impl CoopWorld {
                 puppet.knockdown_due = None;
                 continue;
             };
-            if pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0) {
+            if knocked_down(pedestrian) {
                 puppet.knockdown_due = None;
                 continue;
             }
@@ -1357,7 +1357,7 @@ impl CoopWorld {
             // completions with them, so its own intent generator starts from idle. Not
             // while it collides or lies down: the collision's packet is its colliding
             // behaviour's, which would stand it up at once with no get-up.
-            let down = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
+            let down = knocked_down(pedestrian);
             if !down && !PuppetDrive::colliding(pedestrian.collision.as_ref()) {
                 pedestrian.clear_all_intents()?;
             }
@@ -1459,7 +1459,7 @@ impl CoopWorld {
                     Owner::Remote(slot) => format!("puppet of {slot}"),
                 };
                 let speed = (core.velocity[0].powi(2) + core.velocity[1].powi(2) + core.velocity[2].powi(2)).sqrt();
-                let down = pedestrian.state.as_ref().is_some_and(|state| state.flags[1] & 4 != 0);
+                let down = knocked_down(pedestrian);
                 // M20: the intents its motion graph is given, and how many packets wait.
                 let queue = pedestrian.intent_queue.as_ref().map(|queue| {
                     let names = queue.active_stage().map_or_else(|_| "absent".to_owned(), |stage| {
