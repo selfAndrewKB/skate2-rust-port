@@ -1372,6 +1372,22 @@ impl ChallengeSystem {
     }
 }
 
+/// Co-op fork (M13): a script's outcome for `player`: applied here and now when a human's event
+/// is being handled (every console's script decides alike at that tick, see
+/// [`apply_coop_outcome_to`]); otherwise queued to travel as a note.
+pub fn submit_coop_outcome(world: &mut World, player: i32, outcome: crate::coop::outcomes::Outcome) {
+    if world.event_player.is_some() {
+        apply_coop_outcome_to(world, player, outcome, round_tick(world));
+    } else {
+        world.coop_outcomes.push(outcome);
+    }
+}
+
+/// The round tick a campaign's scripts run at (0 outside one).
+fn round_tick(world: &World) -> u32 {
+    world.online.as_ref().map_or(0, |online| online.tick)
+}
+
 /// [`ChallengeSystem::apply_coop_outcome`] on a world: a note's arrival, or (M13) a script's
 /// decision in reaction to a human's event applied where it is made, at the event's tick,
 /// since every console's script hears the lockstep event at that tick and decides alike (a

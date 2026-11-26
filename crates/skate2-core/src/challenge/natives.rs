@@ -575,11 +575,6 @@ fn challenge_save_set_other(lua: &mut Lua<World>, world: &mut World, call: &Nati
 
 // ---- Objectives -----------------------------------------------------------
 
-/// The round tick a campaign's scripts run at (0 outside one).
-fn round_tick(world: &World) -> u32 {
-    world.online.as_ref().map_or(0, |online| online.tick)
-}
-
 /// The group a script's value names. Co-op fork (M13): while a graph handles a human's event,
 /// that human's copy of it (`objectives::subject_copy`).
 fn objective_group(world: &World, value: &Value) -> Option<u32> {
@@ -890,11 +885,7 @@ fn objectives_fail_all(_: &mut Lua<World>, world: &mut World, call: &NativeCall)
     // (the group natives already name that human's copy); one outside any travels as a note.
     if let Some((key, ordinal, player)) = own_outcome_group(world, call.arg(0)) {
         let outcome = crate::coop::outcomes::Outcome::ObjectivesFailed { activity: key, group: ordinal, player };
-        if world.event_player.is_some() {
-            super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
-        } else {
-            world.coop_outcomes.push(outcome);
-        }
+        super::system::submit_coop_outcome(world, player, outcome);
         return none();
     }
     for group in objective_groups(world, call.arg(0)) {
@@ -911,11 +902,7 @@ fn objectives_force_complete(_: &mut Lua<World>, world: &mut World, call: &Nativ
     if let Some((key, ordinal, player)) = own_outcome_group(world, call.arg(0)) {
         if let Ok(index) = u8::try_from(get_int(call, 1)) {
             let outcome = crate::coop::outcomes::Outcome::ObjectiveComplete { activity: key, group: ordinal, index, player };
-            if world.event_player.is_some() {
-                super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
-            } else {
-                world.coop_outcomes.push(outcome);
-            }
+            super::system::submit_coop_outcome(world, player, outcome);
         }
         return none();
     }
@@ -946,11 +933,7 @@ fn challenge_lose(lua: &mut Lua<World>, world: &mut World, call: &NativeCall) ->
         if world.coop.is_some() {
             let player = super::objectives::subject_player(world);
             let outcome = crate::coop::outcomes::Outcome::Lost { activity: key, result: 1, player };
-            if world.event_player.is_some() {
-                super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
-            } else {
-                world.coop_outcomes.push(outcome);
-            }
+            super::system::submit_coop_outcome(world, player, outcome);
             return none();
         }
         signpost::end_challenge_unwon(world, key, 1);
@@ -1345,11 +1328,7 @@ fn challenge_complete(lua: &mut Lua<World>, world: &mut World, call: &NativeCall
             let key = world.activities.activities[a].key;
             let player = super::objectives::subject_player(world);
             let outcome = crate::coop::outcomes::Outcome::Won { activity: key, process, player };
-            if world.event_player.is_some() {
-                super::system::apply_coop_outcome_to(world, player, outcome, round_tick(world));
-            } else {
-                world.coop_outcomes.push(outcome);
-            }
+            super::system::submit_coop_outcome(world, player, outcome);
             return none();
         }
     }
