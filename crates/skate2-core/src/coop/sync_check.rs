@@ -3,7 +3,7 @@
 //!
 //! **The original.** After every simulated frame `SyncChecker::GenerateChecksum` hashes the
 //! world (`Simulation::GetSyncLog`: the tick, the random seed, the commands, every entity, the
-//! physics world, the movable objects) to one byte, and the GameSync of frame N carries the
+//! physics world, the movable objects) to one byte, and the `GameSync` of frame N carries the
 //! byte of frame N − 45; `DoSyncChecking` compares it with the console's own as the frame is
 //! released and a difference kicks the player ("kicked for unknown reason").
 //!
@@ -123,9 +123,13 @@ pub type Parts = [u32; PARTS];
 
 /// The 16 bits of a part a check carries.
 #[must_use]
+#[expect(clippy::cast_possible_truncation, reason = "the fold keeps the low 16 bits: a check carries 16 bits of a part by format")]
 pub const fn wire_part(part: u32) -> u16 {
     (part ^ (part >> 16)) as u16
 }
+
+/// One player's checks so far: (user id, checked, differed, the first difference).
+pub type Standing = (u64, u32, u32, Option<(u32, u8)>);
 
 /// What a comparison found.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -222,9 +226,9 @@ impl SyncCheck {
         Compared::Differs { mask, first }
     }
 
-    /// Each player's checks so far: (user id, checked, differed, the first difference).
+    /// Each player's checks so far.
     #[must_use]
-    pub fn standings(&self) -> Vec<(u64, u32, u32, Option<(u32, u8)>)> {
+    pub fn standings(&self) -> Vec<Standing> {
         self.peers.iter().map(|(&user_id, peer)| (user_id, peer.checked, peer.differed, peer.first)).collect()
     }
 

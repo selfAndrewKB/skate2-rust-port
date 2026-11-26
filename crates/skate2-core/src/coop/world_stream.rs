@@ -21,12 +21,15 @@ pub const FORMAT: u8 = 7;
 /// A world id names an entity across consoles: its first spawner's slot in the game (4 bits)
 /// over that console's local entity id (its type nibble and 24-bit counter); it stays through
 /// a handoff (M6).
+#[must_use]
 pub fn world_id(slot: u8, local_id: u32) -> u32 {
     (u32::from(slot & 0xf) << 28) | (local_id & 0x0fff_ffff)
 }
+#[must_use]
 pub fn owner_slot(id: u32) -> u8 {
     (id >> 28) as u8
 }
+#[must_use]
 pub fn local_id(id: u32) -> u32 {
     id & 0x0fff_ffff
 }
@@ -146,9 +149,11 @@ fn varint(out: &mut Vec<u8>, mut value: u64) {
         out.push(byte | 0x80);
     }
 }
+#[expect(clippy::cast_sign_loss, reason = "zigzag coding carries the signed value's bits as unsigned by format")]
 fn zigzag(out: &mut Vec<u8>, value: i64) {
     varint(out, ((value << 1) ^ (value >> 63)) as u64);
 }
+#[expect(clippy::cast_possible_truncation, reason = "rounded and NaN-checked first; the cast saturates and the clamp keeps the field's range")]
 fn quantized(value: f32, scale: f32, limit: i64) -> i64 {
     let scaled = (value * scale).round();
     if scaled.is_nan() {
@@ -178,6 +183,7 @@ impl Reader<'_> {
         }
         Err("world run varint too long")
     }
+    #[expect(clippy::cast_possible_wrap, reason = "zigzag decoding reinterprets the unsigned bits as signed by format")]
     fn zigzag(&mut self) -> Result<i64, &'static str> {
         let raw = self.varint()?;
         Ok(((raw >> 1) as i64) ^ -((raw & 1) as i64))
@@ -189,6 +195,7 @@ impl Reader<'_> {
         }
         Ok(u64::from_le_bytes(bytes))
     }
+    #[expect(clippy::cast_possible_truncation, reason = "checked against `most` first")]
     fn count(&mut self, most: usize) -> Result<usize, &'static str> {
         let count = self.varint()?;
         if count > most as u64 {
@@ -209,10 +216,12 @@ fn write_vector(out: &mut Vec<u8>, vector: [f32; 3], scale: f32, limit: i64) {
         zigzag(out, quantized(lane, scale, limit));
     }
 }
+#[expect(clippy::cast_precision_loss, reason = "the format's fixed-point lanes, at most 32 bits, read back as floats")]
 fn read_vector(r: &mut Reader<'_>, scale: f32) -> Result<[f32; 3], &'static str> {
     Ok([r.zigzag()? as f32 / scale, r.zigzag()? as f32 / scale, r.zigzag()? as f32 / scale])
 }
 
+#[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "the intent counts and lengths are capped to a byte first; the yaw is a non-negative turn fraction masked to its 16-bit field by format")]
 fn write_entity(out: &mut Vec<u8>, entity: &EntityState) {
     varint(out, u64::from(entity.id));
     out.push(entity.kind as u8);
@@ -263,6 +272,8 @@ fn write_entity(out: &mut Vec<u8>, entity: &EntityState) {
 /// Codes a run within `budget` bytes: the despawns and contacts always (they are few and must
 /// arrive), then the entities in order until the budget is reached. Returns the bytes and how
 /// many entities went in.
+#[must_use]
+#[expect(clippy::cast_possible_truncation, reason = "the entity count stops at 127, so it fits its byte")]
 pub fn encode(run: &WorldRun, budget: usize) -> (Vec<u8>, usize) {
     let mut out = vec![FORMAT];
     let despawns = &run.despawns[..run.despawns.len().min(MOST_DESPAWNS)];
@@ -309,6 +320,13 @@ pub fn encode(run: &WorldRun, budget: usize) -> (Vec<u8>, usize) {
     (out, included)
 }
 
+/// Reads a run [`encode`] wrote.
+///
+/// # Errors
+///
+/// The run is of another format, cut short, over a count's limit, or has a malformed field or
+/// trailing bytes.
+#[expect(clippy::cast_possible_truncation, clippy::cast_precision_loss, reason = "ids, epochs and claims are 32-bit fields by format, and its fixed-point values read back as floats")]
 pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
     let mut r = Reader { bytes, at: 0 };
     if r.u8()? != FORMAT {
@@ -405,6 +423,7 @@ pub fn decode(bytes: &[u8]) -> Result<WorldRun, &'static str> {
 
 /// The rotation of a living-world transform (rows right, up, forward, translation; 16 floats)
 /// as a unit quaternion (x, y, z, w).
+#[must_use]
 pub fn quaternion_of(m: &[f32; 16]) -> [f32; 4] {
     // Rows are the basis vectors, so m[row * 4 + column] is basis `row`'s component `column`.
     let (r00, r01, r02) = (m[0], m[1], m[2]);
@@ -430,6 +449,8 @@ pub fn quaternion_of(m: &[f32; 16]) -> [f32; 4] {
 
 /// A living-world transform from a position and a unit quaternion (the inverse of
 /// [`quaternion_of`]).
+#[must_use]
+#[expect(clippy::many_single_char_names, reason = "the quaternion's components by their usual names")]
 pub fn transform_of(position: [f32; 3], q: [f32; 4]) -> [f32; 16] {
     let [x, y, z, w] = q;
     let (xx, yy, zz) = (x * x, y * y, z * z);
@@ -444,11 +465,13 @@ pub fn transform_of(position: [f32; 3], q: [f32; 4]) -> [f32; 16] {
 }
 
 /// The yaw of a living-world transform (rows: right, up, forward, translation).
+#[must_use]
 pub fn yaw_of(transform: &[[f32; 4]; 4]) -> f32 {
     transform[2][0].atan2(transform[2][2])
 }
 
 /// A living-world transform standing upright at a position, facing a yaw.
+#[must_use]
 pub fn transform(position: [f32; 3], yaw: f32) -> [[f32; 4]; 4] {
     let (sin, cos) = yaw.sin_cos();
     [[cos, 0., -sin, 0.], [0., 1., 0., 0.], [sin, 0., cos, 0.], [position[0], position[1], position[2], 1.]]

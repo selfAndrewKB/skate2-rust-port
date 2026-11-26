@@ -45,6 +45,8 @@ const PLAYER_SHIFT: i32 = 24;
 const PAYLOAD_MASK: i32 = 0x00ff_ffff;
 
 impl Outcome {
+    #[must_use]
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "a loss's result is clamped to 16 bits and carried as the payload's low 16 bits by format")]
     pub fn to_wire(self) -> (u8, u64, i32) {
         let tag = |player: i32| (player + 1).clamp(0, 0x7f) << PLAYER_SHIFT;
         match self {
@@ -55,6 +57,8 @@ impl Outcome {
         }
     }
 
+    #[must_use]
+    #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap, reason = "a loss's result is the payload's low 16 bits, signed, by format")]
     pub fn from_wire(kind: u8, activity: u64, value: i32) -> Option<Self> {
         let byte = |shift: i32| u8::try_from((value >> shift) & 0xff).ok();
         let player = ((value >> PLAYER_SHIFT) & 0x7f) - 1;
@@ -68,6 +72,7 @@ impl Outcome {
         })
     }
 
+    #[must_use]
     pub fn activity(self) -> u64 {
         match self {
             Self::ObjectiveComplete { activity, .. } | Self::ObjectivesFailed { activity, .. } | Self::Won { activity, .. } | Self::Lost { activity, .. } => activity,
@@ -75,6 +80,7 @@ impl Outcome {
     }
 
     /// The campaign slot the decision is about; negative for none (the sender's).
+    #[must_use]
     pub fn player(self) -> i32 {
         match self {
             Self::ObjectiveComplete { player, .. } | Self::ObjectivesFailed { player, .. } | Self::Won { player, .. } | Self::Lost { player, .. } => player,
