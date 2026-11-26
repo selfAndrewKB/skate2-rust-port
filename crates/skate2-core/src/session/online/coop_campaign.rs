@@ -197,8 +197,8 @@ fn win_ats_of(spec: &str) -> Vec<WinAt> {
 /// The progression savables as one byte string, for the server's store and the hash every
 /// console's log can compare: each leaf's name, version and tuples. The skater's own
 /// orientation leaf (`cSignPost::Position`) is each console's, not the career's: two seats
-/// that completed the same mission at the same tick differed in its low bits alone (M4,
-/// `2026-11-10-m4d-*.log`), so it stays out of the blob and of the hash.
+/// that completed the same mission at the same tick differ in its low bits alone, so it stays
+/// out of the blob and of the hash.
 #[expect(clippy::cast_possible_truncation, reason = "the blob's lengths are u32s; a leaf's name and tuples are far below 4 GiB")]
 fn progression_blob(leaves: &[Leaf]) -> Vec<u8> {
     let mut out = Vec::new();

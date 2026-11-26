@@ -51,11 +51,11 @@ impl super::SelectedRecipeFrame<'_> {
                     let was_colliding = entity.puppet.as_mut().map(|drive| std::mem::replace(&mut drive.was_colliding, colliding_now));
                     let own_graph = entity.puppet.is_none() || colliding_now || was_colliding == Some(true);
                     // M16: a puppet's graph is held at its owner's state every tick, so it plays
-                    // what its owner plays. M21: a held update that fails here (a state this
-                    // console cannot enter: a takedown with no target) resets the graph to its
-                    // start, every behaviour ended (it stopped partway, half applied, and the
-                    // puppet's next update of its own stopped the game on it: the field test,
-                    // 2026-11-12), and that state is not held again; the others still are.
+                    // what its owner plays. M21: a held update that fails (a state this console
+                    // cannot enter, such as a takedown with no target) leaves the graph half
+                    // applied, and the puppet's next own update would fail on it. So the graph
+                    // resets to its start with every behaviour ended, and that state is not held
+                    // again; the others still are.
                     // While the puppet collides (a knockdown or a standing hit from the owner's
                     // flags) its own graph plays the collision, as M6 had it; the colliding
                     // state itself is never held.

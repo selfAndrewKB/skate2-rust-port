@@ -59,11 +59,9 @@ impl PedestrianConstruction {
     pub(crate) fn update_puppet_intent(&mut self) -> Result<(), String> {
         let drive = self.puppet.as_mut().ok_or("puppet intent drive absent")?;
         let velocity = drive.locomotion_velocity();
-        // M20: the owner's intents, applied to the base packet when they change. Until M20 the
-        // band came from the owner's velocity alone: a stop to talk, a turn or a speed near a
-        // band's edge played as another band here (the census, 2026-11-12: owner and puppet
-        // agreed on 79.5% of samples; the owner walking or idle while its puppet shuffled was
-        // the walk in place and the moonwalk the player saw).
+        // M20: the owner's intents, applied to the base packet when they change. A band chosen
+        // from velocity alone misreads a stop to talk, a turn or a speed near a band's edge, so
+        // the puppet would walk in place or moonwalk.
         let owner = drive.owner_intents.as_ref().map(|(hash, names)| (*hash, names));
         if let Some((hash, names)) = owner {
             let changed = drive.applied_intents != Some(hash);

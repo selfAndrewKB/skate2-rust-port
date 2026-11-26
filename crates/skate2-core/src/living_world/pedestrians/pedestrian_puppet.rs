@@ -45,7 +45,7 @@ pub(crate) struct PuppetDrive {
     /// Whether the entity was in or entering its colliding behaviour at the last graph gate:
     /// the graph is ticked once more after the collision ends, so its exit (the behaviour's
     /// `End`, which clears the knocked-down flag and releases the collision's intent packet)
-    /// runs. Without it a puppet stayed knocked down for good (2026-11-11).
+    /// runs; without it a puppet stays knocked down.
     pub(crate) was_colliding: bool,
     /// M16: the state the owner's AI graph is in, from its last sample, which this puppet's
     /// graph is held at (`PedestrianGraph::update_delegate_held`); `None` before the first

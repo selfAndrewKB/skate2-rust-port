@@ -1308,9 +1308,8 @@ fn evaluate_group(lua: &mut Lua<World>, world: &mut World, group: u32, triggers:
             let o = &world.objectives.groups[gi].objectives[i];
             (o.state, o.key)
         };
-        // Co-op fork, diagnostic: how each active objective judged a trick (the player's field
-        // test of the Burnette photo, 2026-11-13: every attempt a bail, and no trace said whether
-        // a landed trick reached the objective at all).
+        // Co-op fork, diagnostic: how each active objective judged a trick, so a trace shows
+        // whether a landed trick reached the objective at all.
         let judging = world.coop.is_some().then(|| triggers.trick_kind()).flatten().filter(|_| state == Status::Active);
         let player = world.objectives.groups[gi].player;
         if state != Status::Active || !triggers.matches(Triggers::read(&world.db, key)) {

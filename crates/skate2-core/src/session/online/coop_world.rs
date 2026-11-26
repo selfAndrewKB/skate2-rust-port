@@ -308,8 +308,8 @@ pub(in super::super) struct CoopWorld {
     own_steps: BTreeMap<u32, ([f32; 3], [f32; 3])>,
     /// M20: this console's own pedestrians' last positions (`TRAIL_TICKS` of them): the velocity
     /// their samples carry is the one they move at, not their navigation's (a pedestrian stopped
-    /// to talk or wait kept a navigation velocity of up to half a metre a second while it stood,
-    /// and its puppet walked in place to it: the player, 2026-11-12, and the M19 census dumps).
+    /// to talk or wait kept a navigation velocity of up to half a metre a second while standing,
+    /// and its puppet walked in place to it).
     own_trail: BTreeMap<u32, std::collections::VecDeque<[f32; 3]>>,
     /// M20: every intent list heard from the others, by its hash.
     intent_names: BTreeMap<u32, Vec<crate::play_animation::FastString30>>,

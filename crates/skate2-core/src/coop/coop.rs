@@ -27,8 +27,8 @@ pub mod world_stream;
 /// The co-op logs a console keeps in its `coop_logs` folder, newest first.
 const KEPT_LOGS: usize = 20;
 
-/// The shared world's decisions and measurements, in every build: on by default while co-op is
-/// played and tested (2026-11-26), `SKATE2_TRACE_COOP=0` silences them. Each line goes to
+/// The shared world's decisions and measurements, in every build: on by default;
+/// `SKATE2_TRACE_COOP=0` silences them. Each line goes to
 /// stderr and to this session's `coop_logs/coop-<unix seconds>.log` beside the saves (where the
 /// crash reports go), so a session the game was opened for from the desktop, whose stderr goes
 /// nowhere, still leaves its log; `SKATE2_COOP_LOG=0` keeps them to stderr (the bench, whose seat
