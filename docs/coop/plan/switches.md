@@ -12,7 +12,7 @@ read. 387 switches: 27 the fork's, 360 upstream's.
 | --- | --- | --- |
 | `SKATE2_COOP_LOG` | `SKATE2_COOP_LOG=0` keeps them to stderr (the bench, whose seat | `crates/skate2-core/src/coop/coop.rs` |
 | `SKATE2_COOP_RULES` | `SKATE2_COOP_RULES=<file>`; the built-in table when neither exists. A file that does not | `crates/skate2-core/src/coop/rules.rs` |
-| `SKATE2_COOP_SYNC_DUMP` | `SKATE2_COOP_SYNC_DUMP=<ticks>`, every that many ticks) or a difference did; and | `crates/skate2-core/src/session/online/online_challenge.rs` |
+| `SKATE2_COOP_SYNC_DUMP` | `SKATE2_COOP_SYNC_DUMP=<ticks>`, every that many ticks) or a difference did; and | `crates/skate2-core/src/session/online/coop_round.rs` |
 | `SKATE2_DIAGNOSTIC_COOP_ANSWER` | `SKATE2_DIAGNOSTIC_COOP_ANSWER=yes\|no[:<ticks>]`: the progression's Yes/No dialog answered that | `crates/skate2-core/src/session/online/coop_campaign.rs` |
 | `SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND` | `SKATE2_DIAGNOSTIC_COOP_BAIL_ROUND=<tick>[,<tick>...]` (M13): at each round tick the local | `crates/skate2-core/src/session/online/coop_campaign.rs` |
 | `SKATE2_DIAGNOSTIC_COOP_COMPLETE` | `SKATE2_DIAGNOSTIC_COOP_COMPLETE=<tick>[;<tick>...]`: at each round tick the first active | `crates/skate2-core/src/session/online/coop_campaign.rs` |
@@ -29,7 +29,7 @@ read. 387 switches: 27 the fork's, 360 upstream's.
 | `SKATE2_DIAGNOSTIC_COOP_TRIGGERS` | `SKATE2_DIAGNOSTIC_COOP_TRIGGERS=<tick>:<radius>`: at that round tick, the trigger volumes | `crates/skate2-core/src/session/online/coop_campaign.rs` |
 | `SKATE2_DIAGNOSTIC_COOP_WIN` | `SKATE2_DIAGNOSTIC_COOP_WIN=<round tick>\|running+<ticks>[;...]`: at each round tick named, | `crates/skate2-core/src/session/online/coop_campaign.rs` |
 | `SKATE2_DIAGNOSTIC_COOP_ZONES` | `SKATE2_DIAGNOSTIC_COOP_ZONES=<round tick>`: at that round tick the security guard areas | `crates/skate2-core/src/session/online/coop_campaign.rs` |
-| `SKATE2_DIAGNOSTIC_DESYNC` | `SKATE2_DIAGNOSTIC_DESYNC=<tick>`, a planted divergence of this console's vars at the tick. | `crates/skate2-core/src/session/online/online_challenge.rs` |
+| `SKATE2_DIAGNOSTIC_DESYNC` | `SKATE2_DIAGNOSTIC_DESYNC=<tick>`, a planted divergence of this console's vars at the tick. | `crates/skate2-core/src/session/online/coop_round.rs` |
 | `SKATE2_DIAGNOSTIC_DUMP_LOOK` | M17's measure: the look's bytes to a file, to weigh its compression. | `crates/skate2-core/src/session/selected_session_online.rs` |
 | `SKATE2_DIAGNOSTIC_MUTE` | `SKATE2_DIAGNOSTIC_MUTE`: the device gets silence, the mix runs as ever. | `apps/skate2-pc/src/game_audio.rs` |
 | `SKATE2_DIAGNOSTIC_PUPPET_BLEND` | `SKATE2_DIAGNOSTIC_PUPPET_BLEND=linear` drives this seat's puppets | `crates/skate2-core/src/living_world/pedestrians/pedestrian_puppet.rs` |
