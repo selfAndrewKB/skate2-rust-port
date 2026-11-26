@@ -196,36 +196,10 @@ impl Round {
     pub(super) fn take_coop_notes(&mut self, notes: Vec<(i32, FactsNotes)>) -> (Vec<FactsNotes>, Vec<(i32, skate2_net::protocol::Prompt)>, Vec<(i32, skate2_net::protocol::Outcome)>) {
         // Co-op fork: each player's prompts, applied once each in order; the presser's own
         // pending ones are done with once its own facts carried them.
-        let mut prompts = Vec::new();
-        for (player, note) in &notes {
-            let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
-            for &prompt in &note.prompts {
-                if prompt.seq > self.coop.prompts_applied[slot] {
-                    self.coop.prompts_applied[slot] = prompt.seq;
-                    prompts.push((*player, prompt));
-                }
-            }
-            if *player == self.local {
-                let applied = self.coop.prompts_applied[slot];
-                self.coop.prompts_pending.retain(|prompt| prompt.seq > applied);
-            }
-        }
+        let prompts = take_sequenced(&notes, |note| &note.prompts, &mut self.coop.prompts_applied, &mut self.coop.prompts_pending, self.local);
         // Co-op fork (M9): each player's outcomes, applied once each in order, the decider's own
         // pending ones done with once its own facts carried them.
-        let mut outcomes = Vec::new();
-        for (player, note) in &notes {
-            let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
-            for &outcome in &note.outcomes {
-                if outcome.seq > self.coop.outcomes_applied[slot] {
-                    self.coop.outcomes_applied[slot] = outcome.seq;
-                    outcomes.push((*player, outcome));
-                }
-            }
-            if *player == self.local {
-                let applied = self.coop.outcomes_applied[slot];
-                self.coop.outcomes_pending.retain(|outcome| outcome.seq > applied);
-            }
-        }
+        let outcomes = take_sequenced(&notes, |note| &note.outcomes, &mut self.coop.outcomes_applied, &mut self.coop.outcomes_pending, self.local);
         if self.coop.campaign {
             self.compare_checks(&notes);
         }
@@ -744,4 +718,41 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
         }
     }
+}
+
+/// Co-op fork: a note numbered in its player's run (prompts, M9's outcomes).
+trait Sequenced: Copy {
+    fn seq(&self) -> u32;
+}
+impl Sequenced for skate2_net::protocol::Prompt {
+    fn seq(&self) -> u32 {
+        self.seq
+    }
+}
+impl Sequenced for skate2_net::protocol::Outcome {
+    fn seq(&self) -> u32 {
+        self.seq
+    }
+}
+
+/// Co-op fork: the tick's notes of one kind (`of` picks them from a player's facts notes), each
+/// player's taken once each in order: one numbered past what `applied` holds for its player is
+/// taken and raises it. Once the local player's own facts carried its notes, its `pending` ones
+/// up to that number are done with.
+fn take_sequenced<N: Sequenced>(notes: &[(i32, FactsNotes)], of: impl Fn(&FactsNotes) -> &[N], applied: &mut [u32; MAX_PLAYERS], pending: &mut Vec<N>, local: i32) -> Vec<(i32, N)> {
+    let mut taken = Vec::new();
+    for (player, note) in notes {
+        let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
+        for &item in of(note) {
+            if item.seq() > applied[slot] {
+                applied[slot] = item.seq();
+                taken.push((*player, item));
+            }
+        }
+        if *player == local {
+            let done = applied[slot];
+            pending.retain(|item| item.seq() > done);
+        }
+    }
+    taken
 }
