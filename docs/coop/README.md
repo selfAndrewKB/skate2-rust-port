@@ -6,8 +6,8 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.22.0-upstream-0.3.6`**
-(2026-11-26): M24, upstream 0.3.6 merged into the fork (protocol 128); M23 before it, the campaign round's sync check (each console hashes the scripts' state
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.23.0-structure`**
+(2026-11-26): M25 to M27, the fork's structure (co-op out of upstream's files, the lint and test gate, structured logs and one reader, the switch list); M24, upstream 0.3.6 merged into the fork (protocol 128); M23 before it, the campaign round's sync check (each console hashes the scripts' state
 after every round tick and the facts carry it, so a seat's log says where two games parted);
 M22 before it, the round's pace and the "Waiting for Skaters" notice ([versions](plan/versions.md)).
 Earlier (2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
@@ -85,7 +85,7 @@ tagged ([versions](plan/versions.md)).
 - [plan/design.md](plan/design.md): the analysis and decision record (the port today, the
   routes, the architecture in the port's terms, the method, milestones, risks).
 - [plan/versions.md](plan/versions.md): every tagged state and its proof.
-- [plan/tooling.md](plan/tooling.md): the bench, the switches, building; per-machine notes in
+- [plan/tooling.md](plan/tooling.md): the bench, the gate (`tools/coop/check.py`), the log reader, building; every switch in [plan/switches.md](plan/switches.md); per-machine notes in
   [setup-macos.md](plan/setup-macos.md) and [setup-windows.md](plan/setup-windows.md).
 - [plan/qa-matrix.md](plan/qa-matrix.md): seats × machines × situations, exercised or not.
 - [plan/reports/2026-11-11-overnight.md](plan/reports/2026-11-11-overnight.md): the overnight
