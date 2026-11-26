@@ -235,6 +235,12 @@ pub struct GameAttributes {
 }
 
 impl GameAttributes {
+    /// Co-op fork: whether the game is a campaign lobby.
+    #[must_use]
+    pub fn is_campaign(&self) -> bool {
+        self.challenge_type == challenge::CAMPAIGN
+    }
+
     fn write(&self, w: &mut Writer) {
         w.string(&self.game_version);
         w.u8(self.challenge_type);

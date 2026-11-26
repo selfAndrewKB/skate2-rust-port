@@ -564,7 +564,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     self.online.sign_in = SignIn::Failed(reason);
                     self.online.user_id = None;
                     // A campaign lost at any point, its career loading or up, is rejoined.
-                    let in_campaign = self.online.game.as_ref().is_some_and(|game| game.attributes.challenge_type == challenge::CAMPAIGN);
+                    let in_campaign = self.online.game.as_ref().is_some_and(|game| game.attributes.is_campaign());
                     if had_game && in_campaign && !update && !nickname {
                         self.online_campaign_dropped(loss)?;
                     } else if self.online.campaign_rejoin && !update && !nickname {
@@ -598,7 +598,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     if let Some(game) = self.online.game.as_mut() {
                         // Co-op fork (M10): an owned challenge AI skater's frames drive a puppet
                         // of it, made at their first arrival in a campaign.
-                        let campaign = game.attributes.challenge_type == challenge::CAMPAIGN;
+                        let campaign = game.attributes.is_campaign();
                         let remote = match owned::slot_of_id(user_id) {
                             Some((owner, slot)) if campaign => Some(game.remotes.entry(user_id).or_insert_with(|| {
                                 crate::coop::trace(format_args!("owned skater at slot {slot} of player {owner}: its frames arrive; a puppet here"));
@@ -695,7 +695,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// (the list the menus offer): any other is one this console cannot load.
     fn online_challenge_known(&mut self, attributes: &GameAttributes) -> Result<bool, SelectedLiveError> {
         // Co-op fork: a campaign lobby is at its one key, known to every build of the fork.
-        if attributes.challenge_type == challenge::CAMPAIGN {
+        if attributes.is_campaign() {
             return Ok(attributes.challenge_key == skate2_net::protocol::campaign::KEY);
         }
         self.online_data()?;
@@ -1099,7 +1099,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             .map(|player| (player.user_id, RemoteSkater::new(player.user_id, player.slot)))
             .collect();
         // Co-op fork: a campaign lobby starts where the career does (`start_online_campaign`).
-        let start = if attributes.challenge_type == challenge::CAMPAIGN { CAMPAIGN_START } else { self.online_location(&attributes, slot)? };
+        let start = if attributes.is_campaign() { CAMPAIGN_START } else { self.online_location(&attributes, slot)? };
         self.online.game = Some(OnlineGame {
             id,
             local_slot: slot,
@@ -1547,7 +1547,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // Co-op fork (M10): an owned challenge AI skater's look makes its puppet if its frames
         // have not yet.
         let remote = match owned::slot_of_id(user_id) {
-            Some((owner, slot)) if game.attributes.challenge_type == challenge::CAMPAIGN => game.remotes.entry(user_id).or_insert_with(|| RemoteSkater::new(user_id, owned::frames_slot(owner, slot))),
+            Some((owner, slot)) if game.attributes.is_campaign() => game.remotes.entry(user_id).or_insert_with(|| RemoteSkater::new(user_id, owned::frames_slot(owner, slot))),
             Some(_) => return Ok(()),
             None => match game.remotes.get_mut(&user_id) {
                 Some(remote) => remote,

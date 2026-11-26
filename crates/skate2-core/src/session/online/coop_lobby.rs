@@ -20,7 +20,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Co-op fork: the online game is a campaign lobby (`docs/coop/design.md`): the career plays
     /// with the game attached rather than the online free skate.
     pub(in super::super) fn online_campaign(&self) -> bool {
-        self.online.game.as_ref().is_some_and(|game| game.attributes.challenge_type == challenge::CAMPAIGN)
+        self.online.game.as_ref().is_some_and(|game| game.attributes.is_campaign())
     }
 
     /// Co-op fork: a campaign lobby entered from the main menu or the single player hub. The

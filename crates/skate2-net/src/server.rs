@@ -360,6 +360,18 @@ impl Game {
         self.members.iter_mut().find(|member| member.user_id == user_id)
     }
 
+    /// Co-op fork (M10, M18): `user_id`'s look for its owned AI skater at `slot`, kept for
+    /// joiners. A member keeps at most `owned::MOST` such looks; a new slot past that is refused.
+    /// The owner's player slot when it is kept, for the skater's marked id.
+    fn accept_owned_look(&mut self, user_id: u64, slot: u8, data: Arc<Vec<u8>>) -> Option<u8> {
+        let member = self.member_mut(user_id)?;
+        if member.owned_recipes.len() >= owned::MOST && !member.owned_recipes.contains_key(&slot) {
+            return None;
+        }
+        member.owned_recipes.insert(slot, data);
+        Some(member.slot)
+    }
+
     fn free_slot(&self) -> Option<u8> {
         (0..MAX_PLAYERS)
             .filter_map(|slot| u8::try_from(slot).ok())
@@ -1296,36 +1308,26 @@ impl ServerCore {
             // to every other member as the recipe of the skater's marked id; a campaign's only.
             ClientMessage::OwnedRecipe { slot, data } => {
                 let Some(game) = self.games.get_mut(&game_id) else { return };
-                if game.attributes.challenge_type != challenge::CAMPAIGN {
+                if !game.attributes.is_campaign() {
                     return;
                 }
                 let data = Arc::new(data);
                 game.looks.insert(crate::protocol::look_hash(&data), Arc::clone(&data));
-                let Some(member) = game.member_mut(user_id) else { return };
-                if member.owned_recipes.len() >= owned::MOST && !member.owned_recipes.contains_key(&slot) {
-                    return;
-                }
-                member.owned_recipes.insert(slot, Arc::clone(&data));
-                let owner = member.slot;
+                let Some(owner) = game.accept_owned_look(user_id, slot, Arc::clone(&data)) else { return };
                 self.broadcast(game_id, &ServerMessage::Recipe { user_id: owned::skater_id(owner, slot), data: data.to_vec() }, Some(user_id));
             }
             // Co-op fork (M18): the same look again, by hash: resolved from the game's looks and
             // relayed as a reference the others resolve from theirs.
             ClientMessage::OwnedRecipeRef { slot, hash } => {
                 let Some(game) = self.games.get_mut(&game_id) else { return };
-                if game.attributes.challenge_type != challenge::CAMPAIGN {
+                if !game.attributes.is_campaign() {
                     return;
                 }
                 let Some(data) = game.looks.get(&hash).cloned() else {
                     (self.log)(&format!("game {game_id}: a look reference {hash:016x} names no look here, dropped"));
                     return;
                 };
-                let Some(member) = game.member_mut(user_id) else { return };
-                if member.owned_recipes.len() >= owned::MOST && !member.owned_recipes.contains_key(&slot) {
-                    return;
-                }
-                member.owned_recipes.insert(slot, data);
-                let owner = member.slot;
+                let Some(owner) = game.accept_owned_look(user_id, slot, data) else { return };
                 self.broadcast(game_id, &ServerMessage::RecipeRef { user_id: owned::skater_id(owner, slot), hash }, Some(user_id));
             }
             ClientMessage::LookRequest { user_id: of, hash } => {
@@ -1625,7 +1627,7 @@ impl ServerCore {
                     return;
                 }
                 // Co-op fork: a campaign's "start" is its round's, once every member has loaded.
-                if game.attributes.challenge_type == challenge::CAMPAIGN {
+                if game.attributes.is_campaign() {
                     self.start_campaign(game_id, true);
                     return;
                 }
@@ -2063,7 +2065,7 @@ impl ServerCore {
     fn relay_owned_frames(&mut self, id: u32, user_id: u64, slot: u8, run: &crate::frames::EncodedRun, now: Instant) {
         let Some(game_id) = self.game_of(id) else { return };
         let Some(game) = self.games.get_mut(&game_id) else { return };
-        if game.attributes.challenge_type != challenge::CAMPAIGN {
+        if !game.attributes.is_campaign() {
             return;
         }
         let Some(source) = game.members.iter().position(|member| member.user_id == user_id && member.recipe.is_some()) else { return };
@@ -2112,7 +2114,7 @@ impl ServerCore {
         let Some(game_id) = self.game_of(id) else { return };
         let Some(game) = self.games.get_mut(&game_id) else { return };
         let Some(source) = game.members.iter().position(|member| member.user_id == user_id) else { return };
-        if game.attributes.challenge_type != challenge::CAMPAIGN {
+        if !game.attributes.is_campaign() {
             let member = &mut game.members[source];
             if !std::mem::replace(&mut member.world_refused_logged, true) {
                 (self.log)(&format!("{}: world runs outside a campaign are not relayed", member.name));
@@ -2190,7 +2192,7 @@ impl ServerCore {
             .games
             .values()
             .flat_map(|game| {
-                let campaign = game.attributes.challenge_type == challenge::CAMPAIGN;
+                let campaign = game.attributes.is_campaign();
                 game.members.iter().map(move |member| {
                     (member, if campaign { (CAMPAIGN_INACTIVITY, leave::KICKED_FOR_INACTIVITY) } else { game.inactivity(member.user_id) })
                 })
