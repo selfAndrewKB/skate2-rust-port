@@ -22,12 +22,12 @@ use crate::players_backend_settings::PlayersBackendSettings;
 use super::super::career::HeldPresentation;
 use skate2_net::protocol::{ClientMessage, FactsNotes, GameResult, MAX_PLAYERS, MAX_PRESENTED, Phase, PlayerStats, Presented, reset};
 use std::collections::{BTreeMap, BTreeSet};
-
-/// Co-op fork (M11): how long the challenge AI skaters stand at their leaving owner's last
-/// frames before the next owner's facts must carry them (its lead over the lockstep is about
-/// 120 ticks, and its spawns may wait on a character's scene).
-const AI_HANDOFF_GRACE: u32 = 600;
 use std::sync::{Arc, Mutex};
+
+// Co-op fork: the campaign's part of the round (`CoopRound`) and its methods.
+#[path = "coop_round.rs"]
+mod coop_round;
+use coop_round::{CoopRound, OwnedCoders};
 
 /// Challenge ticks one simulation tick may run while catching up with the other players.
 const CATCH_UP_TICKS: usize = 4;
@@ -121,9 +121,6 @@ pub(super) fn round_lock_line(round: u32) -> String {
 /// the server counts a report only while it is fresh, so one from a wait that has ended cannot
 /// join later ones.
 const STALL_REPORT_TICKS: u32 = 60;
-/// Co-op fork (M22): the "waiting for players" notice's text, the game's own (`SetupLobbyHUD`'s
-/// waiting line); the original's `eSk8FEPopup_Online_WaitForPlayersSmall` is not read here.
-const WAITING_FOR_SKATERS: &str = "ID_ONLINE_WAITING_FOR_SKATERS";
 
 /// Where the challenge last teleported a player of a turn-based round (see [`SPOT_LIMIT`]),
 /// whether their skater has shown there since, and whether this console now leaves it undrawn.
@@ -134,16 +131,6 @@ struct Spot {
     reached: bool,
     hidden: bool,
 }
-
-/// Co-op fork (M23): the tick a difference found at checkpoint `tick` dumps its parts' fields
-/// at: the next multiple of [`SYNC_DUMP_GRID`] at least a grid past it, which every console
-/// reaches after hearing of the difference unless its round trails by more than that.
-const fn sync_dump_tick(tick: u32) -> u32 {
-    (tick / SYNC_DUMP_GRID + 2) * SYNC_DUMP_GRID
-}
-
-/// Co-op fork (M23): the grid of ticks field dumps fall on.
-const SYNC_DUMP_GRID: u32 = 300;
 
 fn distance_xz(root: [f32; 3], xz: [f32; 2]) -> f32 {
     let (dx, dz) = (root[0] - xz[0], root[2] - xz[1]);
@@ -198,10 +185,8 @@ struct PlayerFacts {
     left: bool,
     /// The run and tick the player waits at a sync point from, standing still at those facts.
     syncing: Option<(u32, u32)>,
-    /// Co-op fork (M10): the coders of the challenge AI skaters the player owns, by their slot,
-    /// each decoded as the player codes it; the slots its last facts carried, for the trace.
-    owned_coders: BTreeMap<u8, FactsCoder>,
-    owned_slots: Vec<u8>,
+    /// Co-op fork (M10): the coders of the challenge AI skaters the player owns.
+    owned: OwnedCoders,
 }
 
 /// One tick of a player's facts: its frame, its notes, and (M10) the frames of the challenge
@@ -227,7 +212,7 @@ struct LocalTickFacts {
 impl PlayerFacts {
     /// The facts of a player in a round of `scope`, decoded as the player codes them.
     fn new(scope: FactsScope) -> Self {
-        Self { coder: FactsCoder::new(scope), frames: BTreeMap::new(), left: false, syncing: None, owned_coders: BTreeMap::new(), owned_slots: Vec::new() }
+        Self { coder: FactsCoder::new(scope), frames: BTreeMap::new(), left: false, syncing: None, owned: OwnedCoders::default() }
     }
 }
 
@@ -287,14 +272,6 @@ pub(super) struct Round {
     coder: FactsCoder,
     /// The local skater's facts by tick ([`LocalTickFacts`]).
     local_frames: BTreeMap<u32, LocalTickFacts>,
-    /// Co-op fork (M10): the coders of the challenge AI skaters this console owns, by slot, and
-    /// the AI slots whose frames the last tick carried (for `cMsgSkaterCreated`/`Destroyed`).
-    owned_coders: BTreeMap<u8, FactsCoder>,
-    ai_present: BTreeSet<i32>,
-    /// The slots the last produced facts carried, for the trace.
-    owned_slots: Vec<u8>,
-    /// This console's ambient skaters last counted, for the trace (they are no frame of the scripts').
-    ambient_seen: usize,
     /// The local skater's last whole frame, for the ticks it sends no facts for.
     own: Option<MissionFrame>,
     others: BTreeMap<u64, PlayerFacts>,
@@ -323,10 +300,8 @@ pub(super) struct Round {
     awaiting: Option<Awaiting>,
     /// How many runs of ticks each player has sent facts for, counted alike on every console.
     stints: [u32; MAX_PLAYERS],
-    /// Each player's frame of the last tick it sent facts for, and (M10) the owned skaters'
-    /// frames that came with it: a player standing at its last facts has its AI stand too.
+    /// Each player's frame of the last tick it sent facts for.
     standing: [Option<MissionFrame>; MAX_PLAYERS],
-    standing_owned: [Vec<MissionFrame>; MAX_PLAYERS],
     /// Votes pressed (player index, score) and players who left while not sending facts, until a
     /// tick's notes count them. A player who left is held by user id and numbered in the notes
     /// by the table then: one who left during the load is not in the challenge's table, which the
@@ -337,10 +312,6 @@ pub(super) struct Round {
     facts_sent: (u32, usize),
     /// Players whose `cMsgPlayerDisconnected` went to the challenge.
     disconnected: Vec<i32>,
-    /// Co-op fork (M11): a player who owned challenge AI skaters left at this tick (and its
-    /// index): its skaters stand at its last frames until another player's facts carry them,
-    /// `AI_HANDOFF_GRACE` ticks at most (open item 65).
-    ai_handoff: Option<(u32, usize)>,
     /// `mMyGameResult`.
     result: Option<GameResult>,
     stance: Arc<Mutex<[bool; MAX_PLAYERS]>>,
@@ -359,26 +330,6 @@ pub(super) struct Round {
     released: BTreeSet<u32>,
     /// `ChallengeLoadState`'s Enter ran: the lobby's travel came first.
     load_entered: bool,
-    /// Co-op fork: the round is a campaign's, the whole session long: every player paces it,
-    /// its objective groups each read their own player, and it never completes.
-    pub(super) campaign: bool,
-    /// Co-op fork (M22): a campaign round's pace and its "waiting for players" notice
-    /// (`crate::coop::pace`).
-    pace: crate::coop::pace::Pace,
-    stall: crate::coop::pace::StallWatch,
-    /// The session frame the pace and the watch last stepped in: a frame the round is not
-    /// updated in (a travel) leaves the timer to the game and starts the wait again.
-    paced_frame: Option<u32>,
-    /// Co-op fork (M9): the outcomes this console's scripts decided and not yet carried by a tick,
-    /// numbered; the newest applied of each player's.
-    outcomes_pending: Vec<skate2_net::protocol::Outcome>,
-    outcome_seq: u32,
-    outcomes_applied: [u32; MAX_PLAYERS],
-    /// Co-op fork: the prompts this console answered and not yet carried by a tick, numbered;
-    /// the next number; and the last number of each player's applied.
-    prompts_pending: Vec<skate2_net::protocol::Prompt>,
-    prompt_seq: u32,
-    prompts_applied: [u32; MAX_PLAYERS],
     /// `mWaitingForStreamer`: the loading screen is up.
     streamer: Option<StreamerWait>,
     /// `SKATE2_DIAGNOSTIC_ONLINE_VOTE` voted on the turn the HUD shows.
@@ -388,11 +339,6 @@ pub(super) struct Round {
     diagnostic_entered: Vec<(u64, u32)>,
     /// `SKATE2_TRACE_ONLINE_INPUTS`: a running hash of the ticks' frames.
     input_hash: u64,
-    /// Co-op fork (M23): the campaign round's sync check (`crate::coop::sync_check`) and the
-    /// grid ticks whose field dumps a difference asked for (two, so seats that heard of it a
-    /// grid apart still dump at one tick alike) and the parts.
-    sync_check: crate::coop::sync_check::SyncCheck,
-    sync_dump_at: Option<([u32; 2], u8)>,
     /// The scenes' and speech lines' events this console saw, numbered (`Presented`), until a
     /// tick delivers them, each with whether this console announced it while leading; the
     /// counts seen and delivered (delivered alike on every console).
@@ -401,9 +347,6 @@ pub(super) struct Round {
     speech_seen: BTreeMap<(i32, i32), u32>,
     nis_delivered: u32,
     speech_delivered: BTreeMap<(i32, i32), u32>,
-    /// Co-op fork: movie ends, counted as the NIS events are.
-    fmv_seen: u32,
-    fmv_delivered: u32,
     /// PC port (user request): a Spot Battle the host started with Infinite Rounds on, as the
     /// game had it at the round's load on every console.
     pub(super) infinite_rounds: bool,
@@ -426,6 +369,8 @@ pub(super) struct Round {
     /// The state this battle starts from (`ServerMessage::ChallengeCarry`), until it starts: one
     /// the server loaded again for a player who joined the battle before it.
     carry: Option<Vec<u8>>,
+    /// Co-op fork: the campaign's part of the round (`coop_round.rs`).
+    coop: CoopRound,
 }
 
 impl Round {
@@ -457,10 +402,6 @@ impl Round {
             scope,
             coder: FactsCoder::new(scope),
             local_frames: BTreeMap::new(),
-            owned_coders: BTreeMap::new(),
-            ai_present: BTreeSet::new(),
-            owned_slots: Vec::new(),
-            ambient_seen: 0,
             own: None,
             others: BTreeMap::new(),
             refilling: false,
@@ -474,12 +415,10 @@ impl Round {
             awaiting: None,
             stints: [0; MAX_PLAYERS],
             standing: Default::default(),
-            standing_owned: Default::default(),
             votes: BTreeMap::new(),
             leaving: BTreeSet::new(),
             facts_sent: (0, 0),
             disconnected: Vec::new(),
-            ai_handoff: None,
             result: None,
             stance,
             unpinned: None,
@@ -489,29 +428,15 @@ impl Round {
             sync: None,
             released: BTreeSet::new(),
             load_entered: false,
-            campaign: false,
-            pace: crate::coop::pace::Pace::default(),
-            stall: crate::coop::pace::StallWatch::default(),
-            paced_frame: None,
-            prompts_pending: Vec::new(),
-            prompt_seq: 0,
-            prompts_applied: [0; MAX_PLAYERS],
-            outcomes_pending: Vec::new(),
-            outcome_seq: 0,
-            outcomes_applied: [0; MAX_PLAYERS],
             streamer: None,
             diagnostic_voted: false,
             diagnostic_entered: Vec::new(),
             input_hash: 0,
-            sync_check: crate::coop::sync_check::SyncCheck::default(),
-            sync_dump_at: None,
             presentation_log: Vec::new(),
             nis_seen: 0,
             speech_seen: BTreeMap::new(),
             nis_delivered: 0,
             speech_delivered: BTreeMap::new(),
-            fmv_seen: 0,
-            fmv_delivered: 0,
             infinite_rounds: false,
             round_lock: 0,
             end_pending: false,
@@ -520,6 +445,7 @@ impl Round {
             spot_battle: false,
             join_wanted: false,
             carry: None,
+            coop: CoopRound::default(),
         }
     }
 
@@ -571,25 +497,6 @@ impl Round {
         usize::try_from(self.local).is_ok_and(|local| self.contributes(local))
     }
 
-    /// Co-op fork (M22): the local facts produced and not yet run, while a running campaign round
-    /// is paced by the local skater and at least one other player (`UpdateInputRate`'s "sent and
-    /// not simulated"); none otherwise.
-    fn campaign_pace_lead(&self) -> Option<u32> {
-        let others = self.players.len().saturating_sub(self.disconnected.len()) > 1;
-        (self.campaign && self.running() && others && self.local_contributes()).then(|| self.produced.saturating_sub(self.processed))
-    }
-
-    /// Co-op fork (M22): why the pace has no lead to read, for the trace.
-    fn unpaced_reason(&self) -> &'static str {
-        if !self.running() {
-            "the round not running (a sync point)"
-        } else if !self.local_contributes() {
-            "the local skater not pacing the round"
-        } else {
-            "no other player in the round"
-        }
-    }
-
     /// Whether the local skater alone paces the round: its own turn, no one else's teleport
     /// still under way.
     fn paced_by_local_alone(&self) -> bool {
@@ -632,11 +539,6 @@ impl Round {
         self.camera_player == Some(self.local)
     }
 
-    /// The player `Online.SwitchCamera` last made this console follow.
-    pub(super) fn followed(&self) -> Option<i32> {
-        self.camera_player
-    }
-
     /// Whether this console leads the round's presentation: it paces the round, and no player
     /// before it does.
     fn presentation_leader(&self) -> bool {
@@ -656,17 +558,11 @@ impl Round {
                 Presented::Speech { character, id, seq: *seen }
             }
             HeldPresentation::Fmv => {
-                self.fmv_seen += 1;
-                Presented::Fmv { seq: self.fmv_seen }
+                self.coop.fmv_seen += 1;
+                Presented::Fmv { seq: self.coop.fmv_seen }
             }
         };
-        if self.campaign {
-            crate::coop::trace(format_args!(
-                "presentation {presented:?} seen here at tick {} ({})",
-                self.processed,
-                if self.presentation_leader() { "this console leads: its facts will announce it" } else { "waiting for the leader's facts to deliver it" }
-            ));
-        }
+        self.trace_presentation_seen(presented); // Co-op fork
         self.presentation_log.push((presented, false));
     }
 
@@ -683,9 +579,7 @@ impl Round {
                 announced.push(*presented);
             }
         }
-        if self.campaign && !announced.is_empty() {
-            crate::coop::trace(format_args!("presentation {announced:?} announced with the facts of tick {}", self.produced));
-        }
+        self.trace_presentation_announced(&announced); // Co-op fork
         announced
     }
 
@@ -704,41 +598,26 @@ impl Round {
                 new
             }
             Presented::Fmv { seq } => {
-                let new = seq > self.fmv_delivered;
-                self.fmv_delivered = self.fmv_delivered.max(seq);
+                let new = seq > self.coop.fmv_delivered;
+                self.coop.fmv_delivered = self.coop.fmv_delivered.max(seq);
                 new
             }
         };
-        let (nis, speech, fmv) = (self.nis_delivered, &self.speech_delivered, self.fmv_delivered);
+        let (nis, speech, fmv) = (self.nis_delivered, &self.speech_delivered, self.coop.fmv_delivered);
         self.presentation_log.retain(|(presented, _)| match *presented {
             Presented::Nis { seq, .. } => seq > nis,
             Presented::Speech { character, id, seq } => speech.get(&(character, id)).is_none_or(|&delivered| seq > delivered),
             Presented::Fmv { seq } => seq > fmv,
         });
-        if self.campaign && !new {
-            crate::coop::trace(format_args!("presentation {presented:?} announced again at tick {}: already delivered", self.processed));
-        }
+        self.trace_presentation_again(presented, new); // Co-op fork
         new
     }
 
     /// What the local skater's next facts tell every console.
     fn notes(&self) -> FactsNotes {
         let left = self.leaving.iter().filter_map(|&user_id| self.player_index(user_id)).filter_map(|index| u8::try_from(index).ok()).collect();
-        let prompts = self.prompts_pending.iter().take(skate2_net::protocol::MAX_PROMPTS).copied().collect();
-        let outcomes = self.outcomes_pending.iter().take(skate2_net::protocol::MAX_OUTCOMES).copied().collect();
+        let (prompts, outcomes) = self.coop.pending_notes(); // Co-op fork
         FactsNotes { votes: self.votes.iter().map(|(&player, &score)| (player, score)).collect(), left, prompts, outcomes, ended: self.end_pending, ..FactsNotes::default() }
-    }
-
-    /// Co-op fork: a prompt this console answered, to travel with its next facts.
-    pub(super) fn queue_prompt(&mut self, kind: u8, value: i32) {
-        self.prompt_seq += 1;
-        self.prompts_pending.push(skate2_net::protocol::Prompt { seq: self.prompt_seq, kind, value });
-    }
-
-    /// Co-op fork (M9): an outcome this console's scripts decided, to travel with its next facts.
-    pub(super) fn queue_outcome(&mut self, kind: u8, activity: u64, value: i32) {
-        self.outcome_seq += 1;
-        self.outcomes_pending.push(skate2_net::protocol::Outcome { seq: self.outcome_seq, kind, activity, value });
     }
 
     /// The frame a player stands at for a tick it sends no facts for.
@@ -858,19 +737,19 @@ impl Round {
             }
             if !self.contributes(index) {
                 frames.push(self.standing_frame(index));
-                frames.extend(self.standing_owned[index].iter().cloned());
+                frames.extend(self.coop.standing_owned[index].iter().cloned());
                 continue;
             }
             if player == self.local {
                 if let Some(local) = self.local_frames.get(&tick).cloned() {
                     own = Some(local.whole);
                     frames.push(local.shared);
-                    self.standing_owned[index].clone_from(&local.owned);
+                    self.coop.standing_owned[index].clone_from(&local.owned);
                     frames.extend(local.owned);
                     notes.push((player, local.notes));
                 } else if self.local_ready(tick) {
                     frames.push(self.standing_frame(index));
-                    frames.extend(self.standing_owned[index].iter().cloned());
+                    frames.extend(self.coop.standing_owned[index].iter().cloned());
                 } else {
                     return None;
                 }
@@ -884,61 +763,24 @@ impl Round {
                 frames.extend(facts.owned.iter().cloned());
                 notes.push((player, facts.notes.clone()));
                 let owned = facts.owned.clone();
-                self.standing_owned[index] = owned;
+                self.coop.standing_owned[index] = owned;
             } else if facts.left {
                 disconnects.push(player);
-                if !self.standing_owned[index].is_empty() && self.ai_handoff.is_none() {
-                    trace(format_args!("player {player} left at tick {tick} with {} owned AI skaters: they stand at its last frames until the next owner's facts carry them, {AI_HANDOFF_GRACE} ticks at most", self.standing_owned[index].len()));
-                    self.ai_handoff = Some((tick, index));
-                }
+                self.coop.ai_owner_left(player, tick, index); // Co-op fork (M11)
             } else if facts.syncing.is_some_and(|(at, from)| at == stint && from <= tick) {
                 frames.push(self.standing_frame(index));
-                frames.extend(self.standing_owned[index].iter().cloned());
+                frames.extend(self.coop.standing_owned[index].iter().cloned());
             } else if facts.frames.range((stint, tick.saturating_add(1))..=(stint, u32::MAX)).next().is_some() {
                 // A player's facts arrive in order, so a later tick of the run without this one
                 // means the player began the run after it: it stands at this tick.
                 trace(format_args!("player {player} sent no facts for tick {tick} of run {stint}; it stands at it"));
                 frames.push(self.standing_frame(index));
-                frames.extend(self.standing_owned[index].iter().cloned());
+                frames.extend(self.coop.standing_owned[index].iter().cloned());
             } else {
                 return None;
             }
         }
-        // Co-op fork: each player's prompts, applied once each in order; the presser's own
-        // pending ones are done with once its own facts carried them.
-        let mut prompts = Vec::new();
-        for (player, note) in &notes {
-            let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
-            for &prompt in &note.prompts {
-                if prompt.seq > self.prompts_applied[slot] {
-                    self.prompts_applied[slot] = prompt.seq;
-                    prompts.push((*player, prompt));
-                }
-            }
-            if *player == self.local {
-                let applied = self.prompts_applied[slot];
-                self.prompts_pending.retain(|prompt| prompt.seq > applied);
-            }
-        }
-        // Co-op fork (M9): each player's outcomes, applied once each in order, the decider's own
-        // pending ones done with once its own facts carried them.
-        let mut outcomes = Vec::new();
-        for (player, note) in &notes {
-            let Some(slot) = usize::try_from(*player).ok().filter(|&slot| slot < MAX_PLAYERS) else { continue };
-            for &outcome in &note.outcomes {
-                if outcome.seq > self.outcomes_applied[slot] {
-                    self.outcomes_applied[slot] = outcome.seq;
-                    outcomes.push((*player, outcome));
-                }
-            }
-            if *player == self.local {
-                let applied = self.outcomes_applied[slot];
-                self.outcomes_pending.retain(|outcome| outcome.seq > applied);
-            }
-        }
-        if self.campaign {
-            self.compare_checks(&notes);
-        }
+        let (prompts, outcomes) = self.take_coop_notes(&notes); // Co-op fork
         let notes: Vec<FactsNotes> = notes.into_iter().map(|(_, note)| note).collect();
         for note in &notes {
             for &(voter, score) in &note.votes {
@@ -983,21 +825,7 @@ impl Round {
             }
         }
         self.disconnected.extend(&disconnects);
-        if let Some((since, from)) = self.ai_handoff {
-            let seats = self.players.len();
-            let carried = frames.iter().any(|frame| usize::try_from(frame.player).is_ok_and(|slot| slot >= seats));
-            if carried {
-                trace(format_args!("the next owner's facts carry the AI skaters at tick {tick}: player {from}'s last frames of them go"));
-                self.ai_handoff = None;
-                self.standing_owned[from].clear();
-            } else if tick.saturating_sub(since) > AI_HANDOFF_GRACE {
-                trace(format_args!("no player's facts carried the AI skaters in {AI_HANDOFF_GRACE} ticks after player {from} left: destroyed at tick {tick}"));
-                self.ai_handoff = None;
-                self.standing_owned[from].clear();
-            } else {
-                frames.extend(self.standing_owned[from].iter().cloned());
-            }
-        }
+        self.coop.carry_ai_handoff(&mut frames, tick, self.players.len()); // Co-op fork (M11)
         frames.sort_by_key(|frame| frame.player);
         if let Ok(mut stance) = self.stance.lock() {
             for frame in &frames {
@@ -1011,51 +839,6 @@ impl Round {
         self.processed += 1;
         self.ticks += 1;
         Some((frames, disconnects, own, presented, prompts, outcomes))
-    }
-
-    /// Co-op fork (M23): the other players' round checks that came with this tick's facts,
-    /// against this console's own record of the ticks they name. A first difference with a
-    /// player prints this console's whole parts of the ticks around it and asks for the parts'
-    /// field dump at a tick every console reaches alike ([`sync_dump_tick`]).
-    fn compare_checks(&mut self, notes: &[(i32, FactsNotes)]) {
-        use crate::coop::sync_check::{Compared, part_names};
-        for (player, note) in notes {
-            let Some(check) = note.check.filter(|_| *player != self.local) else { continue };
-            let Some(&user_id) = usize::try_from(*player).ok().and_then(|index| self.players.get(index)) else { continue };
-            match self.sync_check.compare(user_id, check.tick, check.parts) {
-                Compared::Agrees | Compared::StillDiffers { .. } => {}
-                Compared::Unknown => crate::coop::trace(format_args!("sync check of player {player} at tick {}: no record of the tick here", check.tick)),
-                Compared::Differs { mask, first } => {
-                    let ours = self.sync_check.parts_at(check.tick).unwrap_or_default();
-                    crate::coop::trace(format_args!(
-                        "sync check: player {player} differs at tick {} in {} ({}; ours {:08x?}, theirs {:04x?})",
-                        check.tick,
-                        part_names(mask),
-                        if first { "the first difference" } else { "after agreeing again" },
-                        ours,
-                        check.parts
-                    ));
-                    for (tick, parts) in self.sync_check.window(check.tick) {
-                        crate::coop::trace(format_args!("sync parts @{tick}: {parts:08x?}"));
-                    }
-                    if self.sync_dump_at.is_none() {
-                        let at = sync_dump_tick(check.tick);
-                        self.sync_dump_at = Some(([at, at + SYNC_DUMP_GRID], mask));
-                    }
-                }
-            }
-        }
-    }
-
-    /// Co-op fork (M23): each player's sync checks this round, for the trace.
-    fn trace_sync_standings(&self) {
-        if !self.campaign {
-            return;
-        }
-        for (user_id, checked, differed, first) in self.sync_check.standings() {
-            let first = first.map_or_else(|| "none".to_owned(), |(tick, mask)| format!("tick {tick} in {}", crate::coop::sync_check::part_names(mask)));
-            crate::coop::trace(format_args!("sync check with {user_id:016x}: {checked} checks, {differed} differed, first difference {first}"));
-        }
     }
 
     /// The players pacing the next tick, after the challenge ran this one. A player who starts
@@ -1206,17 +989,6 @@ impl OnlinePlayers {
         i32::try_from(self.names.len()).unwrap_or(0)
     }
 
-    /// Co-op fork (open item 45): a player past the humans is one of this console's own
-    /// challenge AI skaters, whose row the AI manager creates in the profile's back end at the
-    /// skater's slot (`AISkaterManager::post`); the row answers for it.
-    fn ai_row(&self, player: i32) -> Option<i32> {
-        (player >= self.count() && crate::ai::skater_manager::player_type::is_ai(self.settings.player_type(player).cast_unsigned())).then_some(player)
-    }
-
-    /// The profile's row a player's settings live in: the local skater's or an AI skater's.
-    fn settings_row(&self, player: i32) -> Option<i32> {
-        self.local_row(player).or_else(|| self.ai_row(player))
-    }
 }
 
 impl PlayersBackEnd for OnlinePlayers {
@@ -1381,10 +1153,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     _ => self.end_online_round()?,
                 }
             }
-            reset::CAMPAIGN => match local {
-                Some(local) if self.online_campaign() => self.start_campaign_round(seed, session, players, local)?,
-                _ => trace(format_args!("campaign reset ignored: local {local:?}, campaign {}", self.online_campaign())),
-            },
+            reset::CAMPAIGN => self.campaign_reset(seed, session, players, local)?, // Co-op fork
             _ => {
                 // The host's GameChange ends at a lobby reset at the new challenge.
                 let changed = self.online.changing_location.take().is_some();
@@ -1552,77 +1321,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// on every console: a freeskate activity's, and a Skate 3 game's that runs Skate 3's own
     /// graph (its 1-Up gives each competitor an objective group).
     pub(in super::super) fn online_round_per_player_objectives(&self) -> bool {
-        self.online.round.as_ref().is_some_and(|round| round.activity.is_some() || round.own_graph || round.campaign)
-    }
-
-    /// Co-op fork: the campaign round's next tick, while one runs.
-    pub(in super::super) fn campaign_round_tick(&self) -> Option<u32> {
-        self.online.round.as_ref().filter(|round| round.campaign).map(|round| round.processed)
-    }
-
-    /// Co-op fork, `GameReset(CAMPAIGN)`: the campaign's round starts on every console at the same
-    /// tick 0 with the server's seed and table. The career stays the career (`GM_SINGLE_PLAYER`,
-    /// progression on, autosaves); what changes is who paces its scripts: from here every
-    /// console runs them on every player's facts (scope "everything"), the players back end is the
-    /// table's, the career's random stream is the seeded one, the objective groups are per player
-    /// under the completion rules, and scenes run under the online rule.
-    fn start_campaign_round(&mut self, seed: u32, session: u32, players: Vec<u64>, local: usize) -> Result<(), SelectedLiveError> {
-        let stance = Arc::new(Mutex::new([true; MAX_PLAYERS]));
-        let backend = self.online_players_backend(&players, local, &stance)?;
-        let count = players.len();
-        let local_index = i32::try_from(local).unwrap_or(0);
-        let mut round = Round::loading(session, skate2_net::protocol::campaign::KEY, None, players.clone(), local_index, FactsScope::ALL, false, stance);
-        round.campaign = true;
-        round.start(players, local_index);
-        let mut random = self.inner.bound_input.as_mut().map(|input| input.simulation_random_mut().clone()).ok_or_else(|| error("input absent"))?;
-        random.set_seed_before_input_reset(seed);
-        let (rules, complaint) = crate::coop::rules::RuleTable::load();
-        if let Some(complaint) = complaint {
-            crate::coop::trace(format_args!("rules: {complaint}"));
-        }
-        let rules_hash = rules.hash();
-        let rules_source = rules.source.clone();
-        let career = self.career.as_mut().ok_or_else(|| error("campaign round without a career"))?;
-        let world = career.system.world_mut();
-        world.players = Some(Arc::new(backend));
-        world.local_player = local_index;
-        world.online = Some(OnlineChallenge { local_player: local_index, players: i32::try_from(count).unwrap_or(0), ..OnlineChallenge::default() });
-        world.coop = Some(crate::coop::rules::CampaignWorld {
-            rules,
-            players: (0..i32::try_from(count).unwrap_or(0)).collect(),
-            seats: count,
-            won: Vec::new(),
-            lost: Vec::new(),
-            decided: Vec::new(),
-            chase_on: false,
-        });
-        // Co-op fork (open items 45, 53): this console's AI skaters, ambient and challenge, seat
-        // themselves after the campaign's humans; one already in a human's slot leaves. M10: the
-        // challenge AI skaters are one console's (`CampaignWorld::ai_owner`); every other shows
-        // them as puppets of its frames and reads them from its facts.
-        let ai_owner = world.coop.as_ref().map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
-        if let (Some(ai), Some(player)) = (self.inner.ai.as_mut(), self.inner.player.as_ref()) {
-            ai.try_seat_ai_after_humans(count, local, &player.selected.owners.services.settings).map_err(error)?;
-            ai.streamed_challenge_ai = local_index != ai_owner;
-            ai.campaign = true;
-        }
-        crate::coop::trace(format_args!("campaign AI skaters: owned by player {ai_owner}{}", if local_index == ai_owner { " (this console)" } else { "; puppets here" }));
-        career.online_random = Some(random);
-        career.nis.set_online_game(true);
-        // The design's online rule for scenes: no skip, so every console sees a scene end at the
-        // tick the leader's facts announce.
-        career.nis.set_skip_blocked(true);
-        career.prompt_notes_on = true;
-        self.retire_campaign_notice();
-        if let Some(previous) = self.online.round.as_ref() {
-            previous.trace_sync_standings();
-        }
-        self.online.round = Some(round);
-        self.online.campaign_hold = false;
-        crate::coop::trace(format_args!(
-            "campaign round {session} started: seed {seed:08x}, {count} players, this console is player {local}, rules {rules_hash:016x} ({rules_source})"
-        ));
-        Ok(())
+        self.online.round.as_ref().is_some_and(|round| round.activity.is_some() || round.own_graph || round.coop.campaign)
     }
 
     /// `GameReset(Challenge)` (`HandleLobbySkateReset` 0x82776f90): `PopAllStates`, then
@@ -1827,18 +1526,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                 if notes.syncing && tick >= round.base {
                     facts.syncing = Some((stint, tick));
                 }
-                let mut owned_frames = Vec::with_capacity(owned.len());
-                for (slot, data) in owned {
-                    match facts.owned_coders.entry(*slot).or_insert_with(|| FactsCoder::new(scope)).decode(data, i32::from(*slot)) {
-                        Ok(frame) => owned_frames.push(frame),
-                        Err(e) => trace(format_args!("{user_id:016x}: facts of tick {tick}, owned slot {slot}: {e}")),
-                    }
-                }
-                let slots: Vec<u8> = owned.iter().map(|(slot, _)| *slot).collect();
-                if slots != facts.owned_slots {
-                    trace(format_args!("{user_id:016x}: facts of tick {tick} (stint {stint}) carry the owned AI slots {slots:?} (before: {:?})", facts.owned_slots));
-                    facts.owned_slots = slots;
-                }
+                let owned_frames = facts.owned.decode(owned, scope, user_id, tick, stint); // Co-op fork (M10)
                 facts.frames.insert((stint, tick), TickFacts { frame, notes, owned: owned_frames });
                 while facts.frames.len() > KEPT_FACTS {
                     facts.frames.pop_last();
@@ -1879,10 +1567,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // puppet here, followed as another player's skater is.
         let user_id = match round.players.get(usize::try_from(player).ok()?) {
             Some(&user_id) => user_id,
-            None if round.campaign => {
-                let owner = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
-                skate2_net::protocol::owned::skater_id(u8::try_from(owner).ok()?, u8::try_from(player).ok()?)
-            }
+            None if round.coop.campaign => self.campaign_ai_puppet(player)?,
             None => return None,
         };
         game.remotes.get(&user_id).filter(|remote| remote.visible())
@@ -2210,112 +1895,6 @@ impl<T, C> SelectedLiveSession<T, C> {
         Ok(())
     }
 
-    /// Co-op fork (M23): the campaign round's parts after the tick the scripts just ran, whose
-    /// frames hashed to `inputs`, for the sync check; the parts' field dumps the bench asked for
-    /// (`SKATE2_COOP_SYNC_DUMP=<ticks>`, every that many ticks) or a difference did; and
-    /// `SKATE2_DIAGNOSTIC_DESYNC=<tick>`, a planted divergence of this console's vars at the tick.
-    fn record_round_check(&mut self, inputs: u32) {
-        use crate::coop::sync_check::{PARTS, Part};
-        static DUMP_EVERY: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-        static PLANT_AT: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-        let Some(round) = self.online.round.as_mut().filter(|round| round.campaign) else { return };
-        let Some(career) = self.career.as_mut() else { return };
-        let tick = round.processed.saturating_sub(1);
-        if PLANT_AT.get_or_init(|| std::env::var("SKATE2_DIAGNOSTIC_DESYNC").ok().and_then(|value| value.trim().parse().ok())).is_some_and(|at| at == tick) {
-            match crate::coop::round_hash::plant_divergence(&mut career.system) {
-                Some(name) => crate::coop::trace(format_args!("diagnostic: a divergence planted in {name}'s vars at tick {tick}")),
-                None => crate::coop::trace(format_args!("diagnostic: no activity's vars to plant a divergence in at tick {tick}")),
-            }
-        }
-        let mut parts = crate::coop::round_hash::round_parts(&career.system);
-        parts[0] = inputs;
-        round.sync_check.record(tick, parts);
-        let every = DUMP_EVERY.get_or_init(|| std::env::var("SKATE2_COOP_SYNC_DUMP").ok().and_then(|value| value.trim().parse().ok()).filter(|&every: &u32| every > 0));
-        let asked = round.sync_dump_at.filter(|&(at, _)| tick >= at[0]).map(|(at, mask)| (at[0], mask));
-        let mask = match (asked, every.is_some_and(|every| tick % every == 0)) {
-            (Some((at, mask)), periodic) => {
-                round.sync_dump_at = round.sync_dump_at.and_then(|(at, mask)| (at[1] != u32::MAX && at[1] > tick).then_some(([at[1], u32::MAX], mask)));
-                if at != tick {
-                    crate::coop::trace(format_args!("sync dump asked for tick {at} comes at tick {tick}: the round here was past it"));
-                }
-                if periodic { u8::MAX } else { mask }
-            }
-            (None, true) => u8::MAX,
-            (None, false) => return,
-        };
-        for (index, part) in Part::ALL.into_iter().enumerate().take(PARTS) {
-            if mask & (1 << index) == 0 || part == Part::Inputs {
-                continue;
-            }
-            for line in crate::coop::round_hash::dump(&career.system, part) {
-                crate::coop::trace(format_args!("sync dump @{tick} {}: {line}", part.name()));
-            }
-        }
-    }
-
-    /// Co-op fork (M22): one simulation tick of a campaign round's pace and stall notice, from
-    /// the lead before the round ran and whether a round tick ran.
-    fn update_campaign_pace(&mut self, lead: Option<u32>, ran: bool) {
-        let (rtt, frame) = (self.online.round_trip, self.completed_frames);
-        let Some(round) = self.online.round.as_mut().filter(|round| round.campaign) else { return };
-        let resumed = round.paced_frame.is_some_and(|last| frame.saturating_sub(last) > 1);
-        round.paced_frame = Some(frame);
-        let (tick, before, paced_before) = (round.processed, round.pace.hz(), round.pace.paced());
-        if let Some(paced) = round.pace.update(lead, rtt) {
-            match paced.lead {
-                Some(lead) => crate::coop::trace(format_args!(
-                    "pace at tick {tick}: timer {before} -> {} Hz, {lead} local facts not yet run (free/target {:.2}, target {:.1}, ping {:.0} ms)",
-                    paced.hz, paced.ratio, paced.target, paced.ping_ms
-                )),
-                None => crate::coop::trace(format_args!("pace at tick {tick}: timer {before} -> {} Hz, {}", paced.hz, round.unpaced_reason())),
-            }
-        } else if paced_before && !round.pace.paced() {
-            crate::coop::trace(format_args!("pace at tick {tick}: the game's own timer again, {}", round.unpaced_reason()));
-        }
-        let notice = if round.running() && round.processed > 0 && !resumed { round.stall.update(ran) } else { round.stall.pause() };
-        let awaited = round.awaited();
-        let shown = round.stall.shown();
-        let text = EventText::plain(WAITING_FOR_SKATERS);
-        match notice {
-            Some(crate::coop::pace::Notice::Open) => crate::coop::trace(format_args!(
-                "waiting for players at tick {tick}: no round tick for {} simulation ticks, awaiting {}, notice shown",
-                crate::coop::pace::STALL_TICKS,
-                awaited.map_or_else(|| "no other player's facts".to_owned(), |user_id| format!("user {user_id}'s facts"))
-            )),
-            Some(crate::coop::pace::Notice::Close(waited)) => {
-                crate::coop::trace(format_args!("waiting for players over at tick {tick} after {waited} simulation ticks{}, notice taken down", if resumed { " (this console's own pause in the round's updates)" } else { "" }));
-                self.online.event_log.retire(&text);
-            }
-            None => {}
-        }
-        if shown {
-            self.online.event_log.keep(&text);
-        }
-    }
-
-    /// Co-op fork (M22): a campaign round going (its end, a new round in its place) takes its
-    /// "waiting for players" notice down.
-    fn retire_campaign_notice(&mut self) {
-        if let Some(round) = self.online.round.as_mut().filter(|round| round.campaign)
-            && let Some(crate::coop::pace::Notice::Close(waited)) = round.stall.pause()
-        {
-            crate::coop::trace(format_args!("waiting for players over with the round after {waited} simulation ticks, notice taken down"));
-            self.online.event_log.retire(&EventText::plain(WAITING_FOR_SKATERS));
-        }
-    }
-
-    /// Co-op fork (M22): the timer rate a campaign round's pace sets for the 60 Hz baseline,
-    /// while another player paces the round with the local skater and the round was stepped in
-    /// the last frame.
-    pub(in super::super) fn campaign_pace_hz(&self) -> Option<i32> {
-        let frame = self.completed_frames;
-        self.online
-            .round
-            .as_ref()
-            .filter(|round| round.campaign && round.pace.paced() && round.paced_frame.is_some_and(|last| frame.saturating_sub(last) <= 1))
-            .map(|round| round.pace.hz())
-    }
-
     /// The players pacing the next challenge tick (`Round::contributors`). Pins do not count:
     /// a script pins `vars.LocalPlayerID`, a different player on each console.
     fn online_contributors(&self) -> Option<u8> {
@@ -2481,29 +2060,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             Stage::Running | Stage::Complete => {
                 let local = round.local;
                 self.take_held_presentation();
-                // Co-op fork: the prompts answered here since the last facts ride the next.
-                if let Some(career) = self.career.as_mut() {
-                    let answered = career.take_pending_prompts();
-                    let decided = std::mem::take(&mut career.system.world_mut().coop_outcomes);
-                    if let Some(round) = self.online.round.as_mut() {
-                        for answer in answered {
-                            let (kind, value) = answer.to_wire();
-                            round.queue_prompt(kind, value);
-                            crate::coop::trace(format_args!("prompt {answer:?} answered here: queued for the next facts"));
-                        }
-                        for outcome in decided {
-                            // M13: every console's scripts decide alike on a human's event; the
-                            // note is that human's console's to send.
-                            if outcome.player() >= 0 && outcome.player() != local {
-                                crate::coop::trace(format_args!("outcome {outcome:?} decided here for player {}: its own console's note carries it", outcome.player()));
-                                continue;
-                            }
-                            let (kind, activity, value) = outcome.to_wire();
-                            round.queue_outcome(kind, activity, value);
-                            crate::coop::trace(format_args!("outcome {outcome:?} decided here: queued for the next facts"));
-                        }
-                    }
-                }
+                self.queue_coop_notes(local); // Co-op fork
                 self.produce_online_facts()?;
                 self.diagnostic_race_gates(local)?;
                 let completed = self.completed_frames;
@@ -2515,7 +2072,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         round.stalls += 1;
                     }
                     if completed % 600 == 0 && round.processed > 0 {
-                        trace(format_args!("round at tick {}: {} ready, stalled {} of the last 600 ticks, timer {} Hz", round.processed, lead, std::mem::take(&mut round.stalls), round.pace.hz()));
+                        trace(format_args!("round at tick {}: {} ready, stalled {} of the last 600 ticks, timer {} Hz", round.processed, lead, std::mem::take(&mut round.stalls), round.coop.pace.hz()));
                         round.trace_sync_standings();
                     }
                     // Only a round with no tick ready waits at its next tick, which every console
@@ -2581,38 +2138,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                                 Presented::Fmv { .. } => HeldPresentation::Fmv,
                             });
                         }
-                        for (player, prompt) in prompts {
-                            match crate::coop::prompts::PromptAnswer::from_wire(prompt.kind, prompt.value) {
-                                Some(answer) => {
-                                    crate::coop::trace(format_args!("prompt {answer:?} from player {player} applied at tick {tick}"));
-                                    career.apply_prompt(answer);
-                                }
-                                None => crate::coop::trace(format_args!("prompt kind {} from player {player} unknown at tick {tick}", prompt.kind)),
-                            }
-                        }
-                        for (player, outcome) in outcomes {
-                            match crate::coop::outcomes::Outcome::from_wire(outcome.kind, outcome.activity, outcome.value) {
-                                Some(outcome) => career.system.apply_coop_outcome(player, outcome, tick),
-                                None => crate::coop::trace(format_args!("outcome kind {} from player {player} unknown at tick {tick}", outcome.kind)),
-                            }
-                        }
                     }
-                    // Co-op fork (open item 45, M10): the owned challenge AI skaters' frames came
-                    // with their owner's facts, so the scripts of every console read the humans
-                    // and one AI run and nothing else. An AI slot's first and last frame are its
-                    // creation and destruction to the scripts, the same tick on every console.
-                    // This console's own ambient skaters (each console's own, open item 53) stay
-                    // out of the scripts' frames (M10.3, open item 69): their creation reached
-                    // the scripts as AI players at each console's own ticks and slots.
-                    if let Some(humans) = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map(|campaign| campaign.seats) {
-                        let ambient = self.career_ai_skaters(humans, false).count();
-                        if let Some(round) = self.online.round.as_mut().filter(|round| round.ambient_seen != ambient) {
-                            round.ambient_seen = ambient;
-                            crate::coop::trace(format_args!("{ambient} ambient skaters here at tick {tick}: each console's own, out of the scripts' frames"));
-                        }
-                        self.online_round_ai_messages(&frames, humans, tick);
-                    }
-                    let inputs = if self.online.round.as_ref().is_some_and(|round| round.campaign) { crate::coop::round_hash::inputs(&frames) } else { 0 };
+                    self.apply_coop_notes(prompts, outcomes, tick); // Co-op fork
+                    self.campaign_round_frames(&frames, tick); // Co-op fork (M10)
+                    let inputs = self.campaign_round_inputs(&frames); // Co-op fork (M23)
                     self.career_step(Some((frames, local, own)))?;
                     self.record_round_check(inputs);
                     self.send_spot_battle_carry();
@@ -2684,94 +2213,6 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
     }
 
-    /// Co-op fork (M10): the AI slots the tick's frames hold against the last tick's: a slot
-    /// that appears is `cMsgSkaterCreated` to the scripts (with the AI's ordinal, as they number
-    /// it), one that goes `cMsgSkaterDestroyed`; a streamed skater's puppet hides with its last
-    /// frame.
-    fn online_round_ai_messages(&mut self, frames: &[MissionFrame], humans: usize, tick: u32) {
-        use crate::hermes_challenge_queue::{ChallengeMessage, ChallengePayload, SkaterNotification};
-        let present: BTreeSet<i32> = frames.iter().map(|frame| frame.player).filter(|&slot| usize::try_from(slot).is_ok_and(|slot| slot >= humans)).collect();
-        let Some(round) = self.online.round.as_mut() else { return };
-        if present == round.ai_present {
-            return;
-        }
-        let was = std::mem::replace(&mut round.ai_present, present.clone());
-        let Some(career) = self.career.as_mut() else { return };
-        let mut hidden = Vec::new();
-        let mut changed = Vec::new();
-        let owner = crate::challenge::players::owns_challenge_ai(career.system.world());
-        for (slot, notification) in was.difference(&present).map(|&slot| (slot, SkaterNotification::Destroyed)).chain(present.difference(&was).map(|&slot| (slot, SkaterNotification::Created))) {
-            let world = career.system.world();
-            let ordinal = crate::challenge::players::script_index(world, slot);
-            let streamed = crate::challenge::players::streamed_ai_slot(world, slot);
-            crate::coop::trace(format_args!("AI skater at slot {slot} (the scripts' AI player {ordinal}{}): {notification:?} at tick {tick}", if streamed { ", a puppet here" } else { "" }));
-            career.system.post(super::super::career::challenge_queue_event(ChallengeMessage::new(ChallengePayload::Skater { notification, player_id: ordinal })));
-            if streamed && notification == SkaterNotification::Destroyed {
-                hidden.push(slot);
-            }
-            if owner && notification == SkaterNotification::Destroyed {
-                changed.push(slot);
-            }
-        }
-        let owner_index = self.career.as_ref().and_then(|career| career.system.world().coop.as_ref()).map_or(0, crate::coop::rules::CampaignWorld::ai_owner);
-        for slot in hidden {
-            self.online_hide_owned_puppet(u8::try_from(owner_index).unwrap_or(0), slot);
-        }
-        for slot in changed {
-            self.online_owned_slot_changed(slot);
-        }
-    }
-
-    /// Co-op fork (M10): a campaign round's end: no challenge AI skater is streamed here any
-    /// more, and the owned skaters' puppets go.
-    pub(super) fn end_campaign_ai_streams(&mut self) {
-        if let Some(ai) = self.inner.ai.as_mut() {
-            ai.streamed_challenge_ai = false;
-            ai.campaign = false;
-            ai.streamed_spawns.clear();
-            let mut manager = ai.manager();
-            manager.campaign_players = 1;
-            manager.campaign_index = 0;
-        }
-        self.online_drop_owned_puppets();
-    }
-
-    /// Co-op fork (M11, open item 65): the challenge AI skaters' owner left the round and the
-    /// next player owns them, at the tick every console delivers the leave. The new owner
-    /// spawns them afresh from the spawn commands it had dropped as the old owner's, each at
-    /// the last frame the old owner's facts carried (its path and behaviour start over), drops
-    /// their puppets, and from its next facts carries their frames and streams their bodies as
-    /// the old owner did; every other console keeps its puppets for the new stream.
-    fn online_ai_owner_changed(&mut self, new_owner: i32) {
-        let Some(round) = self.online.round.as_ref() else { return };
-        let (local, tick) = (round.local, round.processed);
-        let standing: Vec<MissionFrame> = round.ai_handoff.map(|(_, from)| round.standing_owned[from].clone()).unwrap_or_default();
-        let mine = new_owner == local;
-        crate::coop::trace(format_args!("campaign AI skaters: their owner left; owned by player {new_owner}{} from tick {tick}", if mine { " (this console)" } else { "; puppets here" }));
-        if !mine {
-            return;
-        }
-        let Some(ai) = self.inner.ai.as_mut() else { return };
-        ai.streamed_challenge_ai = false;
-        let spawns = std::mem::take(&mut ai.streamed_spawns);
-        let mut taken = Vec::with_capacity(spawns.len());
-        for (slot, command) in spawns {
-            let crate::ai::skater_manager::AmbientCommand::Spawn { slot, client_type, recipe, mut transform, profile_name } = command else { continue };
-            let last = standing.iter().find(|frame| usize::try_from(frame.player) == Ok(slot)).map(|frame| frame.position);
-            if let Some(position) = last {
-                transform[3] = [position[0], position[1], position[2], 1.0];
-            }
-            crate::coop::trace(format_args!("owned AI skater at slot {slot} (recipe {recipe:#018x}): this console takes it over at tick {tick}, spawned {}", last.map_or_else(|| "at its spawn".to_owned(), |position| format!("at its last frame {position:?}"))));
-            ai.deferred.push(crate::ai::skater_manager::AmbientCommand::Spawn { slot, client_type, recipe, transform, profile_name });
-            taken.push(slot);
-        }
-        for slot in taken {
-            if let Ok(slot) = i32::try_from(slot) {
-                self.online_drop_owned_puppet(slot);
-            }
-        }
-    }
-
     /// PC port (user request): the game let `ticks` of its clock go after a stall instead of
     /// running them off in fast motion; a round the local skater paces skips them
     /// (`Round::skip_ticks`).
@@ -2785,10 +2226,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// (M10) the frames of the challenge AI skaters this console owns, at their slots.
     fn produce_online_facts(&mut self) -> Result<(), SelectedLiveError> {
         let frames = self.career_mission_frames()?;
-        let owned_frames = match self.career.as_ref().and_then(|career| career.system.world().coop.as_ref().map(|campaign| (campaign.seats, crate::challenge::players::owns_challenge_ai(career.system.world())))) {
-            Some((humans, true)) => self.career_ai_skater_frames(humans, true)?,
-            _ => Vec::new(),
-        };
+        let owned_frames = self.owned_ai_frames()?; // Co-op fork (M10)
         let Some(round) = self.online.round.as_mut() else { return Ok(()) };
         let Some(mut own) = frames.into_iter().find(|frame| frame.local) else { return Ok(()) };
         own.player = round.local;
@@ -2804,29 +2242,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         let tick = round.produced;
         let mut notes = round.notes();
         notes.presented = round.announce_presentation();
-        if round.campaign {
-            notes.check = round.sync_check.take_unsent().map(|(tick, parts)| skate2_net::protocol::RoundCheck { tick, parts });
-        }
+        round.coop.attach_sync_check(&mut notes); // Co-op fork (M23)
         let stint = usize::try_from(round.local).ok().and_then(|local| round.stints.get(local)).copied().unwrap_or(0);
-        let scope = round.scope;
-        let mut owned = Vec::with_capacity(owned_frames.len());
-        let mut owned_shared = Vec::with_capacity(owned_frames.len());
-        if owned_frames.len() > skate2_net::protocol::owned::MOST {
-            crate::coop::trace(format_args!("{} owned AI skaters at tick {tick}: the wire carries {}; the rest stay here", owned_frames.len(), skate2_net::protocol::owned::MOST));
-        }
-        for frame in owned_frames.into_iter().take(skate2_net::protocol::owned::MOST) {
-            let Ok(slot) = u8::try_from(frame.player) else { continue };
-            let frame = scope.shared(&frame);
-            let coded = round.owned_coders.entry(slot).or_insert_with(|| FactsCoder::new(scope)).encode(&frame);
-            owned.push((slot, coded));
-            owned_shared.push(frame);
-        }
-        let owned_bytes: usize = owned.iter().map(|(_, data)| data.len()).sum();
-        let slots: Vec<u8> = owned.iter().map(|(slot, _)| *slot).collect();
-        if slots != round.owned_slots {
-            trace(format_args!("facts of tick {tick} produced (processed {}) carry the owned AI slots {slots:?} (before: {:?})", round.processed, round.owned_slots));
-            round.owned_slots = slots;
-        }
+        let (owned, owned_shared, owned_bytes) = round.encode_owned(tick, owned_frames); // Co-op fork (M10)
         round.local_frames.insert(tick, LocalTickFacts { shared, whole: own, notes: notes.clone(), owned: owned_shared });
         round.produced += 1;
         if round.produced % 300 == 0 {
@@ -3047,8 +2465,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         // highlight, for one); all go on from the same tick, the next run of ticks.
         state.syncs += 1;
         state.base = state.syncs << 20;
-        state.sync_check.sync_point();
-        state.sync_dump_at = None;
+        state.coop.sync_point(); // Co-op fork (M23)
         state.processed = state.base;
         state.produced = state.base;
         state.local_frames.clear();
