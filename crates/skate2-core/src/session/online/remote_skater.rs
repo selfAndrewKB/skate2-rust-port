@@ -105,6 +105,12 @@ const ROOT_WORD: usize = 32;
 const FLAGS_WORD: usize = 48;
 const LOCAL_FLAG: u32 = 0x8000;
 const TELEPORT_FLAG: u32 = 0x1000;
+/// PC port addition, Skate During Turn Wait: a bit of the flags word no presentation writes or
+/// reads (`SkaterPresentation` keeps 0x8000 local, 0x4000 collidable, 0x2000 main camera only
+/// and 0x1000 teleported), set in the replay frames a player sends while it skates freely
+/// through another player's turn. The other consoles leave such a skater undrawn and unheard,
+/// so the player whose turn it is sees nothing of it.
+pub(super) const TURN_WAIT_FLAG: u32 = 0x0800;
 /// Header words 40 and 41: `peerId` (bytes 160..168).
 const PEER_WORD: usize = 40;
 /// Ticks without a frame after which a skater no longer shows: its player stopped sending (in a
@@ -137,7 +143,8 @@ fn camera_rotation(matrix: &SkeletonRootMatrix) -> [f32; 4] {
 }
 
 /// The game camera as frames carry it: its position, its rotation (on the side of `previous`,
-/// the rotation last sent, so the values move on smoothly) and its vertical field of view.
+/// the rotation last sent, so the values move on smoothly) and its camera frame's vertical field
+/// of view, before the sender's Field of View setting.
 pub(super) fn camera_values(matrix: &SkeletonRootMatrix, fov: f32, previous: Option<[f32; 4]>) -> [f32; CAMERA_VALUES] {
     let mut rotation = camera_rotation(matrix);
     if previous.is_some_and(|previous| previous.iter().zip(&rotation).map(|(a, b)| a * b).sum::<f32>() < 0.0) {
@@ -152,7 +159,8 @@ pub(super) fn camera_values(matrix: &SkeletonRootMatrix, fov: f32, previous: Opt
 pub(super) struct RemoteCamera {
     /// The camera matrix: its axes, then its position.
     pub(super) matrix: [f32; 16],
-    /// The vertical field of view in degrees.
+    /// The camera frame's vertical field of view in degrees, before any console's Field of View
+    /// setting.
     pub(super) fov: f32,
 }
 
@@ -936,6 +944,15 @@ impl RemoteSkater {
     /// The hips of the skater shown, for distances and the camera's subject.
     pub(super) fn hips(&self) -> Option<[f32; 3]> {
         self.shown().and(self.restore.as_ref()).map(|restore| restore.hips_position)
+    }
+
+    /// PC port addition, Skate During Turn Wait: the frame shown says its player skates freely
+    /// through another player's turn ([`TURN_WAIT_FLAG`]).
+    pub(super) fn turn_wait(&self) -> bool {
+        self.shown().is_some_and(|shown| {
+            let flags = &shown.frame.header[4 * FLAGS_WORD..4 * FLAGS_WORD + 4];
+            u32::from_be_bytes([flags[0], flags[1], flags[2], flags[3]]) & TURN_WAIT_FLAG != 0
+        })
     }
 
     /// The root of the skater shown, as `SkaterPresentation::GetSkaterRoot` reads it.

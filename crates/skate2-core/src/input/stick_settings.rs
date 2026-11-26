@@ -7,13 +7,33 @@
 //! game a DualShock 3's 8-bit axes. The game's own stick conversion (`try_convert_xbox_pad`, with
 //! its deadzone of a quarter of the stick's travel) follows unchanged, and at the vanilla settings
 //! a sample passes through as the pad reported it.
+//!
+//! PC port addition (user request): RPCS3's trigger threshold on both triggers
+//! (`NormalizeTriggerInput`). The game reads any pull above none as a held trigger (an air grab, a
+//! crouch) and its conversion (`try_convert_xbox_pad`, the byte over 255) has no threshold of its
+//! own, so a finger resting on a trigger holds it. A trigger at or under the threshold reads as let
+//! go, and past it the rest of its travel maps onto the whole range, so a full pull stays full.
+//!
+//! PC port addition (user request): an input delay in milliseconds, which the pad platforms keep
+//! (`skate2-pc`'s `pad_delay`): the game reads each pad as it was that long before the poll.
+//!
+//! PC port addition (user request): the polling rate, when each tick's one poll reads the pads
+//! ([`Polling`]). The game polls once per 60 Hz timer period at every frame rate; the original
+//! reads the pads on the timer itself, a sixtieth of a second apart, and the port's tick reads
+//! them when it runs, which follows the frames (`docs/evidence/input-delay-2026-11-21.md`).
 use crate::input_pad::XboxPadSample;
 use std::ops::RangeInclusive;
 
 /// The multipliers a stick takes, in hundredths.
-pub const MULTIPLIERS: RangeInclusive<u8> = 40..=110;
+pub const MULTIPLIERS: RangeInclusive<u8> = 40..=120;
 /// The deadzones and anti-deadzones a stick takes, in percent of its travel.
 pub const DEADZONES: RangeInclusive<u8> = 0..=50;
+/// The thresholds the triggers take, in percent of a trigger's travel.
+pub const TRIGGER_THRESHOLDS: RangeInclusive<u8> = 0..=90;
+/// The triggers' threshold without a saved one.
+pub const DEFAULT_TRIGGER_THRESHOLD: u8 = 20;
+/// The input delays the pads take, in milliseconds.
+pub const INPUT_DELAYS: RangeInclusive<u8> = 0..=30;
 
 /// One stick's settings: the multiplier in hundredths, the deadzone and the anti-deadzone in
 /// percent of the stick's travel from its centre.
@@ -84,24 +104,93 @@ impl StickSettings {
     }
 }
 
-/// Both sticks' settings, which `controller_config.json` keeps.
+/// When a tick's poll reads the pads: Control Settings' Polling Rate.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Polling {
+    /// As the original's timer reads them (`timerThread` 0x8298a2c4), and without a saved
+    /// setting: each tick takes the pads as they were at its own 60 Hz timer instant, a sixtieth
+    /// of a second after the tick before's, whenever the frames let the tick run.
+    #[default]
+    Vanilla,
+    /// As the port read them before the setting: at the moment the tick runs, which follows the
+    /// frames' pacing. Measured, the reads stay a sixtieth of a second apart while the frame rate
+    /// is capped or far above 60, and come 11 to 25 ms apart at an uncapped 70 frames a second.
+    FrameTimed,
+}
+
+impl Polling {
+    /// The Polling Rate row's value.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Vanilla => "60hz (Vanilla)",
+            Self::FrameTimed => "Frame Timed",
+        }
+    }
+}
+
+/// Both sticks' settings, the triggers' threshold, the input delay and the polling rate, which
+/// `controller_config.json` keeps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ControllerSettings {
     pub left: StickSettings,
     pub right: StickSettings,
+    /// The percent of a trigger's travel at or under which it reads as let go.
+    pub trigger_threshold: u8,
+    /// How many milliseconds before each poll the game reads a pad's state from.
+    pub input_delay: u8,
+    /// When each tick's poll reads the pads.
+    pub polling: Polling,
+}
+
+impl Default for ControllerSettings {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 impl ControllerSettings {
-    pub const VANILLA: Self = Self { left: StickSettings::VANILLA, right: StickSettings::VANILLA };
+    /// A pad's sample as the pad reported it.
+    pub const VANILLA: Self =
+        Self { left: StickSettings::VANILLA, right: StickSettings::VANILLA, trigger_threshold: 0, input_delay: 0, polling: Polling::Vanilla };
+    /// The settings without saved ones: the sticks vanilla, the triggers past their default
+    /// threshold.
+    pub const DEFAULT: Self = Self { trigger_threshold: DEFAULT_TRIGGER_THRESHOLD, ..Self::VANILLA };
 
-    /// A pad's sample with both sticks as these settings hand them to the game; its buttons and
-    /// triggers as they were.
+    /// A pad's sample with both sticks and both triggers as these settings hand them to the game;
+    /// its buttons as they were. The input delay is the pad platform's to keep.
     #[must_use]
     pub fn apply(&self, sample: XboxPadSample) -> XboxPadSample {
         let (left_x, left_y) = self.left.apply(sample.left_x, sample.left_y);
         let (right_x, right_y) = self.right.apply(sample.right_x, sample.right_y);
-        XboxPadSample { left_x, left_y, right_x, right_y, ..sample }
+        XboxPadSample {
+            left_trigger: trigger(self.trigger_threshold, sample.left_trigger),
+            right_trigger: trigger(self.trigger_threshold, sample.right_trigger),
+            left_x,
+            left_y,
+            right_x,
+            right_y,
+            ..sample
+        }
     }
+}
+
+/// A raw trigger (`XINPUT_GAMEPAD`'s byte) under a threshold in percent of its travel, as RPCS3's
+/// `NormalizeTriggerInput` hands it on: let go at or under the threshold, and past it the rest of
+/// the travel mapped onto the whole range (`ScaledInput`), so the least pull past the threshold
+/// reads above none and a full pull stays full. Without a threshold the byte passes through as the
+/// pad reported it.
+#[must_use]
+pub fn trigger(threshold: u8, value: u8) -> u8 {
+    let threshold = u32::from(threshold.min(*TRIGGER_THRESHOLDS.end())) * 255 / 100;
+    if threshold == 0 {
+        return value;
+    }
+    let value = u32::from(value);
+    if value <= threshold {
+        return 0;
+    }
+    u8::try_from((value - threshold) * 255 / (255 - threshold)).unwrap_or(u8::MAX)
 }
 
 /// A raw axis in `-1..=1`, as the game's conversion scales it (`try_convert_xbox_pad`'s 2^-15).
@@ -177,7 +266,50 @@ mod tests {
         }
         let sample = XboxPadSample { buttons: 0x1234, left_trigger: 7, right_trigger: 200, left_x: -3, left_y: 32767, right_x: -32768, right_y: 99 };
         assert_eq!(ControllerSettings::VANILLA.apply(sample), sample);
-        assert_eq!(ControllerSettings::default(), ControllerSettings::VANILLA);
+        // Without saved settings the sticks are vanilla and the triggers take their default threshold.
+        assert_eq!(ControllerSettings::default(), ControllerSettings::DEFAULT);
+        assert_eq!(ControllerSettings::DEFAULT, ControllerSettings { trigger_threshold: DEFAULT_TRIGGER_THRESHOLD, ..ControllerSettings::VANILLA });
+    }
+
+    /// RPCS3's `NormalizeTriggerInput` on an XInput trigger (`trigger_min` 0, `trigger_max` 255),
+    /// the threshold in its units.
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, reason = "RPCS3's own casts")]
+    fn rpcs3_trigger(value: u8, threshold: u32) -> u16 {
+        if u32::from(value) <= threshold || threshold >= 255 {
+            return 0;
+        }
+        let minimum = threshold as f32;
+        let scaled = (f32::from(value).min(255.).max(minimum) - minimum) / (255. - minimum);
+        (255. * scaled) as u16
+    }
+
+    #[test]
+    fn a_trigger_threshold_lets_a_light_pull_go_and_keeps_a_full_one_full() {
+        for value in 0..=255 {
+            assert_eq!(trigger(0, value), value, "no threshold: as the pad reported it");
+        }
+        // A fifth of the travel is 51 of 255.
+        assert_eq!([trigger(20, 0), trigger(20, 1), trigger(20, 30), trigger(20, 51)], [0; 4]);
+        assert_eq!([trigger(20, 52), trigger(20, 153), trigger(20, 254), trigger(20, 255)], [1, 127, 253, 255]);
+        for threshold in TRIGGER_THRESHOLDS {
+            assert_eq!(trigger(threshold, 255), 255, "a full pull stays full");
+            let mut last = 0;
+            for value in 0..=255 {
+                let ours = trigger(threshold, value);
+                assert!(ours >= last, "{threshold}% at {value}");
+                last = ours;
+                let theirs = rpcs3_trigger(value, u32::from(threshold) * 255 / 100);
+                // RPCS3 scales in single precision and truncates; nothing more apart.
+                assert!(u16::from(ours).abs_diff(theirs) <= 1, "{threshold}% at {value}: {ours} against RPCS3's {theirs}");
+                assert_eq!(ours == 0, theirs == 0, "{threshold}% at {value}");
+            }
+        }
+        // A threshold past the range is kept to it.
+        assert_eq!(trigger(255, 229), 0);
+        assert_eq!(trigger(255, 230), trigger(90, 230));
+        // Both triggers take it; the sticks and the buttons stay as they were.
+        let sample = XboxPadSample { buttons: 0x1234, left_trigger: 30, right_trigger: 200, left_x: -3, left_y: 32767, right_x: -32768, right_y: 99 };
+        assert_eq!(ControllerSettings::DEFAULT.apply(sample), XboxPadSample { left_trigger: 0, right_trigger: 186, ..sample });
     }
 
     #[test]
@@ -209,6 +341,7 @@ mod tests {
         // stick's maximum.
         assert_eq!(settings(110, 0, 0).apply(31130, 31130), (32767, 32767));
         assert_eq!(settings(110, 0, 0).apply(-32768, 0), (-32768, 0));
+        assert_eq!(settings(120, 0, 0).apply(13653, -13653), (16384, -16384));
     }
 
     #[test]
@@ -217,6 +350,7 @@ mod tests {
             settings(100, 0, 0),
             settings(40, 0, 0),
             settings(110, 0, 0),
+            settings(120, 0, 0),
             settings(100, 20, 0),
             settings(100, 0, 25),
             settings(100, 10, 25),
@@ -243,7 +377,7 @@ mod tests {
     #[test]
     fn settings_out_of_range_are_kept_to_it() {
         assert_eq!(settings(0, 90, 51).clamped(), settings(40, 50, 50));
-        assert_eq!(settings(255, 0, 0).clamped(), settings(110, 0, 0));
+        assert_eq!(settings(255, 0, 0).clamped(), settings(120, 0, 0));
         assert_eq!(StickSettings::VANILLA.clamped(), StickSettings::VANILLA);
     }
 }

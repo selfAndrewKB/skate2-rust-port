@@ -37,10 +37,13 @@ pub enum EditSkaterMenu {
     /// PC port: with Skate 3 data linked, the style menu's Skate 3 Physics row opens the Skate 3
     /// physics mode's posture and style.
     Skate3Physics = 28,
+    /// PC port: with Skate 3's emo hair joined (`Skate3Data::clothing_for`), Back Alley Pete's
+    /// Hair first asks which game's hair styles to show.
+    HairPools = 29,
 }
 
 /// The menus, `EditSkaterMenu` values `0..MENU_COUNT`.
-const MENU_COUNT: usize = 29;
+const MENU_COUNT: usize = 30;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -157,6 +160,13 @@ pub enum EditSkaterOption {
     /// 48), which the Skate 3 physics mode rides on in place of Skate 2's.
     Skate3Trucks = 103,
     Skate3Wheels = 104,
+    /// PC port: the Hair Pools rows.
+    Skate2Hair = 105,
+    Skate3Hair = 106,
+    /// PC port: a shirt's or pants' colour filter, the wear styles menu's first row when Apply
+    /// Color (Y, [`EditSkaterAction::ApplyColour`]) opens it on a part with no colour of its own;
+    /// a deck's griptape colour, the menu's one row when Edit Griptape (Y on a deck) opens it.
+    WearStylesFilter = 107,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -755,6 +765,12 @@ impl EditSkaterOption {
                 submenu: None,
                 kind: "option",
             },
+            Self::WearStylesFilter => OptionDefinition {
+                title: "ID_CAC_WEARSTYLES_COLOUR",
+                description: "0",
+                submenu: None,
+                kind: "color",
+            },
             Self::FilterAll => OptionDefinition {
                 title: "ID_CAC_FILTER_ALL",
                 description: "0",
@@ -803,6 +819,18 @@ impl EditSkaterOption {
                 submenu: Some(M::Slappys),
                 kind: "option",
             },
+            Self::Skate2Hair => OptionDefinition {
+                title: "#Skate 2",
+                description: "0",
+                submenu: Some(M::Hair),
+                kind: "option",
+            },
+            Self::Skate3Hair => OptionDefinition {
+                title: "#Skate 3",
+                description: "0",
+                submenu: Some(M::Hair),
+                kind: "option",
+            },
         }
     }
 }
@@ -839,6 +867,7 @@ impl EditSkaterMenu {
             Self::BrandFilters => "ID_CAC_BRAND_FILTERS_TITLE",
             Self::MerchandisePools => "ID_CAC_SLAPPYS_MERCH_TITLE",
             Self::Skate3Physics => "#Skate 3 Physics",
+            Self::HairPools => "ID_CAC_HAIR_TITLE",
         }
     }
     pub const fn movie_mode(self) -> &'static str {
@@ -872,6 +901,7 @@ impl EditSkaterMenu {
             Self::BrandFilters => "list",
             Self::MerchandisePools => "list",
             Self::Skate3Physics => "morph",
+            Self::HairPools => "list",
         }
     }
     pub const fn banner(self) -> &'static str {
@@ -905,6 +935,7 @@ impl EditSkaterMenu {
             Self::BrandFilters => "slappys",
             Self::MerchandisePools => "slappys",
             Self::Skate3Physics => "none",
+            Self::HairPools => "petes",
         }
     }
     pub const fn initial_options(self) -> &'static [EditSkaterOption] {
@@ -997,6 +1028,7 @@ impl EditSkaterMenu {
             Self::BrandFilters => &[],
             Self::MerchandisePools => &[O::Skate2Merchandise, O::Skate3Merchandise],
             Self::Skate3Physics => &[O::Skate3Posture, O::Skate3Style, O::Skate3Trucks, O::Skate3Wheels],
+            Self::HairPools => &[O::Skate2Hair, O::Skate3Hair],
         }
     }
 }
@@ -1015,12 +1047,22 @@ pub struct EditSkaterInput {
     pub select: bool,
     /// `AptMisc` (X).
     pub misc: bool,
+    /// PC port: `AptOption` (Y), a shirt's or pants' Apply Color.
+    pub option: bool,
     pub up: bool,
     pub down: bool,
     pub left: bool,
     pub right: bool,
     pub morph_axis: f32,
     pub morph_axis_secondary: f32,
+    /// PC port: the colour picker's controls (`ui::colour_picker`): `ManualLStickY` (the left
+    /// stick up, `morph_axis` being its right), `ManualRStickX` and `ManualRStickY`, the triggers'
+    /// travel (`GP_LTrigger`, `GP_RTrigger`) and the D-pad alone (`AptDUp`, `AptDDown`,
+    /// `AptDLeft`, `AptDRight`).
+    pub left_stick_y: f32,
+    pub right_stick: [f32; 2],
+    pub triggers: [f32; 2],
+    pub dpad: [bool; 4],
 }
 
 /// Commands target the existing character/room owners. No duplicate CACRecord.
@@ -1037,6 +1079,9 @@ pub enum EditSkaterAction {
         forward: bool,
     },
     ActivateOption(EditSkaterOption),
+    /// PC port: Y (Apply Color) on a row of a shirt or pants list: its part is worn as
+    /// [`Self::SelectPart`] wears it, and its wear styles menu opens on its colour.
+    ApplyColour(usize),
     Finish,
     /// `PushState(20)`: the receipt (`FrontEndState_Receipt`) in mode 0.
     OpenReceipt,
@@ -1080,6 +1125,11 @@ pub struct EditSkaterController {
     /// PC port: Skate 3 data is linked, so the style menu ends with the Gesture Set, Style and
     /// Posture rows.
     pub skate3_gestures: bool,
+    /// PC port: Skate 3's emo hair joined Back Alley Pete's, so Hair opens
+    /// [`EditSkaterMenu::HairPools`].
+    pub skate3_hair: bool,
+    /// PC port: the Hair Pools row last chosen: the hair style selector steps through Skate 3's.
+    pub skate3_hair_pool: bool,
 }
 impl Default for EditSkaterController {
     fn default() -> Self {
@@ -1102,6 +1152,8 @@ impl Default for EditSkaterController {
             skate3_merchandise: false,
             skate3_pool: false,
             skate3_gestures: false,
+            skate3_hair: false,
+            skate3_hair_pool: false,
         }
     }
 }
@@ -1342,6 +1394,12 @@ impl EditSkaterController {
                     self.sounds.push("FE_SOUND_CORE_A_BUTTON");
                 }
                 out.push(EditSkaterAction::SelectPart(self.indices[m]));
+            } else if input.option
+                && menu == EditSkaterMenu::PartThumbnails
+                && self.category.is_some_and(colour_filter_category)
+            {
+                // PC port: Apply Color; its sound follows the shop's verdict, as A's does.
+                out.push(EditSkaterAction::ApplyColour(self.indices[m]));
             }
         } else {
             let n = if menu == EditSkaterMenu::Tattoos {
@@ -1414,6 +1472,17 @@ impl EditSkaterController {
                             self.skate3_pool = option == EditSkaterOption::Skate3Merchandise;
                             option.definition().submenu
                         }
+                        // PC port: with Skate 3's emo hair joined, Hair asks which game's hair
+                        // styles its selector steps through first.
+                        EditSkaterOption::Hair if self.skate3_hair => Some(EditSkaterMenu::HairPools),
+                        EditSkaterOption::Hair => {
+                            self.skate3_hair_pool = false;
+                            option.definition().submenu
+                        }
+                        EditSkaterOption::Skate2Hair | EditSkaterOption::Skate3Hair => {
+                            self.skate3_hair_pool = option == EditSkaterOption::Skate3Hair;
+                            option.definition().submenu
+                        }
                         _ => option.definition().submenu,
                     };
                     if option == EditSkaterOption::WearStylesGraphic {
@@ -1474,10 +1543,25 @@ pub struct EditSkaterView {
     pub help_a: String,
     pub help_b: String,
     pub help_start: String,
+    /// PC port: X's button help, `#` for none (the colour picker's Undo Changes).
+    pub help_x: String,
+    /// PC port: Y's button help, `#` for none (a shirt's or pants' Apply Color, a deck's Edit
+    /// Griptape).
+    pub help_y: String,
+    /// PC port: Edit Griptape's menu is up: the deck shows its top face.
+    pub grip_view: bool,
+    /// PC port: the open colour picker.
+    pub colour_picker: Option<ColourPickerView>,
     /// The `ID_CAC_NOT_ENOUGH_CASH` popup is up.
     pub cash_popup: bool,
     /// The pushed `FrontEndState_Receipt` (screen 122).
     pub receipt: Option<ReceiptView>,
+}
+
+/// PC port: what the colour picker shows (`ui::colour_picker`): the colour picked.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColourPickerView {
+    pub colour: super::colour_picker::Hsv,
 }
 
 /// The receipt's menu picker options, `FrontEndState_Receipt::mReceiptOptionText`
@@ -1530,6 +1614,12 @@ pub fn clothing_slot(option: EditSkaterOption) -> Option<u8> {
         O::Rings => 6,
         _ => return None,
     })
+}
+
+/// PC port: the lists whose parts take Y: the shirts' and the pants' (Apply Color) and the
+/// decks' (Edit Griptape).
+pub fn colour_filter_category(option: EditSkaterOption) -> bool {
+    matches!(clothing_slot(option), Some(11 | 15 | 23))
 }
 
 /// UpdatePartsList82680c90 / GetParts8259d510. DLC availability is a caller fact,
@@ -1750,5 +1840,30 @@ impl EditSkaterOption {
             Self::Chin => Some(0xDD27EEB60DD0C9E0),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// PC port: Y on a part of a shirts or pants list asks for Apply Color on that row, and on
+    /// a deck for Edit Griptape, the same action; other lists, and the other menus, take no Y.
+    #[test]
+    fn y_on_a_shirts_or_pants_part_applies_colour() {
+        use EditSkaterOption as O;
+        for (option, applies) in [(O::TShirts, true), (O::Hoodies, true), (O::Legs, true), (O::Boards, true), (O::Trucks, false), (O::Shoes, false), (O::Hats, false)] {
+            let mut controller = EditSkaterController::default();
+            controller.open(false);
+            controller.category = Some(option);
+            controller.push(EditSkaterMenu::PartThumbnails);
+            controller.set_part_count(5, Some(4));
+            let actions = controller.update(EditSkaterInput { option: true, ..Default::default() });
+            assert_eq!(actions, if applies { vec![EditSkaterAction::ApplyColour(4)] } else { vec![] }, "{option:?}");
+        }
+        let mut controller = EditSkaterController::default();
+        controller.open(false);
+        controller.category = Some(O::TShirts);
+        assert!(controller.update(EditSkaterInput { option: true, ..Default::default() }).is_empty());
     }
 }

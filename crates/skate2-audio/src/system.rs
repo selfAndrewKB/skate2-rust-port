@@ -389,6 +389,20 @@ struct MasterObject {
     loading_screen_volume: i32,
 }
 
+/// `SKATE2_TRACE_AWAY_TIME`: the player-input flag each time it changes and `mAwayTime` each
+/// five seconds it grows, which the speech context's idle lines wait on.
+fn trace_away_time(providing_input: bool, away_time: i32) {
+    static LAST: std::sync::Mutex<(bool, i32)> = std::sync::Mutex::new((false, 0));
+    if std::env::var_os("SKATE2_TRACE_AWAY_TIME").is_none() {
+        return;
+    }
+    let Ok(mut last) = LAST.lock() else { return };
+    if last.0 != providing_input || last.1 / 5000 != away_time / 5000 {
+        eprintln!("audio away time: providing_input={providing_input} away_time={away_time}ms");
+    }
+    *last = (providing_input, away_time);
+}
+
 /// `delayIdle`, `startCount` and `endCount` (0x82fd9410-0x82fd9418).
 const DELAY_IDLE: bool = true;
 const IDLE_START_COUNT: f32 = 0.8;
@@ -860,7 +874,8 @@ impl AudioSystem {
     /// `SFXObj_Reverb::InitSFX` sets up the reverbs and flanges.
     fn initialize_mixer(&mut self, mix_map: Vec<u8>) {
         let mut host = Host { main_objects: &MAIN_SFX_OBJECTS };
-        self.mixer.init_map(mix_map, MIX_STATES, &mut host);
+        // PC port: the map gains the TU3 channels Skate 3 physics sounds read (`player::skate3_mix`).
+        self.mixer.init_map(crate::player::skate3_mix::add_channels(mix_map), MIX_STATES, &mut host);
         let io = |sfx: u32| self.mixer.map().and_then(|map| map.dmixio(0x4000_0000 | (sfx << 4)));
         self.master.io = io(SFX_MASTER);
         self.nis_io = io(SFX_NIS);
@@ -1182,6 +1197,11 @@ impl AudioSystem {
     /// `mCurrentSongIndex`, before the update; `UpdateIPodState` steps through it.
     pub fn set_music_player_playlist(&mut self, songs: &[u32], current_song_index: i32) {
         self.music.set_music_player_playlist(songs, current_song_index);
+    }
+
+    /// PC port: the music player's custom songs (`custom_song`), each one's id and file.
+    pub fn set_custom_songs(&mut self, songs: &[(u32, std::path::PathBuf)]) {
+        self.music.set_custom_songs(songs);
     }
 
     /// `mCurrentSongIndex` after the update, for the profile.
@@ -1822,6 +1842,7 @@ impl AudioSystem {
             } else if !self.is_paused && !self.is_loading() && self.fe_music_state == music::fe_state::IN_GAME {
                 self.away_time = self.away_time.wrapping_add(elapsed);
             }
+            trace_away_time(self.player_providing_input, self.away_time);
         }
         self.time_since_unpaused = self.time_since_unpaused.wrapping_add(elapsed);
     }

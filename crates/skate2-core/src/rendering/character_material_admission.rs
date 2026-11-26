@@ -1,6 +1,7 @@
 //! Selected clone3 material binding over the finalized scene and same palette.
 use super::{
     CharacterScene,
+    grip_surface::{COLOUR_KEY as GRIP_COLOUR_KEY, GripSurface},
     palette::{CharacterPalette, CharacterPaletteIdentity},
 };
 use crate::{
@@ -82,6 +83,8 @@ struct Entry {
     cas_textures: [Option<usize>; 3],
     effect: String,
     material_key: (u64, u64),
+    /// PC port: a deck mesh's griptape (`grip_surface`).
+    grip: Option<GripSurface>,
 }
 /// Owns no geometry, texture copy or independent palette. Public methods only
 /// expose checked borrowed inputs to the actual GPU consumer.
@@ -95,6 +98,9 @@ pub struct CharacterMaterialAdmission {
     cloth: crate::skater_ropa_runtime::SkaterRopaRuntime,
     cvars: InputCvarReferences,
     vault: Arc<AttributeRuntimeVault>,
+    /// PC port: customization colours set after the scene was built (`set_colours`), which the
+    /// meshes take in place of the scene's own.
+    colours: Option<Vec<skate2_formats::recipe::customizations::Colour>>,
 }
 pub struct CharacterMaterialView<'a> {
     /// Prepared CPU stream uses the entity transform instead of skin matrices.
@@ -102,6 +108,10 @@ pub struct CharacterMaterialView<'a> {
     /// GetCustomColour82cff8c8: base, highlight; untouched fourth lanes are one.
     pub colours: [[f32; 4]; 2],
     pub tattoos: [[f32; 4]; 2],
+    /// PC port: Edit Griptape's colour on a deck mesh: what its diffuse squared is multiplied by,
+    /// then the most of it that counts (`GripSurface::gain`), within the rectangle of its first
+    /// texture coordinate set that holds its top face alone.
+    pub grip: Option<([f32; 4], [f32; 4])>,
     pub normal: Option<&'a NativeTexture>,
     pub decal: Option<&'a NativeTexture>,
     pub decal2: Option<&'a NativeTexture>,
@@ -317,6 +327,38 @@ impl CharacterMaterialAdmission {
                         );
                     }
                 }
+                // SKATE2_DIAGNOSTIC_CAS_HIDE=<component>[:<effect>],...: those meshes are not
+                // drawn. Set at all, every part's meshes are listed with their effects.
+                if let Ok(hide) = std::env::var("SKATE2_DIAGNOSTIC_CAS_HIDE") {
+                    let component = &scene.components[part.component_index];
+                    let hidden = hide.split(',').any(|rule| match rule.split_once(':') {
+                        Some((name, only)) => name.eq_ignore_ascii_case(&component.name) && only == effect,
+                        None => rule.eq_ignore_ascii_case(&component.name),
+                    });
+                    eprintln!(
+                        "cas hide: {} model {:#018x} mesh {mesh_index} {effect}{}",
+                        component.name,
+                        component.models[part.model_index].asset_id,
+                        if hidden { " (hidden)" } else { "" },
+                    );
+                    if hidden {
+                        continue;
+                    }
+                }
+                // PC port: a deck mesh's griptape, which Edit Griptape's colour goes over.
+                let deck = scene.components[part.component_index]
+                    .name
+                    .eq_ignore_ascii_case(skate2_formats::cac_parts::SLOT_NAMES[11]);
+                let grip = deck
+                    .then(|| GripSurface::of(&mesh.geometry, &scene.textures[texture].texture))
+                    .flatten();
+                // SKATE2_DIAGNOSTIC_GRIP: each deck mesh's griptape.
+                if deck && std::env::var_os("SKATE2_DIAGNOSTIC_GRIP").is_some() {
+                    eprintln!(
+                        "grip: deck model {:#018x} mesh {mesh_index} {effect}: {grip:?}",
+                        scene.components[part.component_index].models[part.model_index].asset_id,
+                    );
+                }
                 entries.push(Entry {
                     part: part_index,
                     mesh: mesh_index,
@@ -327,6 +369,7 @@ impl CharacterMaterialAdmission {
                     cas_textures,
                     effect: effect.to_owned(),
                     material_key: (class, collection),
+                    grip,
                 });
             }
         }
@@ -342,6 +385,7 @@ impl CharacterMaterialAdmission {
             cloth,
             vault,
             cvars,
+            colours: None,
         })
     }
     pub(crate) fn try_construct_from_header(
@@ -421,6 +465,7 @@ impl CharacterMaterialAdmission {
             cloth: crate::skater_ropa_runtime::SkaterRopaRuntime::without_effects(),
             cvars: self.cvars.clone(),
             vault: Arc::clone(&self.vault),
+            colours: self.colours.clone(),
         };
         copy.try_construct_scene_character()?;
         Ok(copy)
@@ -478,7 +523,22 @@ impl CharacterMaterialAdmission {
         let recipe_model =
             &self.scene.components[indices.component_index].models[indices.model_index];
         let mut colours = [[1.0; 4]; 2];
-        if let Some(custom) = &self.scene.customizations {
+        let mut grip = None;
+        // PC port: colours set since the scene was built stand for its own (`set_colours`).
+        let custom_colours = self
+            .colours
+            .as_deref()
+            .or_else(|| self.scene.customizations.as_ref().map(|custom| custom.colours.as_slice()));
+        if let Some(custom_colours) = custom_colours {
+            // PC port: Edit Griptape's colour goes on the deck drawn, whichever of the installed
+            // deck's parts that is (`assemble_parts` wears another in the game).
+            grip = entry
+                .grip
+                .zip(custom_colours.iter().find(|c| c.key == GRIP_COLOUR_KEY))
+                .map(|(surface, colour)| (surface.gain(colour.base_rgb_bits.map(f32::from_bits)), surface.rectangle));
+            if let (Some(surface), Some(tint)) = (entry.grip, diagnostic_grip_tint()) {
+                grip = Some((surface.gain(tint), surface.rectangle));
+            }
             // The chosen LOD material vector is the same ordered material map
             // consumed by RebindToMaterials. Each instance maps one RModel mesh.
             if let Some(material) = lod
@@ -486,8 +546,9 @@ impl CharacterMaterialAdmission {
                 .get(mesh)
                 .and_then(|m| m.materials.first())
             {
-                if let Some(colour) = custom.colours.iter().find(|c| {
-                    c.model_id == recipe_model.asset_id && c.material_id == material.asset_id
+                // PC port: the griptape's colour, bound to its deck, is no colour of the part's.
+                if let Some(colour) = custom_colours.iter().find(|c| {
+                    c.key != GRIP_COLOUR_KEY && c.model_id == recipe_model.asset_id && c.material_id == material.asset_id
                 }) {
                     for axis in 0..3 {
                         colours[0][axis] = f32::from_bits(colour.base_rgb_bits[axis]);
@@ -520,6 +581,7 @@ impl CharacterMaterialAdmission {
             cpu_rows:cpu.map(|(_,rows)|rows),
             colours,
             tattoos,
+            grip,
             normal: entry.cas_textures[0].map(|i| &self.scene.textures[i].texture),
             decal: entry.cas_textures[1].map(|i| &self.scene.textures[i].texture),
             decal2: entry.cas_textures[2].map(|i| &self.scene.textures[i].texture),
@@ -534,6 +596,11 @@ impl CharacterMaterialAdmission {
                 None
             },
         })
+    }
+    /// PC port: Edit Skater's change of colours alone (a colour row's, the colour picker's): the
+    /// customization colours the meshes take from here on, the scene and its GPU objects kept.
+    pub(crate) fn set_colours(&mut self, colours: Vec<skate2_formats::recipe::customizations::Colour>) {
+        self.colours = Some(colours);
     }
     pub fn meshes(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         self.entries.iter().map(|e| (e.part, e.mesh))
@@ -608,6 +675,17 @@ impl CharacterMaterialAdmission {
         self.ropa.cloth_disabled()
     }
 }
+/// `SKATE2_DIAGNOSTIC_GRIP_TINT=<red>,<green>,<blue>`: every deck's griptape wears that tint (a
+/// colour on screen, squared, as Edit Griptape's picker stores one), whatever its skater's own.
+fn diagnostic_grip_tint() -> Option<[f32; 3]> {
+    static TINT: std::sync::OnceLock<Option<[f32; 3]>> = std::sync::OnceLock::new();
+    *TINT.get_or_init(|| {
+        let text = std::env::var("SKATE2_DIAGNOSTIC_GRIP_TINT").ok()?;
+        let mut lanes = text.split(',').map(|lane| lane.trim().parse::<f32>().ok());
+        Some([lanes.next()??, lanes.next()??, lanes.next()??])
+    })
+}
+
 fn diffuse_guid(
     material: &crate::presentation::PresentationMaterial,
 ) -> Result<u64, CharacterMaterialError> {

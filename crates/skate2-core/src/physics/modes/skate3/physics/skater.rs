@@ -29,6 +29,14 @@ use std::path::Path;
 pub(crate) struct Skate3ControllerState {
     /// The actual input-phase reset callback completed in this source tick.
     pub teleported_this_tick: bool,
+    /// This tick's AnimOut +0x14 bits 24 and 23 (the DropInLock and DropInRelease attributes) as
+    /// Update5 publishes them (82DB7DA4, 82DB7DB8: PhysOut_Intents +0x3D and +0x3E), kept past
+    /// the clear that follows (82DB7DCC) for the frame's output.
+    pub drop_in_sounds: [bool; 2],
+    /// PhysOut_Intents `mIsPlayerProvidingInput`, which the audio's away time reads: this tick's
+    /// riding intentions without `NoInput` (a stick, push, trigger, brake, right bumper or board
+    /// toggle), the intent the motion graph's NoInput attribute is made from.
+    pub player_providing_input: bool,
     pub climbing: super::climbing::Runtime,
     /// Completed physical pose in native animation space, read by rendering.
     pub render_pose: Vec<skate3_core::animation::output::NativeMatrix>,
@@ -280,6 +288,8 @@ impl Skate3ControllerState {
         ];
         Ok(Self {
             teleported_this_tick: false,
+            drop_in_sounds: [false; 2],
+            player_providing_input: false,
             respawn,
             climbing: super::climbing::Runtime::load(asset_root, &animation.evaluator.frames.bone_names)?,
             render_pose: initial_hierarchy,

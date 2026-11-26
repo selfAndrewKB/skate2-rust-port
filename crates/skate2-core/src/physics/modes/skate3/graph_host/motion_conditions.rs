@@ -74,6 +74,9 @@ pub enum MotionCondition {
     /// Thin-ground branch of the stock BipedGround state.
     IsBipedGroundThin,
     IsHoldingSkateboard,
+    /// IsArmChannelPlaying (Activation 82BA84F0): a GestureBoth, GestureLeft, GestureRight or
+    /// Shove channel is playing.
+    ArmChannelPlaying,
     /// Static gameplay has no moving actors yet; the stock condition is a
     /// resolved physical flag and must remain false until a moving support is
     /// published by the collision owner.
@@ -186,6 +189,7 @@ impl MotionCondition {
             "GroundSlopeType" => Self::GroundSlopeType(super::motion_ground_slope::GroundSlopeType::parse(a)?),
             "IsBipedGroundThin" => Self::IsBipedGroundThin,
             "IsHoldingSkateboard" => Self::IsHoldingSkateboard,
+            "IsArmChannelPlaying" => Self::ArmChannelPlaying,
             "IsStandingOnMovingObject" => Self::IsStandingOnMovingObject,
             "AngleAdjustByAnimationEndLessThan" => Self::AngleAdjustByAnimationEndLessThan {
                 max_delta_angle: f32::from_bits(a.float_bits("MaxDeltaAngle", 0x4000_0000)),
@@ -261,10 +265,17 @@ impl MotionCondition {
                 .ok_or("IsBipedGroundThin requires the native ground geometry publication")?,
             Self::IsHoldingSkateboard => host.toggle_board_physical
                 .is_some_and(|p| p.holding_board),
-            Self::IsStandingOnMovingObject => host
-                .gameplay_conditions
-                .ok_or("IsStandingOnMovingObject requires the physical state publication")?
-                .moving_object,
+            Self::ArmChannelPlaying => ["GestureBoth", "GestureLeft", "GestureRight", "Shove"]
+                .iter()
+                .any(|channel| host.animation.channels.has(channel)),
+            Self::IsStandingOnMovingObject => {
+                //82BA5B80: |OffBoard+264| + |OffBoard+260| + OffBoard+256 over 0.01.
+                let [speed, x, z] = host
+                    .gameplay_conditions
+                    .ok_or("IsStandingOnMovingObject requires the physical state publication")?
+                    .support_motion;
+                (z.abs() + x.abs()) + speed > f32::from_bits(0x3c23_d70a)
+            }
             Self::AngleAdjustByAnimationEndLessThan { max_delta_angle } => {
                 super::motion_moving_object::angle_adjust_by_animation_end_less_than(
                     &host.moving_objects.coefficients,

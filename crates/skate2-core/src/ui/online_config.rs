@@ -35,11 +35,22 @@ pub struct OnlineConfig {
     /// Co-op fork (M8): this console's own stable id, as 16 hex digits, made once on first use
     /// and kept in the file, so a campaign knows a returning player. Empty until made.
     pub player_id: String,
+    /// Skate During Turn Wait: while another player's turn of a challenge plays, the local skater
+    /// is free to skate and its own camera shows in a corner of the screen. Off, the waiting
+    /// skater stands pinned as the challenge asks. Off unless the file says otherwise.
+    pub skate_during_turn_wait: bool,
 }
 
 impl Default for OnlineConfig {
     fn default() -> Self {
-        Self { nickname: String::new(), server: String::new(), show_lobby_chat: true, show_ghost_players: true, player_id: String::new() }
+        Self {
+            nickname: String::new(),
+            server: String::new(),
+            show_lobby_chat: true,
+            show_ghost_players: true,
+            skate_during_turn_wait: false,
+            player_id: String::new(),
+        }
     }
 }
 
@@ -104,11 +115,12 @@ impl OnlineConfig {
 
     fn text(&self) -> String {
         format!(
-            "{{\n  \"nickname\": {},\n  \"server\": {},\n  \"show_lobby_chat\": {},\n  \"show_ghost_players\": {},\n  \"player_id\": {}\n}}\n",
+            "{{\n  \"nickname\": {},\n  \"server\": {},\n  \"show_lobby_chat\": {},\n  \"show_ghost_players\": {},\n  \"skate_during_turn_wait\": {},\n  \"player_id\": {}\n}}\n",
             quote(&self.nickname),
             quote(&self.server),
             self.show_lobby_chat,
             self.show_ghost_players,
+            self.skate_during_turn_wait,
             quote(&self.player_id)
         )
     }
@@ -132,8 +144,8 @@ pub(super) fn quote(text: &str) -> String {
     out
 }
 
-/// Reads the top-level object's `nickname` and `server` strings and its `show_lobby_chat` and
-/// `show_ghost_players` booleans, and skips every other value.
+/// Reads the top-level object's `nickname` and `server` strings and its `show_lobby_chat`,
+/// `show_ghost_players` and `skate_during_turn_wait` booleans, and skips every other value.
 fn parse(text: &str) -> Option<OnlineConfig> {
     let mut reader = Reader { bytes: text.as_bytes(), at: 0 };
     let mut config = OnlineConfig::default();
@@ -154,6 +166,8 @@ fn parse(text: &str) -> Option<OnlineConfig> {
             config.show_ghost_players = reader.boolean()?;
         } else if key == "player_id" && reader.peek()? == b'"' {
             config.player_id = reader.string()?.trim().to_owned();
+        } else if key == "skate_during_turn_wait" && matches!(reader.peek()?, b't' | b'f') {
+            config.skate_during_turn_wait = reader.boolean()?;
         } else {
             reader.skip_value()?;
         }
@@ -413,9 +427,20 @@ mod tests {
                 show_lobby_chat,
                 show_ghost_players: !show_lobby_chat,
                 player_id: "00000000deadbeef".into(),
+                skate_during_turn_wait: show_lobby_chat,
             };
             assert_eq!(parse(&config.text()), Some(config));
         }
+    }
+
+    #[test]
+    fn skate_during_turn_wait_is_off_unless_the_file_turns_it_on() {
+        assert!(!parse(r#"{"nickname": "Rob", "show_ghost_players": false}"#).unwrap().skate_during_turn_wait);
+        let config = parse(r#"{"skate_during_turn_wait": true, "nickname": "Rob"}"#).unwrap();
+        assert!(config.skate_during_turn_wait && config.show_ghost_players && config.show_lobby_chat);
+        assert!(!parse(r#"{"skate_during_turn_wait": 1}"#).unwrap().skate_during_turn_wait);
+        // The keys it had before it was Skate During Turn Wait are not read.
+        assert!(!parse(r#"{"skate_while_waiting": true, "brainrot_mode": true}"#).unwrap().skate_during_turn_wait);
     }
 
     #[test]

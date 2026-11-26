@@ -73,6 +73,80 @@ pub struct MatchRequest {
     pub fallback_key: u64,
 }
 
+/// Why a game ended under the player: its notice names it under its text, as `Reason: …` (PC
+/// port addition).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LossReason {
+    /// Nothing came from the server for the transport's timeout, or the server closed the
+    /// connection as a lost one. A banned address is never answered again and is told nothing, so
+    /// its game ends with this reason, as any game whose link went silent.
+    TimedOut,
+    /// `leave::KICKED_BY_HOST`.
+    KickedByHost,
+    /// A kick with a reason this build does not know.
+    Kicked,
+    /// `leave::KICKED_FOR_INACTIVITY`: a challenge's participant whose game sent nothing for
+    /// `skate2_net::protocol::INACTIVITY`.
+    ChallengeTimeout,
+    /// `leave::KICKED_FOR_IDLE`: any other member whose game sent nothing for
+    /// `skate2_net::protocol::IDLE_INACTIVITY`.
+    InactivityTimeout,
+    /// `leave::KICKED_FOR_FLOOD`.
+    Flood,
+    /// `leave::KICKED_FOR_CHAT`.
+    Chat,
+    /// `leave::KICKED_FOR_HOST_REQUEST`.
+    HostRequest,
+    /// The socket failed.
+    Network,
+    /// A server message the game could not follow (`online_unplayable`).
+    GameError,
+}
+
+impl LossReason {
+    /// The reason a connection that ended gives a game. Whatever the server closes without a
+    /// reason of the player's own doing reads as a timeout.
+    pub(super) fn of(disconnect: &Disconnect) -> Self {
+        use skate2_net::protocol::leave;
+        match disconnect {
+            Disconnect::Closed(leave::KICKED_FOR_FLOOD) => Self::Flood,
+            Disconnect::Closed(leave::KICKED_FOR_CHAT) => Self::Chat,
+            Disconnect::Closed(leave::KICKED_FOR_HOST_REQUEST) => Self::HostRequest,
+            Disconnect::Network(_) => Self::Network,
+            Disconnect::TimedOut | Disconnect::Unreachable | Disconnect::Refused(_) | Disconnect::Closed(_) => Self::TimedOut,
+        }
+    }
+
+    /// The reason of `ServerMessage::Kicked`.
+    pub(super) const fn of_kick(reason: u8) -> Self {
+        use skate2_net::protocol::leave;
+        match reason {
+            leave::KICKED_BY_HOST => Self::KickedByHost,
+            leave::KICKED_FOR_INACTIVITY => Self::ChallengeTimeout,
+            leave::KICKED_FOR_IDLE => Self::InactivityTimeout,
+            _ => Self::Kicked,
+        }
+    }
+
+    /// The reason's name on the notice. The timeouts name the server's limits.
+    #[must_use]
+    pub fn name(self) -> String {
+        use skate2_net::protocol::{IDLE_INACTIVITY, INACTIVITY};
+        match self {
+            Self::TimedOut => "Connection timed out".to_owned(),
+            Self::KickedByHost => "Kicked by host".to_owned(),
+            Self::Kicked => "Kicked".to_owned(),
+            Self::ChallengeTimeout => format!("{} second challenge timeout", INACTIVITY.as_secs()),
+            Self::InactivityTimeout => format!("{} second inactivity timeout", IDLE_INACTIVITY.as_secs()),
+            Self::Flood => "Too many messages".to_owned(),
+            Self::Chat => "Invalid chat message".to_owned(),
+            Self::HostRequest => "Host-only request".to_owned(),
+            Self::Network => "Network error".to_owned(),
+            Self::GameError => "Game error".to_owned(),
+        }
+    }
+}
+
 /// What the front end hears of the connection and matchmaking.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OnlineNotice {
@@ -82,10 +156,11 @@ pub enum OnlineNotice {
     NoMatch,
     /// Matchmaking failed (`SER_PLAYNOW_NO_RB`, a full game).
     MatchFailed,
-    /// The server dropped the game (`SER_GAME_DISCONNECTED`).
-    Disconnected,
-    /// The game host kicked the player (`SER_GAME_KICKED`).
-    Kicked,
+    /// The game ended under the player (`SER_GAME_DISCONNECTED`), and why.
+    Disconnected(LossReason),
+    /// The player was kicked (`SER_GAME_KICKED`): by the game host, or by the server for its
+    /// game saying nothing (`eONLINE_ERROR_KICKED_FOR_INACTIVITY`).
+    Kicked(LossReason),
     /// The server is another build of the game (`refuse::BUILD`, `refuse::VERSION`): the game has
     /// to update. The original had no such notice (Xbox LIVE updated the title).
     UpdateRequired,
@@ -109,8 +184,14 @@ pub(super) struct OnlineGame {
     pub(super) id: u32,
     pub(super) local_slot: u8,
     pub(super) attributes: GameAttributes,
-    /// In join order; the first is the game host peer.
+    /// In join order, the player list's.
     pub(super) players: Vec<OnlinePlayer>,
+    /// The game host peer as the server last said (`GameJoined`, `HostChanged`; PC port: the
+    /// server keeps it, where the original's was the first player).
+    host: Option<u64>,
+    /// PC port addition: the local host asked the server to hand the game to this player
+    /// (`online_make_host`); the console acts as the host no more until the server names the host.
+    handing_to: Option<u64>,
     pub(super) phase: Phase,
     /// The members playing the challenge in progress, as the server last said: a player waiting
     /// in its pre-game lobby watches them as ghosts (PC port addition).
@@ -139,11 +220,30 @@ pub(super) struct OnlineGame {
     /// Co-op fork (M10): the owned challenge AI skaters whose look went out, by slot, with the
     /// recipe it was taken from; a slot created again (the round's frames say) sends it again.
     owned_sent: BTreeMap<u8, u64>,
+    /// PC port (user request): the host's Infinite Rounds as the server last said
+    /// (`ChallengeOption`): a Spot Battle started with it on has no last round.
+    pub(super) infinite_rounds: bool,
+    /// PC port (user request): the host's Round Lock as the server last said (`ChallengeOption`):
+    /// the round start every round of the game's 1-Up begins at, from 1; 0 without one. It is one
+    /// 1-Up's: a change of the game's challenge lets it go, here as on the server.
+    pub(super) round_lock: u32,
+    /// The host ended the challenge in play (`ChallengeEnded`); a challenge's load clears it.
+    pub(super) challenge_ended: bool,
 }
 
 impl OnlineGame {
+    /// The game host peer: the server's, or the player this console's hand is going to.
     fn host(&self) -> Option<u64> {
-        self.players.first().map(|player| player.user_id)
+        self.handing_to.or(self.host)
+    }
+
+    /// PC port: a Spot Battle under Infinite Rounds from its load until the game is back in lobby
+    /// skate, as the server keeps it from matchmaking, while its host has not ended it.
+    fn endless_in_play(&self) -> bool {
+        self.attributes.challenge_type == skate2_net::protocol::challenge::OWN_THE_SPOT
+            && self.infinite_rounds
+            && self.phase != Phase::LobbySkate
+            && !self.challenge_ended
     }
 
     fn name(&self, user_id: u64) -> String {
@@ -205,6 +305,9 @@ pub(super) struct Online {
     /// `SKATE2_DIAGNOSTIC_ONLINE_START`: completed ticks in lobby skate before the host starts
     /// the game's challenge.
     diagnostic_lobby_ticks: u32,
+    /// `SKATE2_DIAGNOSTIC_ONLINE_MAKE_HOST`: completed ticks in lobby skate before the host hands
+    /// the game to the next player.
+    diagnostic_host_ticks: u32,
     /// `SKATE2_DIAGNOSTIC_ONLINE_FRAME_DUMP`: the local frames sent, written raw.
     frame_dump: Option<std::io::BufWriter<std::fs::File>>,
     /// The online screen over the Online options.
@@ -232,6 +335,15 @@ pub(super) struct Online {
     lobby_hud_dirty: bool,
     /// What the submitted camera shows in place of the game camera.
     view: Option<online_challenge::OnlineView>,
+    /// Skate During Turn Wait (PC port addition): the local skater skated freely through the last
+    /// tick while another player's turn played.
+    pub(super) free_skating: bool,
+    /// Skate During Turn Wait: the session marker the local skater set while it waited, kept from
+    /// one wait of the round to the next (`swap_turn_wait_marker`).
+    pub(super) turn_wait_marker: Option<crate::session_marker::SessionMarker>,
+    /// The challenge's own session marker, held back while the wait's stands in its place; the
+    /// inner none is a game without one (a Spot Battle, S.K.A.T.E.).
+    pub(super) held_marker: Option<Option<crate::session_marker::SessionMarker>>,
     /// When the game last sent a replay frame or `Busy`: the server drops a game that sends
     /// neither for two seconds.
     alive_sent: Option<std::time::Instant>,
@@ -278,6 +390,9 @@ pub(super) struct Online {
     /// The freeskate activity proposed, its overlay and sign-up, and the profile's completed
     /// activities.
     activity: activity::Activities,
+    /// PC port: the state the Spot Battle about to load starts from (`ChallengeCarry`), one the
+    /// server loads again for a player who joined it in play.
+    carry: Option<Vec<u8>>,
 }
 
 impl Online {
@@ -520,6 +635,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     trace(format_args!("disconnected: {reason:?} (build {})", skate2_net::crypto::Build::current().id()));
                     let update = matches!(reason, Disconnect::Refused(refuse::BUILD | refuse::VERSION));
                     let nickname = reason == Disconnect::Closed(skate2_net::protocol::leave::KICKED_FOR_NICKNAME);
+                    let loss = LossReason::of(&reason);
                     let had_game = self.online.game.is_some();
                     self.online.client = None;
                     self.online.searching = None;
@@ -528,13 +644,13 @@ impl<T, C> SelectedLiveSession<T, C> {
                     // A campaign lost at any point, its career loading or up, is rejoined.
                     let in_campaign = self.online.game.as_ref().is_some_and(|game| game.attributes.challenge_type == challenge::CAMPAIGN);
                     if had_game && in_campaign && !update && !nickname {
-                        self.online_campaign_dropped()?;
+                        self.online_campaign_dropped(loss)?;
                     } else if self.online.campaign_rejoin && !update && !nickname {
                         // The server is not back yet: again in three seconds.
                         self.online.campaign_rejoin_at = Some(self.completed_frames + 180);
                         crate::coop::trace(format_args!("campaign: the rejoin's sign-in failed; again in 3 s"));
                     } else if had_game {
-                        self.online_game_lost(OnlineNotice::Disconnected)?;
+                        self.online_game_lost(OnlineNotice::Disconnected(loss))?;
                     } else {
                         self.online.notices.push(if update {
                             OnlineNotice::UpdateRequired
@@ -627,7 +743,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// made-up message, or a round it cannot build): left as a lost connection leaves a game, so
     /// nothing the server or another player sends ends the session.
     fn online_unplayable(&mut self, reason: &dyn std::fmt::Display) -> Result<(), SelectedLiveError> {
-        self.online_leave_unplayable(reason, OnlineNotice::Disconnected, OnlineNotice::MatchFailed)
+        self.online_leave_unplayable(reason, OnlineNotice::Disconnected(LossReason::GameError), OnlineNotice::MatchFailed)
     }
 
     /// `SetupGame` (0x82778530) of a game at a challenge this build lacks, joined or moved to by
@@ -981,7 +1097,9 @@ impl<T, C> SelectedLiveSession<T, C> {
                 }
             }
             ServerMessage::Lobbies(lobbies) => self.online_lobbies(&lobbies)?,
-            ServerMessage::GameJoined { game, slot, attributes, players, phase, participants } => self.online_game_joined(game, slot, attributes, players, phase, participants)?,
+            ServerMessage::GameJoined { game, slot, attributes, players, phase, participants, host } => {
+                self.online_game_joined(game, slot, attributes, players, phase, participants, host)?;
+            }
             ServerMessage::GameAttributes(attributes) => {
                 if !self.online_challenge_known(&attributes)? {
                     return self.online_lacks_challenge(&attributes);
@@ -999,6 +1117,10 @@ impl<T, C> SelectedLiveSession<T, C> {
                     // challenge's players.
                     if game.attributes.challenge_key != attributes.challenge_key {
                         self.online.changing_location.get_or_insert((attributes.challenge_type, attributes.challenge_key));
+                    }
+                    // PC port: the Round Lock is one 1-Up's, and goes with it as on the server.
+                    if (game.attributes.challenge_type, game.attributes.challenge_key) != (attributes.challenge_type, attributes.challenge_key) {
+                        game.round_lock = 0;
                     }
                     game.attributes = attributes;
                 }
@@ -1034,7 +1156,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             ServerMessage::PlayerJoin(player) => self.online_player_join(&player),
             ServerMessage::PlayerLeave { user_id, reason } => self.online_player_leave(user_id, reason),
             ServerMessage::Recipe { user_id, data } => self.online_recipe(user_id, data)?,
-            ServerMessage::Kicked { .. } => self.online_game_lost(OnlineNotice::Kicked)?,
+            // `OnlineBackEnd::ShowErrorDialog(eOnlineErrorCode)` (0x8257d068) has a dialog for each
+            // `KickReason`; the server's own kick is not the host's.
+            ServerMessage::Kicked { reason } => self.online_game_lost(OnlineNotice::Kicked(LossReason::of_kick(reason)))?,
             ServerMessage::GameChange { challenge_type, challenge_key, .. } => self.online_game_change(challenge_type, challenge_key)?,
             ServerMessage::ChatEnabled => {
                 if let Some(game) = self.online.game.as_mut() {
@@ -1043,14 +1167,20 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
             ServerMessage::Chat { user_id, text } => self.online_chat(user_id, &text),
             ServerMessage::ChallengeLeave { user_id } => self.online_challenge_leave(user_id)?,
+            ServerMessage::HostChanged { user_id } => self.online_host_changed(user_id),
+            ServerMessage::ChallengeOption { option, value } => self.online_challenge_option(option, value),
+            ServerMessage::ChallengeEnded => self.online_challenge_ended(),
+            ServerMessage::ChallengeJoining => self.online_challenge_joining(),
+            ServerMessage::ChallengeCarry(data) => self.online_challenge_carry(data),
             message => trace(format_args!("unhandled {message:?}")),
         }
         Ok(())
     }
 
-    /// `OnEvent(OE_GameJoined)` and `SetupGame` 0x82778530: the game's players, then the game's
-    /// location once the front end's fade covers.
-    fn online_game_joined(&mut self, id: u32, slot: u8, attributes: GameAttributes, players: Vec<PlayerInfo>, phase: Phase, participants: Vec<u64>) -> Result<(), SelectedLiveError> {
+    /// `OnEvent(OE_GameJoined)` and `SetupGame` 0x82778530: the game's players and host, then the
+    /// game's location once the front end's fade covers.
+    #[expect(clippy::too_many_arguments, reason = "GameJoined's fields")]
+    fn online_game_joined(&mut self, id: u32, slot: u8, attributes: GameAttributes, players: Vec<PlayerInfo>, phase: Phase, participants: Vec<u64>, host: u64) -> Result<(), SelectedLiveError> {
         trace(format_args!("joined game {id} in slot {slot}: {attributes:?}, {} players, {phase:?}", players.len()));
         if !self.online_challenge_known(&attributes)? {
             return self.online_lacks_challenge(&attributes);
@@ -1074,6 +1204,8 @@ impl<T, C> SelectedLiveSession<T, C> {
             local_slot: slot,
             attributes,
             players: players.into_iter().map(|player| OnlinePlayer { user_id: player.user_id, slot: player.slot, name: player.name }).collect(),
+            host: Some(host),
+            handing_to: None,
             phase,
             participants,
             remotes,
@@ -1087,6 +1219,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             owned_sent: BTreeMap::new(),
             last_teleport: false,
             last_camera_rotation: None,
+            infinite_rounds: false,
+            round_lock: 0,
+            challenge_ended: false,
         });
         self.online.chat = None;
         self.online.event_log.clear();
@@ -1443,7 +1578,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// Co-op fork (M8): the connection was lost in a campaign. The career stays up but held
     /// (its scripts do not tick without the round), the game's state goes, and the next sign-in
     /// rejoins the campaign lobby, whose join brings the server's save and a reload for all.
-    fn online_campaign_dropped(&mut self) -> Result<(), SelectedLiveError> {
+    fn online_campaign_dropped(&mut self, loss: LossReason) -> Result<(), SelectedLiveError> {
         crate::coop::trace(format_args!("campaign: the connection was lost; the career waits, signing in again to rejoin"));
         self.end_campaign_ai_streams();
         if self.online.round.take().is_some()
@@ -1457,7 +1592,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.online.chat = None;
         self.online.start = None;
         self.online.event_log.clear();
-        self.online.notices.push(OnlineNotice::Disconnected);
+        self.online.notices.push(OnlineNotice::Disconnected(loss));
         self.online.campaign_rejoin = true;
         self.online.campaign_rejoin_at = Some(self.completed_frames + 60);
         Ok(())
@@ -1491,6 +1626,12 @@ impl<T, C> SelectedLiveSession<T, C> {
         // takes no change while a proposal is under way, so none is left to end).
         self.online_reset_proposal()?;
         self.online.changing_location = Some((challenge_type, challenge_key));
+        // PC port: the Round Lock is one 1-Up's; the server let it go with this change.
+        if let Some(game) = self.online.game.as_mut()
+            && (game.attributes.challenge_type, game.attributes.challenge_key) != (challenge_type, challenge_key)
+        {
+            game.round_lock = 0;
+        }
         let title = self.online_challenge_list_all(challenge_type)?.into_iter().find(|challenge| challenge.key == challenge_key).map(|challenge| challenge.title);
         self.online.event_log.add(EventText::plain("ID_ONLINE_EVENT_CHANGED_SETTINGS"));
         self.online.event_log.add(match title {
@@ -1518,34 +1659,72 @@ impl<T, C> SelectedLiveSession<T, C> {
     }
 
     /// `HandlePlayerLeave` 0x8276aa70 and `OnlineEventLog::OnEvent(OE_PlayerLeave)`: the skater
-    /// goes, the log names who left, and the host may change. The original takes no join while a
-    /// challenge runs, so a round's players never hear of a member waiting in the pre-game lobby:
-    /// that member's leave is not logged to them.
+    /// goes and the log names who left. The original takes no join while a challenge runs, so a
+    /// round's players never hear of a member waiting in the pre-game lobby: that member's leave is
+    /// not logged to them. A host's leave is followed by the server's `HostChanged`.
     fn online_player_leave(&mut self, user_id: u64, reason: u8) {
         let apart = self.online_apart_from_round(user_id);
         self.online_round_player_left(user_id);
         let Some(game) = self.online.game.as_mut() else { return };
         let name = game.name(user_id);
         trace(format_args!("{name} left (reason {reason})"));
-        let host_before = game.host();
         game.players.retain(|player| player.user_id != user_id);
         game.participants.retain(|&participant| participant != user_id);
         game.remotes.remove(&user_id);
         game.recipes.remove(&user_id);
         game.announced.retain(|&announced| announced != user_id);
         self.online.lobby_hud_dirty = true;
-        let host_after = game.host();
-        let host_name = host_after.map(|host| game.name(host));
-        if game.entered {
-            if !apart {
-                self.online.event_log.add(EventText::named("ID_ONLINE_EVENT_LEAVE", &name));
-            }
-            if host_before != host_after
-                && let Some(host) = host_name
-            {
-                self.online.event_log.add(EventText::named("ID_ONLINE_EVENT_HOST_CHANGE", &host));
-            }
+        if game.entered && !apart {
+            self.online.event_log.add(EventText::named("ID_ONLINE_EVENT_LEAVE", &name));
         }
+    }
+
+    /// `HostChanged` (PC port addition): the game's host as the server keeps it, after the host
+    /// handed the game on or left it; the log names a new host as the original's host change
+    /// (`ID_ONLINE_EVENT_HOST_CHANGE`). A hand this console asked for ends here, given or not.
+    fn online_host_changed(&mut self, user_id: u64) {
+        let Some(game) = self.online.game.as_mut() else { return };
+        let before = game.host;
+        game.host = Some(user_id);
+        game.handing_to = None;
+        let name = game.name(user_id);
+        trace(format_args!("{name} is the host"));
+        if before != Some(user_id) && game.entered {
+            self.online.event_log.add(EventText::named("ID_ONLINE_EVENT_HOST_CHANGE", &name));
+        }
+    }
+
+    /// PC port addition: the host hands the game to another player (`request::MAKE_HOST`). The
+    /// console stops acting as the host at once: once the server has the hand, it takes no host's
+    /// request from this console. The server's `HostChanged` then names the host, this console
+    /// again when the player had left.
+    pub fn online_make_host(&mut self, user_id: u64) {
+        let local = self.online.user_id;
+        let Some(game) = self.online.game.as_mut() else { return };
+        if local.is_none() || game.host() != local || Some(user_id) == local || !game.players.iter().any(|player| player.user_id == user_id) {
+            return;
+        }
+        trace(format_args!("handing the game to {}", game.name(user_id)));
+        game.handing_to = Some(user_id);
+        self.online.send(ClientMessage::GameRequest { request: request::MAKE_HOST, value: user_id });
+    }
+
+    /// `SKATE2_DIAGNOSTIC_ONLINE_MAKE_HOST=<ticks>`: after that many lobby ticks with every other
+    /// player's skater showing, the host hands the game to the first other player in its list.
+    fn online_diagnostic_make_host(&mut self) {
+        let Some(ticks) = std::env::var("SKATE2_DIAGNOSTIC_ONLINE_MAKE_HOST").ok().and_then(|ticks| ticks.parse::<u32>().ok()) else { return };
+        let Some(game) = self.online.game.as_ref() else { return };
+        if self.online.round.is_some() || game.players.len() < 2 || !game.remotes.values().all(RemoteSkater::visible) {
+            return;
+        }
+        self.online.diagnostic_host_ticks += 1;
+        if self.online.diagnostic_host_ticks != ticks {
+            return;
+        }
+        let local = self.online.user_id;
+        let Some(target) = game.players.iter().map(|player| player.user_id).find(|&user_id| Some(user_id) != local) else { return };
+        trace(format_args!("diagnostic hands the game on"));
+        self.online_make_host(target);
     }
 
     /// `StateOnlineRecipe::LoadingRemoteRecipe` 0x8276fb40: a player's look, built once the
@@ -1605,6 +1784,9 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.online.notices.push(notice);
         self.online_clear_area()?;
         if entered && !self.main_menu_pending {
+            // Once the game no longer simulates, Options and the Skate Profile end each frame
+            // before the way to the main menu, under the fade that covers them: they close.
+            self.pop_all_front_end_states()?;
             self.request_main_menu()?;
         }
         Ok(())
@@ -1642,6 +1824,46 @@ impl<T, C> SelectedLiveSession<T, C> {
     }
 
     /// The game host peer's `GameRequest`.
+    /// `ChallengeOption` (PC port addition): a challenge option as the host set it. A change
+    /// goes to the log of a console in the game's world; a joiner hears the options as they are
+    /// before it is.
+    fn online_challenge_option(&mut self, option: u8, value: u32) {
+        use skate2_net::protocol::option::{INFINITE_ROUNDS, ROUND_LOCK};
+        let Some(game) = self.online.game.as_mut() else { return };
+        let line = match option {
+            INFINITE_ROUNDS if game.infinite_rounds != (value != 0) => {
+                game.infinite_rounds = value != 0;
+                trace(format_args!("infinite rounds {}", if game.infinite_rounds { "on" } else { "off" }));
+                if game.infinite_rounds { online_challenge::INFINITE_ROUNDS_ENABLED.to_owned() } else { online_challenge::INFINITE_ROUNDS_DISABLED.to_owned() }
+            }
+            ROUND_LOCK if game.round_lock != value => {
+                game.round_lock = value;
+                trace(format_args!("round lock {value}"));
+                online_challenge::round_lock_line(value)
+            }
+            _ => return,
+        };
+        if game.entered {
+            self.online.event_log.add(EventText::literal(line));
+        }
+    }
+
+    /// The host menu's Challenge Options (PC port addition): Infinite Rounds on or off.
+    pub(super) fn online_set_infinite_rounds(&mut self, on: bool) {
+        self.online_game_request(request::SET_CHALLENGE_OPTION, u64::from(skate2_net::protocol::option::INFINITE_ROUNDS) | u64::from(on) << 8);
+    }
+
+    /// The host menu's Challenge Options (PC port addition): a 1-Up's Round Lock at a round, or
+    /// off (0).
+    pub(super) fn online_set_round_lock(&mut self, round: u32) {
+        self.online_game_request(request::SET_CHALLENGE_OPTION, u64::from(skate2_net::protocol::option::ROUND_LOCK) | u64::from(round) << 8);
+    }
+
+    /// The host menu's End Challenge (PC port addition).
+    pub(super) fn online_end_challenge(&mut self) {
+        self.online_game_request(request::END_CHALLENGE, 0);
+    }
+
     pub(super) fn online_game_request(&mut self, kind: u8, value: u64) {
         let is_host = self.online.game.as_ref().and_then(OnlineGame::host) == self.online.user_id;
         if is_host {
@@ -1673,10 +1895,26 @@ impl<T, C> SelectedLiveSession<T, C> {
         // GenerateActionGraphIntents 0x825fda28 skips the whole fill while pinned).
         let online = self.online.game.as_ref().is_some_and(|game| game.entered);
         let diagnostic_pin = diagnostic_pin();
+        // PC port addition, Skate During Turn Wait: while another player's turn shows, the local
+        // skater is unpinned every tick (over any pin the challenge sends meanwhile); once it no
+        // longer is, the challenge's own pin is back.
+        let free = self.online_skates_while_waiting();
+        let was_free = std::mem::replace(&mut self.online.free_skating, free);
+        let script_pinned = self.online.round.as_ref().is_some_and(online_challenge::Round::script_pinned);
+        if free != was_free {
+            trace(format_args!(
+                "skate during turn wait: {}",
+                if free { "the local skater skates" } else if script_pinned { "the local skater is pinned again" } else { "stopped" }
+            ));
+        }
         if let Some(actor) = self.inner.player.as_ref().and_then(|player| player.selected.actor.as_ref()) {
             actor.try_set_pinned_gestures(online || diagnostic_pin.is_some()).map_err(|e| error(format!("{e:?}")))?;
             if let Some(pinned) = diagnostic_pin {
                 actor.try_set_pinned(pinned).map_err(|e| error(format!("{e:?}")))?;
+            } else if free {
+                actor.try_set_pinned(false).map_err(|e| error(format!("{e:?}")))?;
+            } else if was_free {
+                actor.try_set_pinned(script_pinned).map_err(|e| error(format!("{e:?}")))?;
             }
         }
         let Some(game) = self.online.game.as_ref() else { return Ok(()) };
@@ -1684,6 +1922,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             return Ok(());
         }
         self.online_diagnostic_start();
+        self.online_diagnostic_make_host();
         self.online_diagnostic_activity();
         if self.online.game.is_none() {
             return Ok(());
@@ -1713,7 +1952,9 @@ impl<T, C> SelectedLiveSession<T, C> {
             matches!(player.selected.owners.loader.phase(), crate::player::PlayerLoadPhase::Loaded { .. })
         });
         let game = self.online.game.as_mut().expect("checked");
-        let camera = projection.map(|projection| remote_skater::camera_values(&projection.camera_matrix, projection.chosen_fov_y_degrees, game.last_camera_rotation));
+        // The camera frame's own field of view: Gameplay Settings' Field of View (PC port addition)
+        // is each console's, applied to what it shows, so a watched player's never reaches another.
+        let camera = projection.map(|projection| remote_skater::camera_values(&projection.camera_matrix, projection.frame_fov_y_degrees, game.last_camera_rotation));
         if let Some(values) = camera {
             game.last_camera_rotation = Some([values[3], values[4], values[5], values[6]]);
         }
@@ -1736,7 +1977,12 @@ impl<T, C> SelectedLiveSession<T, C> {
                     Err(e) => trace(format_args!("our character cannot be sent: {e}")),
                 }
             }
-            let header = net_header(&frame.header);
+            let mut header = net_header(&frame.header);
+            // PC port addition, Skate During Turn Wait: the other consoles show nothing of a
+            // skater that skates through their players' turns.
+            if self.online.free_skating {
+                header[48] |= remote_skater::TURN_WAIT_FLAG;
+            }
             let teleport = header[48] & 0x1000 != 0;
             let ends = tick % interval == 0 || teleport || game.last_teleport;
             let sample = watched || ends;
@@ -1984,7 +2230,8 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// challenge's players nothing of lobby skate (the server relays them none of its frames
     /// either), and a member waiting sees the challenge's players only with Show Ghost Players in
     /// pregame lobby on; to the players, one of them off their waiting spot through another's turn
-    /// shows nothing either (PC port additions).
+    /// shows nothing either, nor does one who skates through it with Skate During Turn Wait on
+    /// (its frames say so) (PC port additions).
     fn online_remote_hidden(&self, user_id: u64) -> bool {
         let Some(game) = self.online.game.as_ref() else { return false };
         // Co-op fork (M10): an owned challenge AI skater's puppet shows while the campaign's
@@ -1994,7 +2241,7 @@ impl<T, C> SelectedLiveSession<T, C> {
         }
         let playing = game.participants.contains(&user_id);
         if self.online.round.is_some() {
-            !playing || self.online_spot_hidden(user_id)
+            !playing || self.online_spot_hidden(user_id) || game.remotes.get(&user_id).is_some_and(RemoteSkater::turn_wait)
         } else {
             playing && !self.options_menu.show_ghost_players()
         }

@@ -33,6 +33,7 @@ pub mod gameplay;
 pub mod gameplay_modes;
 pub mod puddle_physics;
 pub mod music_player;
+pub mod custom_songs;
 pub mod movie_player;
 pub mod replay_editor;
 pub mod skate_reel;
@@ -44,6 +45,7 @@ pub mod map_menu;
 pub mod map_viewport;
 pub mod minimap;
 pub mod edit_skater;
+pub mod colour_picker;
 pub mod edit_skater_presentation;
 pub(crate) mod frontend_fade;
 

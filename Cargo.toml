@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 # The release version: with a release key it names the build's secret (apps/build_secret.rs), so a
 # new version's game and server meet only each other.
-version = "0.3.3"
+version = "0.3.6"
 edition = "2024"
 license = "GPL-3.0-only"
 rust-version = "1.85"
@@ -34,3 +34,7 @@ pedantic = "warn"
 incremental = true
 codegen-units = 16
 debug = "line-tables-only"
+
+# wgpu-hal 30.0.1 with the changes in vendor/wgpu-hal/PATCHES.md.
+[patch.crates-io]
+wgpu-hal = { path = "vendor/wgpu-hal" }

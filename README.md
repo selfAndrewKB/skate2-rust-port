@@ -58,9 +58,20 @@ PC. Requires your own legally obtained Xbox 360 copy of Skate 2 to run, you will
   borderless fullscreen (Alt+Enter works too), and switches for PostFX and the fisheye lens.
 - **Better Party Play.** No pedestrians or traffic in the way and your own career skater is in the
   list to choose from.
-- **Stick Settings.** Under Control Settings, each stick takes a multiplier (0.40 to 1.10), a
+- **Stick Settings.** Under Control Settings, each stick takes a multiplier (0.40 to 1.20), a
   deadzone and an anti-deadzone that work as RPCS3's do, with both sticks drawn live beside them.
   Out of the box, and after Reset To Default, the sticks feel exactly as the original's.
+- **Trigger Threshold.** Under Control Settings, a knob sets how far a trigger travels before the
+  game reads it as held (0% to 90%, 20% out of the box), so a finger resting on a trigger no longer
+  grabs or crouches. It works as RPCS3's does: past the threshold the rest of the pull covers the
+  whole range, and a full pull stays full. At 0% the game reads the triggers exactly as the pad
+  reports them.
+- **Polling Rate.** Control Settings' Polling & Delay page picks when each of the game's 60 polls
+  a second reads the pad: `60hz (Vanilla)`, at the game's 60 Hz timer instant as the original
+  reads it (the default), or `Frame Timed`, at the moment each tick runs, as before: evenly
+  spaced at a capped or very high frame rate, uneven at an uncapped one near 60 to 100.
+- **Added Input Delay.** On the same page, a knob delays every pad by 0 to 30 milliseconds (0
+  out of the box).
 - **Link Skate 3 data.** You can now link your own copy of Skate 3 data and play Port Carverton maps and hotswap between Skate 2/3 physics from the **Physics Settings** menu ingame.
 
 ## How to play
@@ -112,8 +123,8 @@ What the build needs, and the parts of the game macOS does not have yet, are in
   message box for is written there too; run `Skate 2.app/Contents/MacOS/Skate 2` from a terminal
   to see what it prints.
 - To try the other graphics API, make a `.bat` file beside the game with `set WGPU_BACKEND=dx12`
-  (or `vulkan`) on one line and `skate2-pc.exe` on the next, and run it. `set SKATE2_NO_MSAA=1`
-  turns antialiasing off.
+  (or `vulkan`) on one line and `skate2-pc.exe` on the next, and run it. Display Settings'
+  Anti-Aliasing sets MSAA (Off, 2x or 4x); `set SKATE2_NO_MSAA=1` keeps it off whatever the setting.
 
 ### Online
 
@@ -124,8 +135,8 @@ game.
 **Hosting:** `skate2-pc --server <ip:port>` runs the game in dedicated server mode, on Windows,
 Linux or macOS. The Linux zip also holds `skate2-server`, the server alone, for a VPS or any machine
 without a display. Players join only a server of the same release; `--update` on either program
-puts the newest release in place. A server can also run a barebones moderation panel, with chat shadowbans
-and IP bans: see [the server's documentation](docs/online/implementation.md#the-server).
+puts the newest release in place. A server can also run a barebones moderation panel, with chat and
+matchmaking shadowbans and IP bans: see [the server's documentation](docs/online/implementation.md#the-server).
 
 ### Updates
 
@@ -137,9 +148,13 @@ version.
 ### Saves and settings
 
 Everything stays in the folder you run the game from: `config.json`, `online-config.json`,
-`controller_config.json` and `saves/`. On macOS the app starts itself in `~/Library/Application Support/Skate 2`, so they stay
+`controller_config.json`, `custom_songs.json` and `saves/`. On macOS the app starts itself in `~/Library/Application Support/Skate 2`, so they stay
 there. Replays and photos go to `saves/skate_reel/`. MP4 export needs FFmpeg with H.264 and
 AAC: put `ffmpeg.exe` (`ffmpeg` on Linux and macOS) beside the game, or on your `PATH`.
+
+The Music Player takes your own MP3 and WAV files: Add Song on its screen picks a file and asks
+for the artist and title, and Remove Song in Edit Playlist takes a song out again. The list is
+`custom_songs.json`; the files stay where they are.
 
 ## Not done yet
 

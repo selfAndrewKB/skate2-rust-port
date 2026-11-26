@@ -10,7 +10,7 @@ use crate::challenge::invisible_boundary::InvisibleBoundaries;
 use crate::challenge::players::{GM_PROFILE_FREE_SKATE, GM_SINGLE_PLAYER};
 use crate::ui::FeSoundRequest;
 use crate::ui::online_config::OnlineConfig;
-use crate::ui::online_hub::{Action, Controller, HUB_SOUND, HubKind, Lobby, Popup, ScreenCall, Snapshot};
+use crate::ui::online_hub::{Action, Controller, HUB_SOUND, HubKind, Lobby, MAKE_HOST, Popup, SPECTATE, ScreenCall, Snapshot, Title};
 use crate::ui::online_match;
 use crate::ui::pause_menu::PauseMenuInput;
 use crate::ui::profile_name::Prompt;
@@ -69,7 +69,25 @@ impl<T, C> SelectedLiveSession<T, C> {
             spectatable: game.remotes.keys().copied().filter(|&user_id| self.online_can_spectate(user_id)).collect(),
             activities: self.online_hub_activities(),
             proposal: self.online_proposal_pending(),
+            spot_battle: game.attributes.challenge_type == challenge::OWN_THE_SPOT,
+            infinite_rounds: game.infinite_rounds,
+            endless_in_play: game.endless_in_play(),
+            // PC port: a 1-Up's round starts (a linked Skate 3 data folder's 1-Up, which runs
+            // Skate 3's graph), and the host's Round Lock among them.
+            one_up_rounds: if game.attributes.challenge_type == challenge::ONE_UP {
+                crate::skate3::linked().map_or(0, |data| data.one_up_rounds(game.attributes.challenge_key))
+            } else {
+                0
+            },
+            round_lock: game.round_lock,
         })
+    }
+
+    /// PC port addition: whether End Challenge is offered, as the hub's root menu offers it (the
+    /// host's, while a Spot Battle under Infinite Rounds plays). The StartHub lists it too.
+    pub(in super::super) fn online_end_challenge_offered(&self) -> bool {
+        let Some(game) = self.online.game.as_ref() else { return false };
+        self.online.user_id.is_some_and(|local| game.host() == Some(local)) && game.endless_in_play()
     }
 
     /// `PickCurrentState` 0x82688470 out of an online game: in a single player or free skate game
@@ -109,6 +127,7 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// HUD; then the hub, or a screen over it, takes the input, after an open popup. The input
     /// the game should still see.
     pub(in super::super) fn update_online_hub(&mut self, input: PauseMenuInput, focused: bool, can_open: bool) -> Result<PauseMenuInput, SelectedLiveError> {
+        let (input, focused) = self.online_diagnostic_hub_input(input, focused);
         let playing = self.online.network_resumed && self.online.game.as_ref().is_some_and(|game| game.entered) && self.map_travel.is_none();
         let input = self.update_online_popup(input, focused)?;
         let lobby = if playing { self.online_hub_lobby() } else { self.single_player_hub_lobby()? };
@@ -153,6 +172,81 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.online.hub.sounds.extend(sounds);
         self.online_hub_action(action)?;
         Ok(PauseMenuInput::default())
+    }
+
+    /// `SKATE2_DIAGNOSTIC_ONLINE_HUB_MAKE_HOST=<updates>`: once the host's game has shown every
+    /// other skater in lobby skate for that many updates, Back opens the hub, and a press every
+    /// second and a half goes to the Player List, its first player's menu and Make Host. The
+    /// confirmation stays up four seconds, then Yes hands the game on. Its presses count as
+    /// focused. `SKATE2_DIAGNOSTIC_ONLINE_HUB_SPECTATE=<updates>` walks a host's or a guest's hub
+    /// the same way to the first player's Spectate.
+    fn online_diagnostic_hub_input(&mut self, input: PauseMenuInput, focused: bool) -> (PauseMenuInput, bool) {
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+        static UPDATES: AtomicU32 = AtomicU32::new(0);
+        static CONFIRMING: AtomicU32 = AtomicU32::new(0);
+        static DONE: AtomicBool = AtomicBool::new(false);
+        let updates = |name: &str| std::env::var(name).ok().and_then(|ticks| ticks.parse::<u32>().ok());
+        let Some((start, item)) = updates("SKATE2_DIAGNOSTIC_ONLINE_HUB_MAKE_HOST")
+            .map(|start| (start, MAKE_HOST))
+            .or_else(|| updates("SKATE2_DIAGNOSTIC_ONLINE_HUB_SPECTATE").map(|start| (start, SPECTATE)))
+        else {
+            return (input, focused);
+        };
+        if DONE.load(Ordering::Relaxed) {
+            return (input, focused);
+        }
+        let press = |input: PauseMenuInput| (input, true);
+        let Some(hub) = self.online.hub.menu.as_ref() else {
+            let ready = (item == SPECTATE || self.online_is_host())
+                && self.online.round.is_none()
+                && self.online.game.as_ref().is_some_and(|game| {
+                    game.entered && game.players.len() >= 2 && game.remotes.values().all(super::remote_skater::RemoteSkater::visible)
+                });
+            if !ready || UPDATES.fetch_add(1, Ordering::Relaxed) + 1 < start {
+                return (input, focused);
+            }
+            trace(format_args!("diagnostic opens the hub"));
+            return press(PauseMenuInput { back: true, ..Default::default() });
+        };
+        if !hub.ready {
+            return press(PauseMenuInput::default());
+        }
+        if matches!(hub.popup(), Some(Popup::MakeHost(_))) {
+            let held = CONFIRMING.fetch_add(1, Ordering::Relaxed) + 1;
+            if held == 1 {
+                trace(format_args!("diagnostic: Make Host's confirmation is up"));
+            }
+            if held < 240 {
+                return press(PauseMenuInput::default());
+            }
+            DONE.store(true, Ordering::Relaxed);
+            trace(format_args!("diagnostic says Yes"));
+            return press(PauseMenuInput { select: true, ..Default::default() });
+        }
+        if UPDATES.fetch_add(1, Ordering::Relaxed) % 90 != 0 {
+            return press(PauseMenuInput::default());
+        }
+        let snapshot = hub.snapshot();
+        let Some(menu) = snapshot.stack.last() else { return press(PauseMenuInput::default()) };
+        let wanted = Title::Literal(item.to_owned());
+        let target = menu
+            .items
+            .iter()
+            .position(|(title, enabled)| *enabled && *title == wanted)
+            .or_else(|| menu.items.iter().position(|(title, enabled)| *enabled && matches!(title, Title::Count { label: "ID_ONLINE_HUB_PLAYER_LIST", .. })))
+            .or_else(|| (menu.title == Title::Hal("ID_ONLINE_HUB_PLAYER_LIST")).then_some(0));
+        trace(format_args!("diagnostic hub menu {:?}: {:?} at {}, target {target:?}", menu.title, menu.items, menu.selected));
+        match target {
+            Some(target) if target == menu.selected => {
+                if menu.items.get(target).is_some_and(|(title, _)| *title == wanted) && item == SPECTATE {
+                    DONE.store(true, Ordering::Relaxed);
+                    trace(format_args!("diagnostic spectates"));
+                }
+                press(PauseMenuInput { select: true, ..Default::default() })
+            }
+            Some(_) => press(PauseMenuInput { down: true, ..Default::default() }),
+            None => press(PauseMenuInput::default()),
+        }
     }
 
     /// `CheckForOnlineHubMenu`'s sound and `PushState(44)`.
@@ -218,7 +312,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     self.online.client = None;
                     self.online.sign_in = SignIn::Offline;
                     self.online.user_id = None;
-                    self.open_online_popup(Popup::Notice("ID_ONLINE_SIGNIN_CANCELLED"));
+                    self.open_online_popup(Popup::Notice("ID_ONLINE_SIGNIN_CANCELLED".to_owned()));
                 }
                 // OK: `HandleErrorState` closes every popup and pops to the game (`PopToState(0)`,
                 // or `OnlineFeManager::Exit` 0x8266c418), the hub and its screens with them.
@@ -271,20 +365,42 @@ impl<T, C> SelectedLiveSession<T, C> {
     /// location the skater is in by its boundary, tested nearest location first (`DoFindFreeskate`
     /// 0x82778950, `FindClosestFreeskateByDistance` 0x82778120, `LoadBoundary` 0x8274e7e0), else
     /// the one whose boundary is nearest; none without a location.
+    ///
+    /// The locations are those of the world the skater is in: an additional world's (a
+    /// downloadable content's, a linked Skate 3 data's map) are no locations of `BAM_Sim.loc`, and
+    /// lie over ground the main world has too, so in one of them the search is among its own, and
+    /// in the main world among the main world's.
     fn online_free_skate_here(&mut self) -> Result<Option<u64>, SelectedLiveError> {
+        use super::super::world_travel::TravelWorld;
         let Some(actor) = self.inner.player.as_ref().and_then(|player| player.selected.actor.as_deref()) else { return Ok(None) };
         let position = super::super::local_skater_position(self.inner.world.as_ref().map(|world| &world.world), actor)?;
-        let locations = self.online_challenge_list(challenge::ONLINE_FREE_SKATE)?;
-        let (db, table) = self.freeskate.data.as_ref().ok_or_else(|| error("data absent"))?;
-        let mut nearest: Vec<(f32, u64, String)> = locations
-            .iter()
-            .filter_map(|location| {
-                let transform = table.find(&location.location)?.transform;
-                let name = db.attribute(CHALLENGES, location.key, CHALLENGE_NAME)?.text(0)?.to_owned();
-                let (x, z) = (transform[12] - position[0], transform[14] - position[2]);
-                Some((x.mul_add(x, z * z), location.key, name))
-            })
-            .collect();
+        let here = self.loaded_additional_world().map(str::to_owned);
+        let mut nearest: Vec<(f32, u64, String)> = Vec::new();
+        for location in self.online_challenge_list_all(challenge::ONLINE_FREE_SKATE)? {
+            let world = self.online_challenge_world(location.key)?.and_then(|(key, file)| match TravelWorld::of_location(&file, key) {
+                TravelWorld::Additional { file, .. } => Some(file),
+                TravelWorld::Main | TravelWorld::Keep => None,
+            });
+            let in_this_world = match (&here, &world) {
+                (None, None) => true,
+                (Some(here), Some(world)) => here.eq_ignore_ascii_case(world),
+                _ => false,
+            };
+            if !in_this_world {
+                continue;
+            }
+            let Ok((_, transform)) = self.online_key_location(location.key) else { continue };
+            let name = match Self::skate3_online_spot(location.key) {
+                Some(spot) => spot.name,
+                None => {
+                    let (db, _) = self.freeskate.data.as_ref().ok_or_else(|| error("data absent"))?;
+                    let Some(name) = db.attribute(CHALLENGES, location.key, CHALLENGE_NAME).and_then(|name| name.text(0)) else { continue };
+                    name.to_owned()
+                }
+            };
+            let (x, z) = (transform[12] - position[0], transform[14] - position[2]);
+            nearest.push((x.mul_add(x, z * z), location.key, name));
+        }
         nearest.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mounts = Arc::clone(&self.inner.assets.as_ref().ok_or_else(|| error("assets absent"))?.mounts);
         let mut best = nearest.first().map(|&(_, key, _)| key);
@@ -306,6 +422,26 @@ impl<T, C> SelectedLiveSession<T, C> {
         Ok(best)
     }
 
+    /// Diagnostics (`SKATE2_DIAGNOSTIC_FREE_SKATE_HERE`): the free skate Free Skate Here would
+    /// ask for from where the skater is, by its challenge's name; no search is made.
+    pub fn diagnostic_free_skate_here(&mut self) -> String {
+        let key = match self.online_free_skate_here() {
+            Ok(Some(key)) => key,
+            Ok(None) => return "none".to_owned(),
+            Err(failure) => return format!("failed: {failure:?}"),
+        };
+        let name = match Self::skate3_online_spot(key) {
+            Some(spot) => Some(spot.name),
+            None => self
+                .freeskate
+                .data
+                .as_ref()
+                .and_then(|(db, _)| db.attribute(CHALLENGES, key, CHALLENGE_NAME))
+                .and_then(|name| name.text(0).map(str::to_owned)),
+        };
+        format!("{key:016x} {}", name.unwrap_or_default())
+    }
+
     fn online_hub_action(&mut self, action: Action) -> Result<(), SelectedLiveError> {
         match action {
             Action::None => {}
@@ -325,7 +461,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                         });
                     });
                 }
-                None => self.open_online_popup(Popup::Notice("ID_ONLINE_MATCHMAKING_NOSERVER")),
+                None => self.open_online_popup(Popup::Notice("ID_ONLINE_MATCHMAKING_NOSERVER".to_owned())),
             },
             Action::CustomFreeskate => {
                 let screen = self.online_freeskate_screen(None)?;
@@ -374,6 +510,17 @@ impl<T, C> SelectedLiveSession<T, C> {
             Action::Spectate(user_id) => {
                 self.close_online_hub()?;
                 self.online_start_spectating(user_id)?;
+            }
+            Action::MakeHost(user_id) => {
+                self.online_make_host(user_id);
+                self.close_online_hub()?;
+            }
+            // PC port: the menu stays, and reads the new setting once the server says it.
+            Action::SetInfiniteRounds(on) => self.online_set_infinite_rounds(on),
+            Action::SetRoundLock(round) => self.online_set_round_lock(round),
+            Action::EndChallenge => {
+                self.online_end_challenge();
+                self.close_online_hub()?;
             }
             Action::ActivitySignUp(key) => self.online_open_activity_signup(key),
         }

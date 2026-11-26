@@ -4,10 +4,10 @@
 //! (`SendUnrankedMatchMessage` 0x826a85a0, `StateOnlinePlayNow`), the Lobby Browser (PC port
 //! addition) and the notices of failed sign-ins and searches.
 
-use super::{MatchRequest, OnlineNotice, SelectedLiveError, SelectedLiveSession, error, trace};
+use super::{LossReason, MatchRequest, OnlineNotice, SelectedLiveError, SelectedLiveSession, error, trace};
 use crate::online::catalog::{self, OnlineChallenge};
 use crate::ui::lobby_browser::Notice;
-use crate::ui::online_match::{Action, CustomMatch, FreeskateMatch, MatchChoice, Snapshot};
+use crate::ui::online_match::{Action, CustomMatch, FreeskateMatch, MatchChoice, SKATE2_POOL, SKATE3_DLC_POOL, SKATE3_POOL, Snapshot};
 use crate::ui::pause_menu::PauseMenuInput;
 use crate::ui::skate_reel::OnlineAction;
 use skate2_formats::localization::{Histogram, LanguageCategory, string_hash};
@@ -66,18 +66,79 @@ impl MatchScreen {
     }
 }
 
-/// The notice the Online options show for a failure.
-pub(super) const fn notice_text(notice: &OnlineNotice) -> &'static str {
+/// The notice the Online options show for a failure. A game that ended under the player names
+/// why on a line of its own under the original's text (PC port addition): the popup reads a
+/// label, a line break and a second label as both.
+pub(super) fn notice_text(notice: &OnlineNotice) -> String {
+    let with_reason = |text: &str, reason: &str| format!("{text}\n#Reason: {reason}");
     match notice {
-        OnlineNotice::SignInFailed => "ID_ONLINE_SIGNIN_FAILED_EA_SERVER",
-        OnlineNotice::NoMatch => "ID_SIDEKICK_ONLINE_QUICK_MATCH_NO_MATCH",
-        OnlineNotice::MatchFailed => "ID_ONLINE_MATCHMAKING_NOSERVER",
-        OnlineNotice::Disconnected => "ID_ONLINE_GAME_LEFT",
-        OnlineNotice::Kicked => "ID_ONLINE_KICKED_BY_GAME_HOST",
-        OnlineNotice::UpdateRequired => "#Your game doesn't match the server's version. Update the game to play online.",
-        OnlineNotice::NicknameNotPermitted => "#Nickname not permitted.",
+        OnlineNotice::SignInFailed => "ID_ONLINE_SIGNIN_FAILED_EA_SERVER".to_owned(),
+        OnlineNotice::NoMatch => "ID_SIDEKICK_ONLINE_QUICK_MATCH_NO_MATCH".to_owned(),
+        OnlineNotice::MatchFailed => "ID_ONLINE_MATCHMAKING_NOSERVER".to_owned(),
+        OnlineNotice::Disconnected(reason) => with_reason("ID_ONLINE_GAME_LEFT", &reason.name()),
+        // eSk8FEPopup_Online_Error_KickedInactivity.
+        OnlineNotice::Kicked(reason @ (LossReason::ChallengeTimeout | LossReason::InactivityTimeout)) => with_reason("ID_ONLINE_KICKED_INACTIVITY", &reason.name()),
+        OnlineNotice::Kicked(reason) => with_reason("ID_ONLINE_KICKED_BY_GAME_HOST", &reason.name()),
+        OnlineNotice::UpdateRequired => "#Your game doesn't match the server's version. Update the game to play online.".to_owned(),
+        OnlineNotice::NicknameNotPermitted => "#Nickname not permitted.".to_owned(),
         // ShowErrorDialog 0x825735d0: eSk8FEPopup_Online_Error_DLC_Required, ID_EANATION and OK.
-        OnlineNotice::DlcRequired => "ID_DLC_REQUIRED",
+        OnlineNotice::DlcRequired => with_reason("ID_DLC_REQUIRED", "Missing content"),
+    }
+}
+
+#[cfg(test)]
+mod notice_tests {
+    use super::{LossReason, OnlineNotice, notice_text};
+    use skate2_net::client::Disconnect;
+    use skate2_net::protocol::leave;
+
+    #[test]
+    fn every_game_lost_names_its_reason() {
+        let reasons = [
+            LossReason::TimedOut,
+            LossReason::KickedByHost,
+            LossReason::Kicked,
+            LossReason::ChallengeTimeout,
+            LossReason::InactivityTimeout,
+            LossReason::Flood,
+            LossReason::Chat,
+            LossReason::HostRequest,
+            LossReason::Network,
+            LossReason::GameError,
+        ];
+        for reason in reasons {
+            for notice in [OnlineNotice::Disconnected(reason), OnlineNotice::Kicked(reason)] {
+                let text = notice_text(&notice);
+                let (label, line) = text.split_once('\n').expect("two lines");
+                assert!(label.starts_with("ID_ONLINE_"), "{text}");
+                assert_eq!(line, format!("#Reason: {}", reason.name()));
+                assert!(!reason.name().is_empty());
+            }
+        }
+        assert_eq!(notice_text(&OnlineNotice::Kicked(LossReason::KickedByHost)), "ID_ONLINE_KICKED_BY_GAME_HOST\n#Reason: Kicked by host");
+        assert_eq!(notice_text(&OnlineNotice::DlcRequired), "ID_DLC_REQUIRED\n#Reason: Missing content");
+    }
+
+    #[test]
+    fn the_timeouts_name_the_server_s_limits() {
+        assert_eq!(LossReason::of_kick(leave::KICKED_FOR_INACTIVITY), LossReason::ChallengeTimeout);
+        assert_eq!(LossReason::of_kick(leave::KICKED_FOR_IDLE), LossReason::InactivityTimeout);
+        assert_eq!(notice_text(&OnlineNotice::Kicked(LossReason::ChallengeTimeout)), "ID_ONLINE_KICKED_INACTIVITY\n#Reason: 5 second challenge timeout");
+        assert_eq!(notice_text(&OnlineNotice::Kicked(LossReason::InactivityTimeout)), "ID_ONLINE_KICKED_INACTIVITY\n#Reason: 60 second inactivity timeout");
+    }
+
+    /// A ban closes the connection without a word, so the game hears a timeout; whatever else
+    /// the server closes as a lost connection reads the same.
+    #[test]
+    fn a_ban_reads_as_a_connection_that_timed_out() {
+        let timeout = "ID_ONLINE_GAME_LEFT\n#Reason: Connection timed out";
+        for end in [Disconnect::TimedOut, Disconnect::Closed(leave::LOST_CONNECTION), Disconnect::Closed(leave::QUIT), Disconnect::Closed(200)] {
+            assert_eq!(notice_text(&OnlineNotice::Disconnected(LossReason::of(&end))), timeout, "{end:?}");
+        }
+        assert_eq!(LossReason::of(&Disconnect::Closed(leave::KICKED_FOR_FLOOD)), LossReason::Flood);
+        assert_eq!(LossReason::of(&Disconnect::Closed(leave::KICKED_FOR_CHAT)), LossReason::Chat);
+        assert_eq!(LossReason::of(&Disconnect::Closed(leave::KICKED_FOR_HOST_REQUEST)), LossReason::HostRequest);
+        assert_eq!(LossReason::of(&Disconnect::Network("socket".into())), LossReason::Network);
     }
 }
 
@@ -119,51 +180,60 @@ impl<T, C> SelectedLiveSession<T, C> {
     }
 
     /// PC port: the linked Skate 3 data's online games of a type (`crate::skate3::OnlineSpot`),
-    /// titled in Skate 3's English (literal text, `#`).
-    pub(super) fn online_skate3_list(net_type: u8) -> Vec<OnlineChallenge> {
-        crate::skate3::linked()
-            .map(|data| {
-                data.online_spots(net_type)
-                    .into_iter()
-                    .map(|spot| OnlineChallenge { key: spot.key, title: format!("#{}", spot.title), image: SKATE3_IMAGE.to_owned(), location: spot.location.clone() })
-                    .collect()
-            })
-            .unwrap_or_default()
+    /// titled in Skate 3's English (literal text, `#`): those at its districts (the Map Pool's
+    /// Skate 3), then those at its downloadable content's maps (Skate 3 DLC).
+    pub(super) fn online_skate3_lists(net_type: u8) -> (Vec<OnlineChallenge>, Vec<OnlineChallenge>) {
+        let Some(data) = crate::skate3::linked() else { return (Vec::new(), Vec::new()) };
+        let (mut districts, mut maps) = (Vec::new(), Vec::new());
+        for spot in data.online_spots(net_type) {
+            let challenge = OnlineChallenge { key: spot.key, title: format!("#{}", spot.title), image: SKATE3_IMAGE.to_owned(), location: spot.location.clone() };
+            if crate::skate3::is_district_stream(spot.stream) {
+                districts.push(challenge);
+            } else {
+                maps.push(challenge);
+            }
+        }
+        (districts, maps)
     }
 
     /// Every online challenge of a type this build can play: the game's, then the linked Skate 3
     /// data's.
     pub(super) fn online_challenge_list_all(&mut self, net_type: u8) -> Result<Vec<OnlineChallenge>, SelectedLiveError> {
         let mut list = self.online_challenge_list(net_type)?;
-        list.extend(Self::online_skate3_list(net_type));
+        let (districts, maps) = Self::online_skate3_lists(net_type);
+        list.extend(districts);
+        list.extend(maps);
         Ok(list)
     }
 
     /// The online free skate screen, with the Map Pool row while Skate 3 data is linked and has
-    /// online maps; `host` opens it in its host state, the pool of the game's own location shown.
+    /// online maps (its districts', its downloadable content's); `host` opens it in its host
+    /// state, the pool of the game's own location shown.
     pub(super) fn online_freeskate_screen(&mut self, host: Option<bool>) -> Result<FreeskateMatch, SelectedLiveError> {
         let locations = self.online_challenge_list(challenge::ONLINE_FREE_SKATE)?;
-        let skate3 = Self::online_skate3_list(challenge::ONLINE_FREE_SKATE);
+        let (districts, maps) = Self::online_skate3_lists(challenge::ONLINE_FREE_SKATE);
         let screen = match host {
             Some(private) => FreeskateMatch::host(locations, private),
             None => FreeskateMatch::new(locations),
         };
-        if skate3.is_empty() {
-            return Ok(screen);
-        }
-        let shown = self.online_game_is_skate3();
-        Ok(screen.with_pools(skate3, shown))
+        Ok(screen.with_pools(vec![(SKATE3_POOL, districts), (SKATE3_DLC_POOL, maps)], self.online_game_pool()))
     }
 
     /// The unranked custom match screen, with the Map Pool row while Skate 3 data is linked and
-    /// has online games of its types; `host` opens it in its host state.
+    /// has online games of its types (at its districts, at its downloadable content's maps);
+    /// `host` opens it in its host state.
     pub(super) fn online_custom_screen(&mut self, host: Option<bool>) -> Result<CustomMatch, SelectedLiveError> {
         let mut lists = self.online_match_lists()?;
-        let skate3: Vec<(u8, Vec<OnlineChallenge>)> = lists
-            .iter()
-            .map(|&(net_type, _)| (net_type, Self::online_skate3_list(net_type)))
-            .filter(|(_, list)| !list.is_empty())
-            .collect();
+        let (mut districts, mut maps) = (Vec::new(), Vec::new());
+        for &(net_type, _) in &lists {
+            let (at_districts, at_maps) = Self::online_skate3_lists(net_type);
+            if !at_districts.is_empty() {
+                districts.push((net_type, at_districts));
+            }
+            if !at_maps.is_empty() {
+                maps.push((net_type, at_maps));
+            }
+        }
         // PC port, for now: the game's own 1-Ups stay out until their online play is complete;
         // Skate 3's play Skate 3's own graph.
         lists.retain(|&(net_type, _)| net_type != challenge::ONE_UP);
@@ -171,16 +241,23 @@ impl<T, C> SelectedLiveSession<T, C> {
             Some(private) => CustomMatch::host(lists, private),
             None => CustomMatch::new(lists),
         };
-        if skate3.is_empty() {
-            return Ok(screen);
-        }
-        let shown = self.online_game_is_skate3();
-        Ok(screen.with_pools(skate3, shown))
+        Ok(screen.with_pools(vec![(SKATE3_POOL, districts), (SKATE3_DLC_POOL, maps)], self.online_game_pool()))
     }
 
     /// Whether the online game's challenge is one of the linked Skate 3 data's.
     pub(super) fn online_game_is_skate3(&self) -> bool {
         self.online.game.as_ref().is_some_and(|game| crate::skate3::linked().is_some_and(|data| data.online_spot(game.attributes.challenge_key).is_some()))
+    }
+
+    /// The Map Pool of the online game's challenge: Skate 3's districts' or its downloadable
+    /// content's maps' for one of the linked Skate 3 data's, else Skate 2's.
+    fn online_game_pool(&self) -> &'static str {
+        let spot = self.online.game.as_ref().and_then(|game| crate::skate3::linked().and_then(|data| data.online_spot(game.attributes.challenge_key).map(|spot| spot.stream)));
+        match spot {
+            Some(stream) if crate::skate3::is_district_stream(stream) => SKATE3_POOL,
+            Some(_) => SKATE3_DLC_POOL,
+            None => SKATE2_POOL,
+        }
     }
 
     /// `GetOnlineChallengesByType` of a type, at the world's locations, sorted by English title.
@@ -228,7 +305,7 @@ impl<T, C> SelectedLiveSession<T, C> {
             if matches!(self.online.screen, Some(MatchScreen::Quick)) {
                 self.online.screen = None;
             }
-            reel.online_notice(notice_text(notice));
+            reel.online_notice(&notice_text(notice));
         }
         if let Some(action) = action {
             self.open_online_screen(action)?;

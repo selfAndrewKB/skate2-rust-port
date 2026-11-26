@@ -4,7 +4,7 @@ use crate::client::{ClientCore, ClientEvent, Disconnect};
 use crate::crypto::{Build, Handshake, Session};
 use crate::frames::{HEADER_WORDS, INTERVAL, NetFrame};
 use crate::protocol::{
-    ClientMessage, FactsNotes, GameAttributes, GameResult, LobbyInfo, MAX_PLAYERS, MAX_WORLD, Phase, PlayNow, PlayNowMode, ServerMessage, campaign, challenge, leave,
+    ClientMessage, FactsNotes, GameAttributes, GameResult, LobbyInfo, MAX_PLAYERS, MAX_WORLD, Phase, PlayNow, PlayNowMode, ServerMessage, campaign, challenge, leave, option,
     play_now, proposal, refuse, request, reset,
 };
 use crate::moderation::BanList;
@@ -29,6 +29,8 @@ struct Net {
     /// Milliseconds run, for each client's `Busy` every quarter second (a game with no frame
     /// to send).
     elapsed: u64,
+    /// The clients whose game has stopped: they say no `Busy`, while their connection goes on.
+    frozen: Vec<usize>,
 }
 
 impl Net {
@@ -43,6 +45,7 @@ impl Net {
             received_bytes: HashMap::new(),
             now: Instant::now(),
             elapsed: 0,
+            frozen: Vec::new(),
         }
     }
 
@@ -66,8 +69,8 @@ impl Net {
         for _ in 0..ms / 5 {
             self.now += Duration::from_millis(5);
             self.elapsed += 5;
-            for (addr, core, _) in &mut self.clients {
-                if self.elapsed % 250 == 0 {
+            for (index, (addr, core, _)) in self.clients.iter_mut().enumerate() {
+                if self.elapsed % 250 == 0 && !self.frozen.contains(&index) {
                     core.send(&ClientMessage::Busy);
                 }
                 core.update(self.now);
@@ -274,25 +277,462 @@ fn players_find_each_other_and_play_a_challenge() {
     assert_eq!(net.server.games(), 1);
 }
 
+fn left_for(messages: &[ServerMessage], why: u8) -> bool {
+    messages.iter().any(|message| matches!(message, ServerMessage::PlayerLeave { reason, .. } if *reason == why))
+}
+
+fn left(messages: &[ServerMessage]) -> bool {
+    messages.iter().any(|message| matches!(message, ServerMessage::PlayerLeave { .. }))
+}
+
+fn kicked_for(messages: &[ServerMessage], why: u8) -> bool {
+    messages.iter().any(|message| matches!(message, ServerMessage::Kicked { reason } if *reason == why))
+}
+
+fn kicked(messages: &[ServerMessage]) -> bool {
+    messages.iter().any(|message| matches!(message, ServerMessage::Kicked { .. }))
+}
+
+/// The other players' rounds wait for a participant's facts: one whose game says nothing for five
+/// seconds is kicked, and told why.
 #[test]
-fn a_silent_player_is_kicked_for_inactivity() {
+fn a_challenge_s_silent_player_is_kicked_for_inactivity() {
     let mut net = Net::new();
-    let host = net.add("Host");
-    let guest = net.add("Guest");
+    let clients = lobby(&mut net, &["Host", "Guest"]);
+    let (host, guest) = (clients[0], clients[1]);
+    challenge(&mut net, &clients);
+    net.frozen.push(guest);
+    net.run(4_500);
+    assert!(!left(&net.messages(host)), "four and a half seconds are no inactivity");
+    net.run(1_000);
+    assert!(left_for(&net.messages(host), leave::KICKED_FOR_INACTIVITY));
+    assert!(kicked_for(&net.messages(guest), leave::KICKED_FOR_INACTIVITY));
+}
+
+/// No round waits on a member in lobby skate: a game that stops for a while (a load, a hitch, a
+/// window that is not drawn) stays in, and only one that stays stopped for a minute is kicked.
+#[test]
+fn lobby_skate_keeps_a_player_whose_game_stops_for_a_while() {
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Host", "Guest"]);
+    let (host, guest) = (clients[0], clients[1]);
+    for stop in [2_500, 9_000, 30_000] {
+        net.frozen.push(guest);
+        net.run(stop);
+        net.frozen.clear();
+        net.run(1_000);
+        assert!(!left(&net.messages(host)), "the guest's game stopped for {stop} ms");
+        assert!(!kicked(&net.messages(guest)), "the guest's game stopped for {stop} ms");
+    }
+    net.frozen.push(guest);
+    net.run(59_000);
+    assert!(!left(&net.messages(host)));
+    net.run(2_000);
+    assert!(left_for(&net.messages(host), leave::KICKED_FOR_IDLE));
+    assert!(kicked_for(&net.messages(guest), leave::KICKED_FOR_IDLE), "the kick names the minute's limit, not a challenge's");
+}
+
+/// A link that drops for a few seconds in lobby skate says no more than a stopped game: the
+/// member stays in. One that stays down is lost, as any connection silent for ten seconds.
+#[test]
+fn lobby_skate_keeps_a_player_through_a_short_loss_of_its_link() {
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Host", "Guest"]);
+    let (host, guest) = (clients[0], clients[1]);
+    let address = net.clients[guest].0;
+    // Nothing reaches the server from the guest, nor the guest from the server.
+    net.clients[guest].0 = SocketAddr::from(([10, 9, 9, 9], 4000));
+    net.run(5_000);
+    net.clients[guest].0 = address;
+    net.run(2_000);
+    assert!(!left(&net.messages(host)), "five seconds without the guest's datagrams");
+    assert!(net.events(guest).iter().all(|event| !matches!(event, ClientEvent::Disconnected(_))));
+    net.clients[guest].0 = SocketAddr::from(([10, 9, 9, 9], 4000));
+    net.run(9_000);
+    assert!(!left(&net.messages(host)));
+    net.run(2_000);
+    assert!(left_for(&net.messages(host), leave::LOST_CONNECTION));
+}
+
+/// A member in lobby skate while others play a challenge is no participant of it: its game
+/// stopping holds no round up.
+#[test]
+fn a_member_waiting_out_a_challenge_is_kept_while_its_game_stops() {
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Host", "Guest", "Third"]);
+    let (host, third) = (clients[0], clients[2]);
+    challenge(&mut net, &clients[..2]);
+    net.messages(third);
+    net.frozen.push(third);
+    net.run(10_000);
+    assert!(!left(&net.messages(host)));
+    assert!(!kicked(&net.messages(third)));
+}
+
+fn infinite_rounds(on: bool) -> ClientMessage {
+    ClientMessage::GameRequest { request: request::SET_CHALLENGE_OPTION, value: u64::from(option::INFINITE_ROUNDS) | u64::from(on) << 8 }
+}
+
+fn options_heard(messages: &[ServerMessage]) -> Vec<u32> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            ServerMessage::ChallengeOption { option: option::INFINITE_ROUNDS, value } => Some(*value),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A Spot Battle's host turns Infinite Rounds on and off in lobby skate: every member hears each
+/// change once, a member who joins later hears it on, and nothing changes once the battle loads.
+#[test]
+fn the_host_s_infinite_rounds_reaches_every_member_and_later_joiners() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::OWN_THE_SPOT);
+    let (host, guest) = (players[0].0, players[1].0);
+    net.send(host, &infinite_rounds(true));
+    net.send(host, &infinite_rounds(true));
     net.run(100);
-    net.send(host, &play(PlayNowMode::Custom, true, Some(1)));
-    net.run(50);
-    net.send(guest, &play(PlayNowMode::Custom, false, Some(1)));
+    assert_eq!(options_heard(&net.messages(host)), [1]);
+    assert_eq!(options_heard(&net.messages(guest)), [1]);
+    net.send(host, &infinite_rounds(false));
     net.run(100);
-    net.events(host);
-    let silent = net.clients.remove(guest);
-    let mut net_without = net;
-    net_without.run(1_500);
-    assert!(net_without.messages(host).is_empty(), "the host's quarter-second Busy keeps it in");
-    net_without.run(1_000);
-    let messages = net_without.messages(host);
-    assert!(messages.iter().any(|message| matches!(message, ServerMessage::PlayerLeave { reason: leave::KICKED_FOR_INACTIVITY, .. })));
-    drop(silent);
+    assert_eq!(options_heard(&net.messages(guest)), [0]);
+    net.send(host, &infinite_rounds(true));
+    net.run(100);
+    let late = net.add("Late");
+    net.run(100);
+    net.send(late, &ClientMessage::PlayNow(PlayNow { challenge_type: challenge::OWN_THE_SPOT, ..match play(PlayNowMode::Custom, false, None) {
+        ClientMessage::PlayNow(request) => request,
+        _ => unreachable!("a search"),
+    } }));
+    net.run(100);
+    let heard = net.messages(late);
+    let joined = heard.iter().position(|message| matches!(message, ServerMessage::GameJoined { .. })).expect("the joiner joins in lobby skate");
+    assert_eq!(options_heard(&heard[joined..]), [1], "after the game it joined");
+    net.messages(host);
+    challenge(&mut net, &[host, guest]);
+    net.send(host, &infinite_rounds(false));
+    net.run(100);
+    assert!(options_heard(&net.messages(guest)).is_empty(), "the battle in play keeps the rounds it loaded with");
+}
+
+fn round_lock(round: u32) -> ClientMessage {
+    ClientMessage::GameRequest { request: request::SET_CHALLENGE_OPTION, value: u64::from(option::ROUND_LOCK) | u64::from(round) << 8 }
+}
+
+fn locks_heard(messages: &[ServerMessage]) -> Vec<u32> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            ServerMessage::ChallengeOption { option: option::ROUND_LOCK, value } => Some(*value),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A 1-Up's host locks its rounds to one round start in lobby skate: every member hears each
+/// change once and a member who joins later hears the lock; the game's change to another
+/// challenge lets it go, so a later joiner hears none.
+#[test]
+fn the_host_s_round_lock_reaches_every_member_until_the_challenge_changes() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::ONE_UP);
+    let (host, guest) = (players[0].0, players[1].0);
+    net.send(host, &round_lock(2));
+    net.send(host, &round_lock(2));
+    net.run(100);
+    assert_eq!(locks_heard(&net.messages(host)), [2]);
+    assert_eq!(locks_heard(&net.messages(guest)), [2]);
+    net.send(host, &round_lock(0));
+    net.send(host, &round_lock(option::MAX_ROUND_LOCK + 1));
+    net.send(host, &round_lock(3));
+    net.run(100);
+    assert_eq!(locks_heard(&net.messages(guest)), [0, 3], "a round past the highest is not taken");
+    let late = net.add("Late");
+    net.run(100);
+    let search = |challenge_type| match play(PlayNowMode::Custom, false, None) {
+        ClientMessage::PlayNow(request) => ClientMessage::PlayNow(PlayNow { challenge_type, ..request }),
+        message => message,
+    };
+    net.send(late, &search(challenge::ONE_UP));
+    net.run(100);
+    let heard = net.messages(late);
+    let joined = heard.iter().position(|message| matches!(message, ServerMessage::GameJoined { .. })).expect("the joiner joins in lobby skate");
+    assert_eq!(locks_heard(&heard[joined..]), [3], "after the game it joined");
+    // Another challenge: the lock goes with the request, and no one is told a setting.
+    net.messages(host);
+    net.send(host, &ClientMessage::RequestChange { challenge_type: challenge::ONE_UP, challenge_key: 0x1234_5678 });
+    net.send(host, &round_lock(1));
+    net.run(100);
+    assert!(locks_heard(&net.messages(host)).is_empty(), "no lock is set while the game changes");
+    let later = net.add("Later");
+    net.run(100);
+    net.send(later, &search(challenge::ONE_UP));
+    net.run(100);
+    let heard = net.messages(later);
+    assert!(heard.iter().any(|message| matches!(message, ServerMessage::GameJoined { .. })));
+    assert!(locks_heard(&heard).is_empty(), "the new challenge has no lock");
+}
+
+/// The Round Lock is a 1-Up's alone.
+#[test]
+fn the_round_lock_is_a_one_up_s() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::OWN_THE_SPOT);
+    net.send(players[0].0, &round_lock(1));
+    net.run(100);
+    assert!(locks_heard(&net.messages(players[1].0)).is_empty());
+}
+
+/// Infinite Rounds is the host's alone to set, and a Spot Battle's alone.
+#[test]
+fn infinite_rounds_is_the_host_s_and_a_spot_battle_s() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::OWN_THE_SPOT);
+    net.send(players[1].0, &infinite_rounds(true));
+    net.run(100);
+    assert!(dropped_for_host_request(&net.events(players[1].0)));
+    assert!(options_heard(&net.messages(players[0].0)).is_empty());
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Host", "Guest"]);
+    net.send(clients[0], &infinite_rounds(true));
+    net.run(100);
+    assert!(options_heard(&net.messages(clients[1])).is_empty(), "the lobby's challenge has no rounds to lift");
+}
+
+fn spot_battle_search() -> ClientMessage {
+    match play(PlayNowMode::Custom, false, None) {
+        ClientMessage::PlayNow(request) => ClientMessage::PlayNow(PlayNow { challenge_type: challenge::OWN_THE_SPOT, ..request }),
+        message => message,
+    }
+}
+
+/// The resets a client heard: kind, session and table.
+fn resets(messages: &[ServerMessage]) -> Vec<(u8, u32, [u64; MAX_PLAYERS])> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            ServerMessage::GameReset { kind, session, participants, .. } => Some((*kind, *session, *participants)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The clients in the game's world, then the first's challenge, loaded by every one: its session.
+fn challenge_session(net: &mut Net, clients: &[usize]) -> u32 {
+    for &client in clients {
+        enter(net, client);
+    }
+    net.send(clients[0], &ClientMessage::GameRequest { request: request::START_GAME, value: 0 });
+    net.run(100);
+    let session = resets(&net.messages(clients[0])).last().expect("the challenge loads").1;
+    for &client in clients {
+        net.send(client, &ClientMessage::ChallengeLoaded);
+    }
+    net.run(100);
+    for &client in clients {
+        net.events(client);
+    }
+    session
+}
+
+/// A member's user id after it signed in.
+fn late_joiner(net: &mut Net, name: &str) -> (usize, u64) {
+    let client = net.add(name);
+    net.run(100);
+    let user_id = signed_in(&net.events(client)).expect("signed in");
+    net.send(client, &spot_battle_search());
+    net.run(100);
+    (client, user_id)
+}
+
+fn joining_heard(messages: &[ServerMessage]) -> usize {
+    messages.iter().filter(|message| matches!(message, ServerMessage::ChallengeJoining)).count()
+}
+
+/// A Spot Battle in play, with or without its rounds, is found as any challenge in play is.
+#[test]
+fn a_spot_battle_is_joined_in_play() {
+    for infinite in [false, true] {
+        let mut net = Net::new();
+        let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::OWN_THE_SPOT);
+        let (host, guest) = (players[0].0, players[1].0);
+        net.send(host, &infinite_rounds(infinite));
+        net.run(100);
+        challenge(&mut net, &[host, guest]);
+        let late = net.add("Late");
+        net.run(100);
+        net.send(late, &spot_battle_search());
+        net.run(100);
+        assert!(net.messages(late).iter().any(|message| matches!(message, ServerMessage::GameJoined { phase: Phase::Challenge, .. })), "infinite rounds {infinite}");
+    }
+}
+
+/// A member who joins a Spot Battle in play joins the battle: once its skater is in the game's
+/// world the participants hear that it waits, once; the first state one of them sends restarts
+/// the battle, a new challenge of the game, for them and the joiner, after that state.
+#[test]
+fn a_spot_battle_in_play_takes_a_joiner_in_from_a_participant_s_state() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::OWN_THE_SPOT);
+    let ((host, host_id), (guest, guest_id)) = (players[0], players[1]);
+    let session = challenge_session(&mut net, &[host, guest]);
+    let state = vec![3, 1, 4, 1, 5];
+    net.send(guest, &ClientMessage::Carry { session, data: state.clone() });
+    net.run(100);
+    assert!(resets(&net.messages(host)).is_empty(), "no one waits: a state restarts nothing");
+    let (late, late_id) = late_joiner(&mut net, "Late");
+    assert_eq!(joining_heard(&net.messages(host)), 0, "a joiner not yet in the world waits for nothing");
+    enter(&mut net, late);
+    assert_eq!(joining_heard(&net.messages(host)), 1);
+    assert_eq!(joining_heard(&net.messages(guest)), 1);
+    assert_eq!(joining_heard(&net.messages(late)), 0, "the participants' to act on");
+    net.send(late, &ClientMessage::Carry { session, data: vec![9] });
+    net.send(guest, &ClientMessage::Carry { session: session.wrapping_add(5), data: vec![9] });
+    net.run(100);
+    assert!(resets(&net.messages(host)).is_empty(), "neither a member outside the battle nor another challenge's state restarts it");
+    // The host's datagrams reach the server first: its state is the one the battle restarts from.
+    net.send(host, &ClientMessage::Carry { session, data: state.clone() });
+    net.send(guest, &ClientMessage::Carry { session, data: vec![8, 8] });
+    net.run(100);
+    let table = {
+        let mut table = [0; MAX_PLAYERS];
+        table[..3].copy_from_slice(&[host_id, guest_id, late_id]);
+        table
+    };
+    for client in [host, guest, late] {
+        let heard = net.messages(client);
+        let carry = heard.iter().position(|message| *message == ServerMessage::ChallengeCarry(state.clone())).expect("the first state sent");
+        let reset = heard.iter().position(|message| matches!(message, ServerMessage::GameReset { .. })).expect("the battle loads again");
+        assert!(carry < reset, "the state comes ahead of the load");
+        assert_eq!(heard.iter().filter(|message| matches!(message, ServerMessage::ChallengeCarry(_))).count(), 1, "the second state is the old challenge's");
+        assert_eq!(resets(&heard), [(reset::LOAD_CHALLENGE, session.wrapping_add(1), table)]);
+    }
+    for client in [host, guest, late] {
+        net.send(client, &ClientMessage::ChallengeLoaded);
+    }
+    net.run(100);
+    for client in [host, guest, late] {
+        assert_eq!(resets(&net.messages(client)), [(reset::CHALLENGE, session.wrapping_add(1), table)]);
+    }
+}
+
+/// A participant who left the battle waits for its end: a restart takes in the joiner, not them.
+#[test]
+fn a_restart_leaves_out_the_players_who_left_the_battle() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest", "Third"], challenge::OWN_THE_SPOT);
+    let ((host, host_id), (guest, guest_id), (third, _)) = (players[0], players[1], players[2]);
+    let session = challenge_session(&mut net, &[host, guest, third]);
+    net.send(third, &ClientMessage::LeaveChallenge);
+    net.run(100);
+    assert_eq!(joining_heard(&net.messages(host)), 0, "the member who left is no joiner");
+    let (late, late_id) = late_joiner(&mut net, "Late");
+    enter(&mut net, late);
+    assert_eq!(joining_heard(&net.messages(host)), 1);
+    assert_eq!(joining_heard(&net.messages(third)), 0);
+    net.send(host, &ClientMessage::Carry { session, data: vec![1] });
+    net.run(100);
+    let mut table = [0; MAX_PLAYERS];
+    table[..3].copy_from_slice(&[host_id, guest_id, late_id]);
+    assert_eq!(resets(&net.messages(guest)), [(reset::LOAD_CHALLENGE, session.wrapping_add(1), table)]);
+}
+
+/// Only a Spot Battle takes joiners in: another challenge's joiner waits in its pre-game lobby.
+#[test]
+fn another_challenge_in_play_takes_no_joiner_in() {
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Host", "Guest"]);
+    challenge(&mut net, &clients);
+    let late = net.add("Late");
+    net.run(100);
+    net.send(late, &play(PlayNowMode::Custom, false, None));
+    net.run(100);
+    enter(&mut net, late);
+    assert_eq!(joining_heard(&net.messages(clients[0])), 0);
+}
+
+/// A battle its host ended, restarted for a joiner before it got to its end, is ended again as
+/// it starts.
+#[test]
+fn a_restart_of_a_battle_its_host_ended_ends_again() {
+    let ended = |messages: &[ServerMessage]| messages.iter().filter(|message| matches!(message, ServerMessage::ChallengeEnded)).count();
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::OWN_THE_SPOT);
+    let (host, guest) = (players[0].0, players[1].0);
+    net.send(host, &infinite_rounds(true));
+    net.run(100);
+    let session = challenge_session(&mut net, &[host, guest]);
+    let (late, _) = late_joiner(&mut net, "Late");
+    enter(&mut net, late);
+    net.send(host, &ClientMessage::GameRequest { request: request::END_CHALLENGE, value: 0 });
+    net.run(100);
+    assert_eq!(ended(&net.messages(guest)), 1);
+    net.messages(late);
+    net.send(guest, &ClientMessage::Carry { session, data: vec![1] });
+    net.run(100);
+    for client in [host, guest, late] {
+        net.send(client, &ClientMessage::ChallengeLoaded);
+    }
+    net.run(100);
+    for client in [guest, late] {
+        let heard = net.messages(client);
+        let started = heard.iter().position(|message| matches!(message, ServerMessage::GameReset { kind: reset::CHALLENGE, .. })).expect("the battle starts again");
+        assert_eq!(ended(&heard[started..]), 1, "ended once it has started");
+        assert_eq!(ended(&heard[..started]), 0);
+    }
+    net.send(host, &ClientMessage::GameRequest { request: request::END_CHALLENGE, value: 0 });
+    net.run(100);
+    assert_eq!(ended(&net.messages(guest)), 0, "an end already told");
+}
+
+/// The host ends an infinite battle in play: every member hears it, once; no other battle and no
+/// other member ends one.
+#[test]
+fn the_host_ends_an_infinite_spot_battle_once() {
+    let end = ClientMessage::GameRequest { request: request::END_CHALLENGE, value: 0 };
+    let ended = |messages: &[ServerMessage]| messages.iter().filter(|message| matches!(message, ServerMessage::ChallengeEnded)).count();
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest", "Third"], challenge::OWN_THE_SPOT);
+    let (host, guest, third) = (players[0].0, players[1].0, players[2].0);
+    net.send(host, &infinite_rounds(true));
+    net.send(host, &end);
+    net.run(100);
+    assert_eq!(ended(&net.messages(guest)), 0, "lobby skate has no challenge to end");
+    challenge(&mut net, &[host, guest]);
+    net.send(host, &end);
+    net.send(host, &end);
+    net.run(100);
+    assert_eq!(ended(&net.messages(host)), 1);
+    assert_eq!(ended(&net.messages(guest)), 1);
+    assert_eq!(ended(&net.messages(third)), 1, "the member waiting in its pre-game lobby hears it too");
+    net.send(guest, &end);
+    net.run(100);
+    assert!(dropped_for_host_request(&net.events(guest)));
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["Host", "Guest"], challenge::OWN_THE_SPOT);
+    challenge(&mut net, &[players[0].0, players[1].0]);
+    net.send(players[0].0, &end);
+    net.run(100);
+    assert_eq!(ended(&net.messages(players[1].0)), 0, "a battle with its rounds ends by itself");
+}
+
+/// A banned player's game is told nothing: its connection ends as one whose link went silent
+/// does, after the transport's ten seconds, so its notice is a timeout's.
+#[test]
+fn a_banned_player_s_connection_ends_as_one_that_timed_out() {
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Host", "Troll"]);
+    let troll = clients[1];
+    let (reply, answer) = std::sync::mpsc::channel();
+    net.server.moderate(Request::Act(Action::IpBan(vec![(IpAddr::from([10, 0, 0, 2]), "Troll".into())]), reply), net.now);
+    answer.recv().expect("an outcome");
+    net.run(9_000);
+    assert!(!net.events(troll).iter().any(|event| matches!(event, ClientEvent::Disconnected(_))), "nothing tells it sooner");
+    net.run(2_000);
+    let ends: Vec<ClientEvent> = net.events(troll).into_iter().filter(|event| matches!(event, ClientEvent::Disconnected(_))).collect();
+    assert_eq!(ends, [ClientEvent::Disconnected(Disconnect::TimedOut)]);
 }
 
 /// Signs every name in and puts them in one custom game, the first its host.
@@ -322,6 +762,7 @@ fn a_guest_asking_what_only_the_host_may_is_dropped() {
         ClientMessage::GameRequest { request: request::START_GAME, value: 0 },
         ClientMessage::GameRequest { request: request::CHANGE_PRIVATE_STATUS, value: 1 },
         ClientMessage::GameRequest { request: request::KICK_PLAYER, value: 0 },
+        ClientMessage::GameRequest { request: request::MAKE_HOST, value: 0 },
         ClientMessage::ResetAttributes(attributes),
         ClientMessage::RequestChange { challenge_type: challenge::SKATE, challenge_key: 0x77 },
     ];
@@ -336,7 +777,10 @@ fn a_guest_asking_what_only_the_host_may_is_dropped() {
         let seen = net.messages(host);
         assert!(seen.iter().any(|seen| matches!(seen, ServerMessage::PlayerLeave { reason: leave::KICKED_FOR_HOST_REQUEST, .. })), "{message:?}");
         assert!(
-            !seen.iter().any(|seen| matches!(seen, ServerMessage::GameReset { .. } | ServerMessage::PrivacyChanged { .. } | ServerMessage::GameChange { .. } | ServerMessage::Kicked { .. })),
+            !seen.iter().any(|seen| matches!(
+                seen,
+                ServerMessage::GameReset { .. } | ServerMessage::PrivacyChanged { .. } | ServerMessage::GameChange { .. } | ServerMessage::Kicked { .. } | ServerMessage::HostChanged { .. }
+            )),
             "{message:?}: nothing it asked happened"
         );
     }
@@ -376,6 +820,94 @@ fn the_host_and_a_player_who_left_are_never_dropped_for_host_requests() {
     net.run(300);
     assert!(dropped_for_host_request(&net.events(first)));
     assert_eq!(net.server.players(), 2);
+}
+
+/// PC port addition: the host hands the game to another member; every member hears of it, a
+/// player joining later is told, the new host acts as the host and the old one no longer may.
+#[test]
+fn the_host_hands_the_game_to_another_member_who_alone_acts_as_its_host() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["First", "Second", "Third"], challenge::SKATE);
+    let [(first, first_id), (second, second_id), (third, third_id)] = players[..] else { panic!("three players") };
+    for client in [first, second, third] {
+        enter(&mut net, client);
+    }
+    for client in [first, second, third] {
+        net.events(client);
+    }
+    net.send(first, &ClientMessage::GameRequest { request: request::MAKE_HOST, value: second_id });
+    net.run(300);
+    for client in [first, second, third] {
+        assert!(net.messages(client).contains(&ServerMessage::HostChanged { user_id: second_id }), "every member hears of the new host");
+    }
+    // A player joining now is told who the host is.
+    let late = net.add("Late");
+    net.run(100);
+    net.events(late);
+    net.send(late, &play(PlayNowMode::Custom, false, None));
+    net.run(300);
+    assert!(net.messages(late).iter().any(|message| matches!(message, ServerMessage::GameJoined { host, players, .. } if *host == second_id && players[0].user_id == first_id)));
+    // The new host kicks a player as the host.
+    net.send(second, &ClientMessage::GameRequest { request: request::KICK_PLAYER, value: third_id });
+    net.run(300);
+    assert!(net.messages(third).iter().any(|message| matches!(message, ServerMessage::Kicked { reason: leave::KICKED_BY_HOST })));
+    assert!(!dropped_for_host_request(&net.events(second)));
+    // The old host asking what only the host may is no longer the host's.
+    net.send(first, &ClientMessage::GameRequest { request: request::START_GAME, value: 0 });
+    net.run(300);
+    assert!(dropped_for_host_request(&net.events(first)));
+    assert!(!net.messages(second).iter().any(|message| matches!(message, ServerMessage::GameReset { .. })), "no challenge started");
+}
+
+/// PC port addition: a host leaving hands the game to the first member in join order whose skater
+/// is in the game's world, which every member hears after the leave.
+#[test]
+fn the_host_leaving_hands_the_game_to_the_first_member_in_its_world() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["First", "Second", "Third"], challenge::SKATE);
+    let [(first, _), (second, second_id), (third, third_id)] = players[..] else { panic!("three players") };
+    // The second is still on its way into the world; the third is in it.
+    enter(&mut net, third);
+    net.events(second);
+    net.events(third);
+    net.send(first, &ClientMessage::LeaveGame);
+    net.run(300);
+    for client in [second, third] {
+        let seen = net.messages(client);
+        let leave = seen.iter().position(|message| matches!(message, ServerMessage::PlayerLeave { .. }));
+        let host = seen.iter().position(|message| *message == ServerMessage::HostChanged { user_id: third_id });
+        assert!(leave.is_some() && host > leave, "the leave, then the new host: {seen:?}");
+    }
+    net.send(third, &ClientMessage::GameRequest { request: request::MAKE_HOST, value: second_id });
+    net.run(300);
+    assert!(!dropped_for_host_request(&net.events(third)), "the new host may hand the game on");
+    assert!(net.messages(second).contains(&ServerMessage::HostChanged { user_id: second_id }));
+}
+
+/// PC port addition: a hand to a member that left as it crossed, or to the host itself, leaves the
+/// host as it was, and the host hears so; it is still the host.
+#[test]
+fn a_hand_to_no_other_member_leaves_the_host_as_it_was() {
+    let mut net = Net::new();
+    let players = lobby_with_ids(&mut net, &["First", "Second"], challenge::SKATE);
+    let [(first, first_id), (second, second_id)] = players[..] else { panic!("two players") };
+    net.send(second, &ClientMessage::LeaveGame);
+    net.run(100);
+    net.events(first);
+    for target in [second_id, first_id] {
+        net.send(first, &ClientMessage::GameRequest { request: request::MAKE_HOST, value: target });
+        net.run(300);
+        assert_eq!(
+            net.messages(first).iter().filter(|message| matches!(message, ServerMessage::HostChanged { .. })).cloned().collect::<Vec<_>>(),
+            [ServerMessage::HostChanged { user_id: first_id }],
+            "{target}"
+        );
+    }
+    net.send(first, &ClientMessage::GameRequest { request: request::CHANGE_PRIVATE_STATUS, value: 1 });
+    net.run(300);
+    let events = net.events(first);
+    assert!(!dropped_for_host_request(&events));
+    assert!(events.contains(&ClientEvent::Message(ServerMessage::PrivacyChanged { private: true })));
 }
 
 #[test]
@@ -1527,7 +2059,7 @@ fn a_kicked_player_never_sees_or_joins_that_game_again_under_any_name() {
 #[test]
 fn a_chat_shadowbanned_player_s_lines_come_back_to_it_alone() {
     let mut net = Net::new();
-    net.server.set_bans(BanList::from_bans([(IpAddr::from([10, 0, 0, 2]), "Guest")]), BanList::default());
+    net.server.set_bans(BanList::from_bans([(IpAddr::from([10, 0, 0, 2]), "Guest")]), BanList::default(), BanList::default());
     let clients = lobby(&mut net, &["Host", "Guest"]);
     let (host, guest) = (clients[0], clients[1]);
     enter(&mut net, host);
@@ -1544,7 +2076,7 @@ fn a_chat_shadowbanned_player_s_lines_come_back_to_it_alone() {
 #[test]
 fn a_banned_address_is_never_answered() {
     let mut net = Net::new();
-    net.server.set_bans(BanList::default(), BanList::from_bans([(IpAddr::from([10, 0, 0, 1]), "Banned")]));
+    net.server.set_bans(BanList::default(), BanList::default(), BanList::from_bans([(IpAddr::from([10, 0, 0, 1]), "Banned")]));
     let banned = net.add("Banned");
     let other = net.add("Other");
     net.run(1_000);
@@ -1578,10 +2110,136 @@ fn an_ip_ban_closes_the_address_s_connections_without_a_word_and_a_lift_lets_it_
     let view = answer.recv().expect("a view");
     assert_eq!(view.players.iter().map(|player| player.name.as_str()).collect::<Vec<_>>(), ["Host"]);
     assert_eq!(view.ip_bans, [(troll_address, "Troll".to_owned())]);
-    assert_eq!(ask(&mut net, Action::Lift { chat: vec![troll_address], ip: vec![troll_address] }), "A ticked chat shadowban was not in force. The IP ban on Troll is lifted.");
+    assert_eq!(
+        ask(&mut net, Action::Lift { chat: vec![troll_address], matchmaking: Vec::new(), ip: vec![troll_address] }),
+        "A ticked chat shadowban was not in force. The IP ban on Troll is lifted."
+    );
     let back = net.add_at("Back", Build::DEVELOPMENT, SocketAddr::from(([10, 0, 0, 2], 4001)));
     net.run(500);
     assert!(signed_in(&net.events(back)).is_some(), "the address connects again");
+}
+
+/// A matchmaking-shadowbanned player sees no game and joins none, and no one else is offered a
+/// game it made: each plays alone, even with another shadowbanned player searching.
+#[test]
+fn a_matchmaking_shadowbanned_player_is_offered_no_game_and_no_one_is_offered_theirs() {
+    let mut net = Net::new();
+    let banned = [(IpAddr::from([10, 0, 0, 2]), "Troll"), (IpAddr::from([10, 0, 0, 3]), "Other")];
+    net.server.set_bans(BanList::default(), BanList::from_bans(banned), BanList::default());
+    let host = net.add("Host");
+    let troll = net.add("Troll");
+    let other = net.add("Other");
+    let stranger = net.add("Stranger");
+    net.run(100);
+    net.send(host, &play(PlayNowMode::Custom, true, None));
+    net.run(100);
+    let (host_game, _) = joined_game(&net.messages(host)).expect("the host's game");
+    let mut own = Vec::new();
+    for client in [troll, other] {
+        net.events(client);
+        net.send(client, &ClientMessage::ListLobbies);
+        net.send(client, &play(PlayNowMode::Quick, false, None));
+        net.run(100);
+        let seen = net.messages(client);
+        assert_eq!(listing(&seen), Some(Vec::new()), "the browser lists nothing");
+        assert!(seen.contains(&ServerMessage::PlayNowResult { result: play_now::NO_MATCH }), "quick match finds nothing");
+        net.send(client, &ClientMessage::JoinLobby { game: host_game });
+        net.run(1_100);
+        let seen = net.messages(client);
+        assert!(seen.contains(&ServerMessage::PlayNowResult { result: play_now::NO_MATCH }));
+        assert_eq!(joined_game(&seen), None, "a join by its id is refused");
+        net.send(client, &play(PlayNowMode::Custom, false, None));
+        net.run(1_100);
+        let (game, players) = joined_game(&net.messages(client)).expect("a Join makes a game of its own");
+        assert_eq!(players, 1);
+        own.push(game);
+    }
+    assert_ne!(own[0], own[1], "not even with each other");
+    net.send(stranger, &ClientMessage::ListLobbies);
+    net.run(100);
+    let listed = listing(&net.messages(stranger)).map(|lobbies| lobbies.iter().map(|lobby| lobby.game).collect::<Vec<_>>());
+    assert_eq!(listed, Some(vec![host_game]), "no one else is shown the shadowbanned players' games");
+    for game in own {
+        net.send(stranger, &ClientMessage::JoinLobby { game });
+        net.run(1_100);
+        let seen = net.messages(stranger);
+        assert!(seen.contains(&ServerMessage::PlayNowResult { result: play_now::NO_MATCH }));
+        assert_eq!(joined_game(&seen), None, "nor joins one by its id");
+    }
+    net.send(stranger, &play(PlayNowMode::Custom, false, None));
+    net.run(100);
+    assert_eq!(joined_game(&net.messages(stranger)), Some((host_game, 2)), "matchmaking passes them over");
+    let (reply, answer) = std::sync::mpsc::channel();
+    net.server.moderate(Request::Stats(reply), net.now);
+    let games: Vec<Vec<String>> = answer.recv().expect("the statistics").games.into_iter().map(|game| game.players).collect();
+    assert_eq!(games, [vec!["Host".to_owned(), "Stranger".to_owned()]], "the statistics leave their games out");
+}
+
+/// A matchmaking shadowban takes its player out of the game it shares, at once: its connection
+/// closes as a lost one, as any, and the others play on. Back under any name it plays alone, in a
+/// game the statistics leave out, until the shadowban is lifted.
+#[test]
+fn a_matchmaking_shadowban_takes_its_player_out_of_a_shared_game_at_once() {
+    let mut net = Net::new();
+    let clients = lobby(&mut net, &["Troll", "Guest", "Third"]);
+    let (troll, guest) = (clients[0], clients[1]);
+    let troll_address = IpAddr::from([10, 0, 0, 1]);
+    let ask = |net: &mut Net, action: Action| {
+        let (reply, answer) = std::sync::mpsc::channel();
+        net.server.moderate(Request::Act(action, reply), net.now);
+        answer.recv().expect("an outcome")
+    };
+    let public_games = |net: &mut Net| -> Vec<Vec<String>> {
+        let (reply, answer) = std::sync::mpsc::channel();
+        net.server.moderate(Request::Stats(reply), net.now);
+        answer.recv().expect("the statistics").games.into_iter().map(|game| game.players).collect()
+    };
+    assert_eq!(
+        ask(&mut net, Action::MatchmakingShadowban(vec![(troll_address, "Troll".into())])),
+        "Troll is matchmaking-shadowbanned. 1 player was taken out of a game with others."
+    );
+    net.run(500);
+    assert!(net.events(troll).contains(&ClientEvent::Disconnected(Disconnect::Closed(leave::LOST_CONNECTION))), "nothing names the ban");
+    assert!(net.messages(guest).iter().any(|message| matches!(message, ServerMessage::PlayerLeave { reason: leave::LOST_CONNECTION, .. })));
+    assert_eq!(public_games(&mut net), [vec!["Guest".to_owned(), "Third".to_owned()]], "the others play on");
+    let back = net.add_at("Back", Build::DEVELOPMENT, SocketAddr::from(([10, 0, 0, 1], 4001)));
+    net.run(100);
+    net.send(back, &play(PlayNowMode::Custom, false, None));
+    net.run(100);
+    assert_eq!(joined_game(&net.messages(back)).map(|(_, players)| players), Some(1), "back under another name, alone");
+    assert_eq!(public_games(&mut net).len(), 1, "the statistics leave its game out");
+    let (reply, answer) = std::sync::mpsc::channel();
+    net.server.moderate(Request::View(reply), net.now);
+    let view = answer.recv().expect("a view");
+    assert_eq!(view.matchmaking_shadowbans, [(troll_address, "Troll".to_owned())]);
+    assert!(view.players.iter().any(|player| player.name == "Back" && player.matchmaking_shadowbanned && !player.chat_shadowbanned));
+    assert_eq!(
+        ask(&mut net, Action::MatchmakingShadowban(vec![(troll_address, "Back".into())])),
+        "Back was matchmaking-shadowbanned already.",
+        "a player alone is left where it is"
+    );
+    assert_eq!(
+        ask(&mut net, Action::Lift { chat: Vec::new(), matchmaking: vec![troll_address], ip: Vec::new() }),
+        "The matchmaking shadowban on Troll is lifted."
+    );
+    assert_eq!(public_games(&mut net).len(), 2, "listed again");
+}
+
+/// A matchmaking shadowban written into its file by hand takes its player out of the game it
+/// shares within a second, as one from the panel does.
+#[test]
+fn a_matchmaking_shadowban_written_by_hand_applies_within_a_second() {
+    let path = std::env::temp_dir().join(format!("skate2-net-matchmaking-shadowbans-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let mut net = Net::new();
+    net.server.set_bans(BanList::default(), BanList::from_file(path.clone()), BanList::default());
+    let clients = lobby(&mut net, &["Host", "Troll"]);
+    let (host, troll) = (clients[0], clients[1]);
+    std::fs::write(&path, "{\"10.0.0.2\": \"Troll\"}").unwrap();
+    net.run(1_100);
+    assert!(net.events(troll).contains(&ClientEvent::Disconnected(Disconnect::Closed(leave::LOST_CONNECTION))));
+    assert!(net.messages(host).iter().any(|message| matches!(message, ServerMessage::PlayerLeave { .. })));
+    std::fs::remove_file(&path).unwrap();
 }
 
 #[test]

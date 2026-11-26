@@ -367,6 +367,8 @@ fn phys_out_view(p: &SkaterAudioPhysOut) -> PhysOutView {
         average_limb_speed: p.average_limb_speed,
         is_wipeout_over: p.is_wipeout_over,
         skate3_dark_catch: p.skate3_dark_catch,
+        skate3_drop_in_lock: p.skate3_drop_in_lock,
+        skate3_drop_in_release: p.skate3_drop_in_release,
         skate3_physics: p.skate3_physics,
         is_left_foot_on_deck: p.is_left_foot_on_deck,
         is_right_foot_on_deck: p.is_right_foot_on_deck,
@@ -949,6 +951,11 @@ impl GameAudio {
     /// `GetMusicPlayerSongIDFromIndex` for each music player song.
     pub(crate) fn music_player_song_ids(&self) -> Vec<u32> {
         lock(&self.system).music_player_song_ids()
+    }
+
+    /// PC port: the music player's custom songs, each one's id and file.
+    pub(crate) fn set_custom_songs(&self, songs: &[(u32, std::path::PathBuf)]) {
+        lock(&self.system).set_custom_songs(songs);
     }
 
     /// The profile's current playlist, then the front end's `MusicSystem` calls in order.

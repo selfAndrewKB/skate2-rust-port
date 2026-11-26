@@ -236,12 +236,17 @@ pub(crate) fn own_character_scene_with_geometry(
         components,
         textures,
     };
+    // PC port: Skate 2's head under a linked Skate 3 data folder's tops.
+    crate::skate3::head_fit::fit_heads(&mut scene.components);
     // Gameplay clone3 normally receives the already rebound resident CAC copy.
     // This host reloads original arena bytes, so perform that same binding on
     // its private decoded resources before publication, including clone3 CAC.
     if matches!(recipe.clone_type, 1 | 2) || recipe.customizations.is_some() {
         rebind_character_materials(&mut scene);
     }
+    // PC port: Skate 2's tattoos on a linked Skate 3 data folder's arms and legs, once their
+    // materials name the skater's own maps.
+    crate::skate3::tattoos::fit_limbs(mounts, category, &mut scene);
     add_missing_texture(mounts, &mut scene)?;
     Ok(scene)
 }

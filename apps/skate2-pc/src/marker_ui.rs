@@ -78,6 +78,7 @@ mod end_challenge_small_movie;
 mod party_play_change_movie;
 mod settings_movie;
 mod stick_preview;
+mod colour_picker;
 mod screen_manager;
 mod edit_skater_movie;
 use crate::gpu_renderer::{
@@ -321,6 +322,12 @@ pub(crate) struct MarkerUi {
     /// (`eHUDVisibilityFlag_GameSettings`, `HudManagerSetVisibleOverride` once toggled) and
     /// `MiniMap::Show` (0x826bcc50) the minimap.
     free_skate_settings: Option<(bool, bool)>,
+    /// A profile free skate's challenge HUD for the next update: a teleporter's prompt and popup
+    /// (`SelectedLiveSession::take_free_skate_hud`).
+    free_skate_hud: Option<skate2_core::FreeSkateHud>,
+    /// The teleporter prompt the action overlay shows in a free skate, which an object's prompt
+    /// waits behind.
+    free_skate_prompt: Option<(i32, skate2_core::challenge::signup_hud::SignUpHudView)>,
     minimap_before_bail: bool,
     /// What the career's HUD manager bound the free-skate components to.
     hud_binding: skate2_core::challenge::hud::HudBinding,
@@ -353,6 +360,18 @@ pub(crate) struct MarkerUi {
 impl MarkerUi {
     pub(crate) fn set_free_skate_settings(&mut self, settings: Option<(bool, bool)>) {
         self.free_skate_settings = settings;
+    }
+    /// A profile free skate's teleporter prompt and popup, which the next update shows.
+    pub(crate) fn set_free_skate_hud(&mut self, hud: Option<skate2_core::FreeSkateHud>) {
+        // Screen states an update has not shown yet stay ahead of the newer ones.
+        self.free_skate_hud = match (self.free_skate_hud.take(), hud) {
+            (Some(mut pending), Some(mut hud)) => {
+                pending.signup_screen.append(&mut hud.signup_screen);
+                hud.signup_screen = pending.signup_screen;
+                Some(hud)
+            }
+            (_, hud) => hud,
+        };
     }
     /// The Stick Settings pages' boxes: the playing controller's sticks as its pad reports them.
     pub(crate) fn set_stick_preview(&mut self, sticks: Option<[i16; 4]>) {
@@ -537,7 +556,23 @@ impl MarkerUi {
 
     /// The lobby chat's prompt while it is open (its line with the cursor and the characters
     /// left), or the single player hub's nickname prompt, as the Online options show theirs.
-    pub(crate) fn update_online_chat(&mut self, prompt: Option<&skate2_core::online::chat::ChatPrompt>, nickname: Option<&skate2_core::ui::profile_name::Prompt>) -> RenderResult<()> {
+    pub(crate) fn update_online_chat(&mut self, prompt: Option<&skate2_core::online::chat::ChatPrompt>, nickname: Option<&skate2_core::ui::profile_name::Prompt>,
+        song: Option<&skate2_core::ui::custom_songs::SongPrompt>) -> RenderResult<()> {
+        // The music player's Add Song: its prompts for the song's names, or why a file was not
+        // added.
+        if let Some(song) = song {
+            let (description, buttons) = match &song.field {
+                Some((text, cursor)) => {
+                    let mut field = text.clone();
+                    field.insert((*cursor).min(field.len()), '|');
+                    let error = song.error.as_deref().unwrap_or("");
+                    (format!("#{}\n\n{field}\n\n{error}", song.message), vec!["#Enter: Confirm".to_owned(), "#Esc: Cancel".to_owned()])
+                }
+                None => (format!("#{}", song.message), vec!["#Enter: OK".to_owned()]),
+            };
+            let dialog = ("#Add Song".to_owned(), description, 0);
+            return self.chat_popup.update(&self.assets, Some(&dialog), Some(buttons.as_slice()));
+        }
         if let Some(prompt) = nickname {
             let mut field = prompt.text.clone();
             field.insert(prompt.cursor, '|');
@@ -766,7 +801,12 @@ impl MarkerUi {
         self.name_popup.update(&self.assets,name_dialog.as_ref(),Some(&name_buttons))?;
         let dlc_popup=dlc_movie::DlcMovie::popup(frame.dlc.as_ref());
         self.dlc_popup.update(&self.assets,dlc_popup.as_ref().map(|(dialog,_)|dialog),dlc_popup.as_ref().map(|(_,options)|options.as_slice()))?;
-        self.update_popup.show(&self.assets,frame.update_prompt.as_ref().map(skate2_core::ui::update_prompt::UpdatePrompt::dialog))?;
+        // PC: the changelog's body scrolls; the update's other popups are sk8popup's own.
+        match frame.update_prompt.as_ref() {
+            Some(prompt@skate2_core::ui::update_prompt::UpdatePrompt::Changelog(changelog)) =>
+                self.update_popup.show_scrolling(&self.assets,prompt.dialog(),changelog.scroll)?,
+            prompt => self.update_popup.show(&self.assets,prompt.map(skate2_core::ui::update_prompt::UpdatePrompt::dialog))?,
+        }
         self.freeskate.update(&self.assets,frame.freeskate.as_ref(),freeskate_states,&mut main.letterbox)?;
         // LoadRX2Texture: the location's large image, once the screen asks for it.
         let image=match frame.party_play.as_ref().and_then(|party_play|party_play.image.as_deref()) {
@@ -877,6 +917,8 @@ impl MarkerUi {
     pub fn take_extras_events(&mut self) -> (bool, bool, bool) { self.extras.take_events() }
     /// The Downloadable Content screen's `IntroComplete` since the last call.
     pub fn take_dlc_intro(&mut self) -> bool { self.dlc.take_intro() }
+    /// PC: the changelog popup's last starting line, from its layout, while it shows.
+    pub fn changelog_scroll_limit(&self) -> Option<usize> { self.update_popup.scroll_limit }
     /// The mounted downloadable content's strings join the screens' (the game's own first).
     pub fn add_dlc_strings(&mut self, mounts: &MountSet) { self.assets.add_dlc_strings(mounts); }
     pub fn take_jacked_request(&mut self)->bool{std::mem::take(&mut self.jacked_request)}
@@ -1095,6 +1137,8 @@ impl MarkerUi {
             zone_key: DEFAULT_ZONE,
             minimap_enabled: true,
             free_skate_settings: None,
+            free_skate_hud: None,
+            free_skate_prompt: None,
             minimap_before_bail: true,
             hud_binding: Default::default(),
             editor,
@@ -1149,11 +1193,36 @@ impl MarkerUi {
             self.apply_career_hud_screens(career, !pause.visible)?;
             self.career = Some(career.clone());
         }
-        if career.is_none() && (facts.prop_tick!=self.previous.prop_tick || facts.prop!=self.previous.prop) {
+        // A free skate's action overlay: a teleporter's prompt as its sign-up HUD set it, each
+        // state in order as the career's screen takes them, and an object's prompt while no
+        // teleporter's is up.
+        let free_skate = self.free_skate_hud.take().filter(|_| career.is_none());
+        let had_prompt = self.free_skate_prompt.is_some();
+        match free_skate.as_ref() {
+            Some(hud) => {
+                for (state, view) in &hud.signup_screen {
+                    self.action_overlay.set_state(&self.assets, *state, view)?;
+                    self.free_skate_prompt = (*state > 0).then(|| (*state, view.clone()));
+                }
+            }
+            None if had_prompt && career.is_none() => {
+                self.free_skate_prompt = None;
+                self.action_overlay.set_state(&self.assets, 0, &Default::default())?;
+            }
+            None => self.free_skate_prompt = None,
+        }
+        // An object's prompt comes back as the teleporter's leaves.
+        let prompt_left = had_prompt && self.free_skate_prompt.is_none() && facts.prop.is_some();
+        if career.is_none() && self.free_skate_prompt.is_none()
+            && (prompt_left || facts.prop_tick!=self.previous.prop_tick || facts.prop!=self.previous.prop)
+        {
             let view=skate2_core::challenge::signup_hud::SignUpHudView {dmo:facts.prop.map(|p|p.params),..Default::default()};
             self.action_overlay.set_state(&self.assets,if facts.prop.is_some(){4}else{0},&view)?;
         }
-        self.progression_popup.update(&self.assets, career.and_then(|c| c.dialog.as_ref()), career.and_then(|c| c.dialog_options.as_deref()))?;
+        let free_dialog = free_skate.as_ref().and_then(|hud| hud.dialog.as_ref());
+        let free_options = free_skate.as_ref().and_then(|hud| hud.dialog_options.as_deref());
+        self.progression_popup.update(&self.assets, career.and_then(|c| c.dialog.as_ref()).or(free_dialog),
+            career.and_then(|c| c.dialog_options.as_deref()).or(free_options))?;
         self.sign_up_choice.update_sign_up_choice(&self.assets, career.and_then(|c| c.sign_up_choice.as_ref()))?;
         self.signup_poster.update(&self.assets, career.and_then(|c| c.poster.as_ref()), renderer.dimensions())?;
         self.update_unlock_overlay(career.and_then(|c| c.unlock_overlay.as_ref()))?;
@@ -1611,6 +1680,8 @@ impl MarkerUi {
         localized.help_a=localize(&view.help_a)?;
         localized.help_b=localize(&view.help_b)?;
         localized.help_start=localize(&view.help_start)?;
+        localized.help_x=localize(&view.help_x)?;
+        localized.help_y=localize(&view.help_y)?;
         for row in &mut localized.rows {
             let selected=row.description_candidates.iter().find_map(|key|self.assets.localize(key).ok());
             row.title=if let Some(title)=selected.as_ref().filter(|_|row.description_candidates.contains(&row.title)){title.clone()}else{localize(&row.title)?};
@@ -2682,6 +2753,15 @@ fn flatten(
     let flat = matches!(clip.asset, 3 | 9 | 11 | 13 | 14 | 32 | 33 | 35 | 36 | 37..=47 | 52 | 54 | 55 | 58 | 68 | 70 | 80 | 81 | 83 | 112);
     flatten_projected(assets, clip, m, colour, size, out, flat, None)
 }
+/// The letterbox's children the port carries to the window's edges: the bars and their film
+/// strips (`mcLetterbox`, character 24, depths 1, 4, 20 and 23), stretched to a wider window's
+/// width, and the page title and buttons (`mInfo`, character 11, depths 3 and 1), all of them
+/// moved to a narrower window's top and bottom (`letterbox_edge_shift`). What the strips draw
+/// beyond the stage belongs to the bars there, so none of it is left out as off the stage.
+fn letterbox_edge(clip: &Clip, depth: i32) -> bool {
+    clip.asset == 11 && matches!((clip.character, depth), (24, 1 | 4 | 20 | 23) | (11, 1 | 3))
+}
+
 /// PC tall-window adaptation, as the backgrounds fill wide windows: in a window narrower than
 /// 16:9 the letterbox's bars keep to the window's top and bottom edges rather than the
 /// stage's. `mcLetterbox` (letterbox character 24) places the top bar and its film strip at
@@ -2723,13 +2803,14 @@ fn flatten_masked(
         return Ok(());
     }
     let start = out.len();
+    let mut fitted = false;
     if let Some(texture)=clip.properties.get("cac_texture") {
         let texture=assets.texture(texture)?;
         let bounds=pause_movie::bounds(clip,assets)?.ok_or("CAC image component has no authored bounds")?;
         out.push(Batch {texture:Some(texture.name.clone()),wrapped:false,
             vertices:quad(m,[bounds.left,bounds.top,bounds.right,bounds.bottom],
                 [0.,0.,1.,1.],colour.apply([1.;4]),size,flat)});
-        mask.occlude(&mut out[start..], size);
+        mask.finish(assets, clip, &mut out[start..], size, fitted);
         return Ok(());
     }
     let colour=if let Some(value)=clip.properties.get("cac_colour") {
@@ -2741,17 +2822,22 @@ fn flatten_masked(
     } else {colour};
     if clip.properties.get("_type").map(String::as_str)==Some("CustomTimeline") {
         replay_editor_movie::draw_timeline(assets,clip,m,colour,size,out,flat)?;
-        mask.occlude(&mut out[start..],size);
+        mask.finish(assets, clip, &mut out[start..], size, fitted);
         return Ok(());
     }
     if clip.properties.get("_type").map(String::as_str) == Some(stick_preview::TYPE) {
         stick_preview::draw(clip, m, colour, size, out, flat)?;
-        mask.occlude(&mut out[start..], size);
+        mask.finish(assets, clip, &mut out[start..], size, fitted);
+        return Ok(());
+    }
+    if let Some(kind) = clip.properties.get("_type").map(String::as_str).filter(|kind| colour_picker::draws(kind)) {
+        colour_picker::draw(clip, kind, m, colour, size, out, flat)?;
+        mask.finish(assets, clip, &mut out[start..], size, fitted);
         return Ok(());
     }
     if clip.properties.get("_type").map(String::as_str) == Some("MapRenderComponent") {
         render_map_component(assets, clip, m, size, out, flat, map)?;
-        mask.occlude(&mut out[start..], size);
+        mask.finish(assets, clip, &mut out[start..], size, fitted);
         return Ok(());
     }
     if clip.properties.get("_type").map(String::as_str) == Some("MiniMapComponent") {
@@ -2775,7 +2861,7 @@ fn flatten_masked(
                 flat,
             ),
         });
-        mask.occlude(&mut out[start..], size);
+        mask.finish(assets, clip, &mut out[start..], size, fitted);
         return Ok(());
     }
     match clip.definition(assets)? {
@@ -2798,6 +2884,7 @@ fn flatten_masked(
                 | (33, 30 | 33 | 37 | 42 | 44 | 47 | 51 | 58 | 64) | (74, 1) | (81, 1)
                 | (challenge_failed_movie::ASSET | challenge_failed_small_movie::ASSET, 2)
                 | (skate101_movie::ASSET, 2) | (online_results_movie::ASSET, 8));
+            fitted = background;
             let background_width = if background {
                 (size.0 as f32 / size.1.max(1) as f32 / (16. / 9.)).max(1.)
             } else { 1. };
@@ -2957,7 +3044,7 @@ fn flatten_masked(
         }
         Character::Sprite(_) | Character::Animation(_) | Character::Font { .. } => {}
     }
-    mask.occlude(&mut out[start..], size);
+    mask.finish(assets, clip, &mut out[start..], size, fitted);
     // AptDecoupleTreeTraversal (0x82a003d0) walks the display list in depth order. A
     // placement whose clip depth is below 0x8000 as u16 is a mask (0x82a004c8):
     // AptDecoupleClippedTreeTraversal (0x829f8bf8) Adds its geometry and that of each
@@ -2988,11 +3075,21 @@ fn flatten_masked(
             }
         }
         let mut m = concatenate(m, child.entry.matrix);
-        if flat {
-            m.ty += letterbox_edge_shift(clip, depth, size);
-        }
+        let shift = if flat { letterbox_edge_shift(clip, depth, size) } else { 0. };
+        m.ty += shift;
         let colour = colour.append(child.entry.colour_scale, child.entry.colour_bias);
+        // The letterbox's bars and strips the port carries to the window's edges draw whole.
+        let edge = u32::from(flat && letterbox_edge(clip, depth));
+        let traced = trace_offstage_enabled();
+        if traced {
+            mask.path.push(child.entry.name.clone().unwrap_or_else(|| format!("#{depth}")));
+        }
+        mask.window_fitted += edge;
         flatten_masked(assets, &child.clip, m, colour, size, out, flat, map, mask)?;
+        mask.window_fitted -= edge;
+        if traced {
+            mask.path.pop();
+        }
         index += 1;
     }
     if let Some((_, geometry)) = active {
@@ -3017,6 +3114,10 @@ enum MaskOperation {
 struct MaskDepth {
     hidden: Vec<[f32; 4]>,
     kept: Option<[f32; 4]>,
+    /// The clip's ancestors the port moves to the window's edges (`letterbox_edge_shift`).
+    window_fitted: u32,
+    /// The instance names down to the clip, kept while `SKATE2_TRACE_OFFSTAGE` traces.
+    path: Vec<String>,
 }
 
 impl MaskDepth {
@@ -3035,6 +3136,85 @@ impl MaskDepth {
             occlude(batches, rect, size);
         }
     }
+
+    /// What one clip draws itself: hidden under the masks, then left out where it lies wholly
+    /// off the stage ([`offstage`]), unless the port fits it to the window.
+    fn finish(&self, assets: &Assets, clip: &Clip, batches: &mut [Batch], size: (u32, u32), fitted: bool) {
+        self.occlude(batches, size);
+        if fitted || self.window_fitted > 0 {
+            return;
+        }
+        for batch in batches {
+            if offstage(&batch.vertices, size) {
+                if trace_offstage_enabled() {
+                    let label = format!("{} {}", assets.movies[clip.asset].texture_owner, self.path.join("/"));
+                    trace_offstage(&label, &batch.vertices, size);
+                }
+                batch.vertices.clear();
+            }
+        }
+    }
+}
+
+/// How much of the window's width and height the 1280x720 stage takes: the UI keeps the whole
+/// stage, centred, so a window of another shape has room beside or above and below it.
+#[expect(clippy::cast_precision_loss, reason = "window pixels as a ratio")]
+fn window_fit((width, height): (u32, u32)) -> [f32; 2] {
+    let aspect = width as f32 / height.max(1) as f32;
+    [((16. / 9.) / aspect).min(1.), (aspect / (16. / 9.)).min(1.)]
+}
+
+/// PC window adaptation. The original renders one 1280x720 target, so what APT parks off the
+/// stage while it is not in use (below, above or beside it) is never seen. A window of another
+/// shape shows the world around the stage, and would show those parked draws there, so a draw
+/// lying wholly outside the stage's place in the window is left out. Anything the stage shows
+/// any of draws as before, and a 16:9 window leaves everything to the GPU's own clipping.
+fn offstage(vertices: &[[f32; 10]], size: (u32, u32)) -> bool {
+    const EDGE: f32 = 1e-4;
+    let fit = window_fit(size);
+    if (fit[0] >= 1. && fit[1] >= 1.) || vertices.is_empty() {
+        return false;
+    }
+    // Left, right, below and above the stage.
+    let mut outside = [true; 4];
+    for v in vertices {
+        if v[3] <= 0. {
+            return false;
+        }
+        let (x, y) = (v[0] / v[3] / fit[0], v[1] / v[3] / fit[1]);
+        outside[0] &= x <= EDGE - 1.;
+        outside[1] &= x >= 1. - EDGE;
+        outside[2] &= y <= EDGE - 1.;
+        outside[3] &= y >= 1. - EDGE;
+    }
+    outside.contains(&true)
+}
+
+/// `SKATE2_TRACE_OFFSTAGE`: each draw left off the stage, once per label, with where it lies on
+/// the 1280x720 stage.
+fn trace_offstage_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("SKATE2_TRACE_OFFSTAGE").is_some())
+}
+
+fn trace_offstage(label: &str, vertices: &[[f32; 10]], size: (u32, u32)) {
+    static SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let Ok(mut seen) = SEEN.lock() else { return };
+    if seen.iter().any(|known| known == label) {
+        return;
+    }
+    seen.push(label.to_owned());
+    let fit = window_fit(size);
+    let [mut left, mut top, mut right, mut bottom] = [f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY];
+    for v in vertices {
+        let x = (v[0] / v[3] / fit[0] + 1.) * 640.;
+        let y = (1. - v[1] / v[3] / fit[1]) * 360.;
+        left = left.min(x);
+        right = right.max(x);
+        top = top.min(y);
+        bottom = bottom.max(y);
+    }
+    eprintln!("offstage: {label} left out at x {left:.0}..{right:.0} y {top:.0}..{bottom:.0}");
 }
 
 /// The parts of rectangle `a` outside rectangle `b`.
@@ -3405,6 +3585,12 @@ fn project_stage(size: (u32, u32), projection: &skate2_core::ui::apt_projection:
             clip[0] *= ((16. / 9.) / aspect).min(1.);
             clip[1] *= (aspect / (16. / 9.)).min(1.);
             vertex[..4].copy_from_slice(&clip);
+        }
+        if offstage(&batch.vertices, size) {
+            if trace_offstage_enabled() {
+                trace_offstage(&format!("projected {}", batch.texture.as_deref().unwrap_or("solid")), &batch.vertices, size);
+            }
+            batch.vertices.clear();
         }
     }
 }

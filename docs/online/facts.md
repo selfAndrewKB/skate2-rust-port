@@ -56,8 +56,8 @@ contexts (`ObjectiveContextual`, skaters aired over) and the big-trick records
 A free-skate activity's objective groups each read their own player, every player's group on
 every console, so its scope also carries the rest of the state the objective natives read of a
 player (`group::PLAYER_STATE`: on the ground, the sequence completed, the moving wipeout's
-duration, the manual's length and time, the animation's trick bits, wiping out); the natives
-read the group's player's state, not the local skater's.
+duration, the manual's length and time, the animation's trick bits, wiping out, riding fakie
+and riding switch); the natives read the group's player's state, not the local skater's.
 
 Every console runs the challenge on the *shared* frame (`FactsScope::shared`): out-of-scope
 groups at their defaults, the owner's console included. A wrong scope therefore cannot desync
@@ -95,9 +95,15 @@ sealing adds 20 bytes a datagram (a Death Race: 8.1 KB/s in 53 datagrams/s).
 A challenge tick runs once it has the facts of the players *pacing* it (`Round::contributors`).
 In a turn-based challenge (S.K.A.T.E., Spot Battle, Hall of Meat, 1-Up), once the first turn has
 started, those are the turn player (the last player `AI.RepositionAI` moved with the camera; every
-turn-based script passes its shared turn player, `vars.ActivePlayerID`, `vars.LeaderID` or the
-follower) and any player `AI.RepositionAI` teleported whose output has not yet finished the
-teleport. Everywhere else every player still in the round paces it. Every other player stands
+turn-based Skate 2 script passes its shared turn player, `vars.ActivePlayerID`, `vars.LeaderID` or
+the follower) and any player `AI.RepositionAI` teleported whose output has not yet finished the
+teleport. Skate 3's own 1-Up graph (a linked Skate 3 data folder's 1-Ups) never moves the camera
+with `AI.RepositionAI` (`spawn_players` passes `false`, `setup_run` five arguments); its
+`countdown` entry names the turn's player with `HUD2.LeaderboardSetTurn(self.Name,
+vars.Competitor[vars.CurrentCompetitorIndex].ID)`, the same on every console, so for a game that
+runs Skate 3's graph that call sets the turn player (2026-11-16; until then no turn player was
+ever set and every player paced the whole game, the turn player's console waiting on every
+other's). Everywhere else every player still in the round paces it. Every other player stands
 still at the frame of the last tick it sent facts for, its events cleared (`facts::standing`), and
 sends no facts at all, only replay frames. Every console computes the set from the same challenge
 state after each tick, so they agree. Pins cannot decide it: the scripts pin and unpin
@@ -119,6 +125,27 @@ state at the same tick and reached the same results.
 A player who starts pacing again begins a new *stint* (counted alike on every console, sent with
 each facts message); facts of an old stint are ignored, so a console that had run ahead before it
 was pinned cannot mix old ticks into new ones.
+
+A Skate 3 graph's turn player also begins a new stint where its turn, its countdown and its run
+start (`HUD2.LeaderboardSetTurn`, `HUD2.StartCountdown` and `HUD2.StartTimer`, each at the same
+tick on every console; `OnlineChallenge::turn_restart`, `Round::set_contributors`), though it
+already paces the round. A turn's `setup_run` teleports every player, each pacing the round until
+its teleport is done, and a console whose own skater stands pinned keeps producing facts while the
+round waits on a slower one (a start in another part of the district streams in on every console
+at its own speed). Those ticks then ran off in fast motion once the round was the turn player's
+alone: a countdown that skipped numbers, and a 20-second run that began two or three seconds in,
+shown as such (`display_lead`). With the new stint the console drops what it sent ahead and the
+others pass it over, so the countdown and the run start with nothing ahead of them. A round only
+the local skater paces also runs each tick as it is produced, without the buffer kept for other
+players' arrivals (`Round::paced_by_local_alone`). A round that ran out of facts waits for six
+ready ticks before it runs on (the buffer against the link's jitter); Skate 3's 1-Up teleports
+its players with no transition, so a waiting player paces its teleport for two ticks and sends
+no more until the round has run them, and a console holding out for six would never run them. A
+refill therefore runs what it has once that has waited twelve simulation ticks for more
+(`REFILL_WAIT`, `Round::ticks_to_run`; seen 2026-11-16 in a two-console run with the turn
+player defined: one console stopped for good at the next turn's teleports). The countdown HUD shows the challenge's own
+time on every console: it runs to the tick that lets the skater go, which a console reaches when
+it runs that tick.
 
 All of this holds only while every console's challenge takes the same inputs at the same tick.
 Two consoles a tick apart on a change of pacing wait on each other for good (a Hall of Meat turn
@@ -177,13 +204,29 @@ vote ended it alike.
 
 ## Inactivity
 
-A game that sends neither a replay frame nor `Busy` for two seconds is kicked
-(`KR_KickedForInactivity`, `leave::KICKED_FOR_INACTIVITY`). A game with no frame to send
-(travelling behind the fade, loading, paused at a sync point) says `Busy` every quarter second; a
-frozen or paused game (a hang, a debugger, Cheat Engine) says nothing and is kicked, and its
-challenge goes on without it. Measured 2026-10-16: a game killed in the middle of S.K.A.T.E. was
-kicked about 3 seconds after its last datagram (two seconds, then the server's next check); the
-other player won by disconnect (`finish_reason` 1) and went back to lobby skate.
+A participant of a challenge in play whose game sends neither a replay frame nor `Busy` for five
+seconds is kicked (`KR_KickedForInactivity`, `leave::KICKED_FOR_INACTIVITY`): the other players'
+rounds wait for its facts. A game with no frame to send (travelling behind the fade, loading,
+paused at a sync point) says `Busy` every quarter second; a frozen or paused game (a hang, a
+debugger, Cheat Engine) says nothing and is kicked, and its challenge goes on without it. The
+limit was two seconds until 2026-11-22. Measured with it 2026-10-16: a game killed in the middle
+of S.K.A.T.E. was kicked about 3 seconds after its last datagram (two seconds, then the server's
+next check); the other player won by disconnect (`finish_reason` 1) and went back to lobby
+skate. A S.K.A.T.E. of three or more takes a silent player out of the challenge alone a second
+sooner, once every other player's round has waited four seconds on it (`Stalled`).
+
+A member no round waits on (lobby skate, a challenge still loading or showing its results, a
+member in lobby skate while others play a challenge) is kicked only after a minute of it
+(`IDLE_INACTIVITY`, 2026-11-22). Until then two seconds held for every member, so a free
+skate lost a player to anything that stopped its game or its datagrams for two seconds: a hitch,
+a window the system stopped drawing, a load longer than the connection thread's 30 seconds of
+`Busy`, a link down for a moment. A link that stays down is dropped as lost after the transport's
+10 seconds, and a challenge's load keeps its own 90. The kick at the minute's limit has its own
+reason (`leave::KICKED_FOR_IDLE`). The kicked game shows `ID_ONLINE_KICKED_INACTIVITY` (the
+original's `eSk8FEPopup_Online_Error_KickedInactivity`; it showed the host's kick's text before)
+and under it `Reason: 5 second challenge timeout` or `Reason: 60 second inactivity timeout`, as
+every notice of a game lost names its reason. Every automatic disconnect and its reason line is
+listed in `docs/evidence/online-disconnects-2026-11-22.md`.
 
 ## Pinned gestures
 

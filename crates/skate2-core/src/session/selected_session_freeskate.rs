@@ -30,6 +30,9 @@ pub(super) struct FreeSkate {
     /// `CommonBackEnd::sGameInfo`'s traffic, pedestrian and security settings, which the
     /// screen reads on entry and writes on EnterGame.
     pub(super) settings: Settings,
+    /// PC port: the game running is a profile free skate whose AI Skaters setting is off. Every
+    /// game start sets it (`set_game_mode`), so the career, party play and online keep theirs.
+    pub(super) ai_skaters_off: bool,
     /// EnterGame, waiting for the fade.
     pub(super) start: Option<GameSettings>,
     /// The skater the front end loads (a marquee, or the created skater), waiting for the
@@ -42,9 +45,24 @@ pub(super) struct FreeSkate {
     pub(super) data: Option<(Arc<AttribDb>, LocationTable)>,
     /// The screen's `SimCharacterViewer`, loaded on the first visit.
     viewer: Option<Viewer>,
-    /// The free-skate game's challenge system (`GenerateGameModeSignature` 2), of which the port
-    /// runs the dynamic hull manager only.
+    /// An online free skate's challenge system (`GenerateGameModeSignature` 8), of which the
+    /// port runs the dynamic hull manager only.
     pub(super) hulls: Option<crate::challenge::ChallengeSystem>,
+    /// A profile free skate's challenge system (`GenerateGameModeSignature` 2): its dynamic
+    /// hull manager and its global activities, the properties' teleporters. It takes the
+    /// career's place for its update alone (`career_step`), so the game has no career.
+    pub(super) challenges: Option<super::career::CareerSession>,
+}
+
+impl FreeSkate {
+    /// The free-skate game's challenge system: a profile free skate's, or an online one's.
+    pub(super) fn system(&self) -> Option<&crate::challenge::ChallengeSystem> {
+        self.challenges.as_ref().map(|session| &session.system).or(self.hulls.as_ref())
+    }
+
+    pub(super) fn system_mut(&mut self) -> Option<&mut crate::challenge::ChallengeSystem> {
+        self.challenges.as_mut().map(|session| &mut session.system).or(self.hulls.as_mut())
+    }
 }
 
 impl<T, C> SelectedLiveSession<T, C> {
@@ -168,7 +186,8 @@ impl<T, C> SelectedLiveSession<T, C> {
         self.replay_frames.clear();
         self.replay_clock=None;
         self.replay_restorer=crate::presentation_restore::PresentationRestorer::new();
-        self.freeskate.hulls = Some(self.free_skate_dynamic_hulls()?);
+        self.freeskate.hulls = None;
+        self.freeskate.challenges = Some(self.free_skate_challenges()?);
         self.pause_menu.set_hub(crate::ui::pause_menu::StartHub::OfflineFreeSkate);
         // The load applies a marquee's character, stance and hat (`ApplyPlayerAttributes`
         // 0x828158f0) before StartGameModule, so the spawn reads them even while this loader
@@ -304,6 +323,12 @@ impl<T, C> SelectedLiveSession<T, C> {
             let foot_forward = input.set_player(0).map_err(|e| error(format!("{e:?}")))?;
             marker.teleport.reload_stance(foot_forward != 0);
         }
+        // A profile free skate's challenge system unloads as the game's: Sk8ChallengeSystem::
+        // GameUnload does not ask which game it ran.
+        if self.career.is_none() {
+            self.career = self.freeskate.challenges.take();
+        }
+        self.freeskate.challenges = None;
         self.unload_career_living_world()?;
         self.unload_career_dynamic_hulls()?;
         self.unload_career_activities()?;
@@ -503,6 +528,7 @@ impl<T, C> SelectedLiveSession<T, C> {
                     .map_err(|e| error(format!("{e:?}")))?;
             }
         }
+        self.freeskate.ai_skaters_off = mode == GM_PROFILE_FREE_SKATE && settings.is_some_and(|settings| !settings.ai_skaters);
         // GameLoad8273c01c -> PreLoadStateGraphs8272550c -> InitPropData.
         // Graphs stay loaded in the host, but a prior game unload destroyed
         // the tracker Prop. Recreate it through the original spawn path.
@@ -524,6 +550,10 @@ impl<T, C> SelectedLiveSession<T, C> {
             }
             let net_challenge_type = self.online.game.as_ref().map(|game| game.attributes.challenge_type);
             marker.try_reset_game(mode, net_challenge_type).map_err(error)?;
+            // PC port addition, Skate During Turn Wait: a new game's marker replaces whichever
+            // stood, and the last game's markers go.
+            self.online.held_marker = None;
+            self.online.turn_wait_marker = None;
             marker.teleport.set_party_play_ui(mode == GM_PARTY_PLAY);
             marker.prop_actions.clear();
             marker.restore_props=false;

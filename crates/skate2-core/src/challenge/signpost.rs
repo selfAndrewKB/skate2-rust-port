@@ -406,9 +406,20 @@ pub(crate) const fn set_activated_machine_count(world: &mut World, count: i32) {
 
 /// `Sk8ChallengeSystem::IsChallengeActive` (`0x825a2c78`), the activities'
 /// progression interface: every challenge without progression, else the
-/// signpost's availability of the activity's challenge.
+/// signpost's availability of the activity's challenge. A free-skate game (game mode
+/// signature 2) reads the progression although it runs none, and takes as well a challenge the
+/// unlockables hold by its name (`UnlockablesBackEndCore::IsUnlocked` of the `CHALLENGES`
+/// category, downloaded content included).
 pub(crate) fn is_neutrino_challenge_active(world: &World, challenge: u64) -> bool {
     if !world.enable_progression && world.game_mode_flags != 2 {
+        return true;
+    }
+    if world.game_mode_flags == 2
+        && world.activities.find(challenge).is_some_and(|activity| {
+            let name = &world.activities.activities[activity].name;
+            world.unlockables.is_unlocked(super::unlockables::category::CHALLENGES, super::unlockables::string_hash(name), true)
+        })
+    {
         return true;
     }
     signpost_key_for_challenge(world, challenge).is_some_and(|k| world.signpost.is_challenge_active(k))
@@ -1245,6 +1256,144 @@ pub(crate) fn complete_challenge_by_name(world: &mut World, name: &str) -> bool 
     let Some(signpost) = world.signpost.helper.names.get(&hash_value32(name)).copied() else { return false };
     let Some(challenge) = SignPost::challenge_key(&world.db, signpost) else { return false };
     complete_challenge_by_key(world, challenge)
+}
+
+/// Whether a progression challenge's challenge is a property's teleporter: a full global
+/// activity of `ChallengeType` 45 (into and out of the stadium and the training facility, the
+/// stadium's ramps, a downloadable content's own). The career's scripts activate one
+/// (`Progression.ActivateChallengeByTitle`) once its property is the player's and nothing
+/// completes it: it shows its Enter or Exit prompt for as long as it is available
+/// (`is_neutrino_challenge_active`), in the career and in free skate. A property's purchase
+/// (`dannys_megapark_extension`) has the same type and is no global activity: buying the property
+/// completes it.
+fn is_property_teleporter(world: &World, signpost: u64) -> bool {
+    SignPost::challenge_key(&world.db, signpost).and_then(|challenge| world.activities.find(challenge)).is_some_and(|activity| {
+        super::signup::challenge_type(world, activity) == PROPERTY_CHALLENGE_TYPE
+            && world.activities.global_type(&world.db, activity) == super::activity::global_type::FULL
+    })
+}
+
+/// A property's teleporter made available as a saved challenge is at a load: not new, with no
+/// entry in the completion results and no evaluation of its own.
+fn open_property_teleporter(world: &mut World, signpost: u64) {
+    let during_init = std::mem::replace(&mut world.signpost.during_init, true);
+    activate_challenge(world, signpost, false, true, false);
+    world.signpost.during_init = during_init;
+}
+
+/// PC port addition: the properties' teleporters a save holds completed are available again,
+/// the completed challenges after each moving up a place. A Max Out Save of a build up to
+/// 0.3.5 completed them with every other progression challenge, which took the prompts to
+/// enter and leave the stadium and the training facility away; no career completes one.
+/// Returns how many it opened.
+pub(crate) fn reopen_property_teleporters(world: &mut World) -> usize {
+    let completed: Vec<u64> =
+        world.signpost.completed.keys().copied().filter(|&signpost| is_property_teleporter(world, signpost)).collect();
+    for &signpost in &completed {
+        let Some(removed) = world.signpost.completed.remove(&signpost) else { continue };
+        let sp = &mut world.signpost;
+        sp.completed_count -= 1;
+        for challenge in sp.completed.values_mut() {
+            if challenge.order > removed.order {
+                challenge.order -= 1;
+            }
+        }
+        open_property_teleporter(world, signpost);
+    }
+    completed.len()
+}
+
+/// PC port addition (Max Out Save, `max_out.rs`): every progression challenge completed as
+/// `ChallengeComplete` (`0x825e00f8`) completes one, in key order and with progression enabled:
+/// its completion BLOG entry, its awards, its place in the completed map, its photo articles and
+/// its groups' exits. The state machines a completion would trigger are not run. A property's
+/// teleporter is not one to complete (`is_property_teleporter`): those the career's scripts
+/// activate are made available instead, as the whole career leaves them.
+/// `SKATE2_TRACE_MAX_OUT` logs the challenges left incomplete.
+pub(crate) fn complete_every_challenge(world: &mut World) {
+    let enabled = std::mem::replace(&mut world.enable_progression, true);
+    for signpost in world.signpost.progression_challenges.clone() {
+        if !is_property_teleporter(world, signpost) {
+            challenge_complete(world, signpost);
+        }
+    }
+    let db = std::sync::Arc::clone(&world.db);
+    for title in scripted_names(&db, "Progression.ActivateChallengeByTitle") {
+        if let Some(signpost) = world.signpost.key_from_title(&title)
+            && is_property_teleporter(world, signpost)
+        {
+            open_property_teleporter(world, signpost);
+        }
+    }
+    world.enable_progression = enabled;
+    world.signpost.triggered.clear();
+    world.signpost.state_machine_triggered = false;
+    if std::env::var_os("SKATE2_TRACE_MAX_OUT").is_some() {
+        let sp = &world.signpost;
+        let left: Vec<&str> = sp
+            .progression_challenges
+            .iter()
+            .filter(|&&key| !sp.is_challenge_complete(key))
+            .map(|&key| world.db.layout_text(class::PROGRESSION_CHALLENGES, key, 0).unwrap_or("?"))
+            .collect();
+        eprintln!(
+            "max out: {} of {} progression challenges complete ({} completed in all), left {left:?}",
+            sp.progression_challenges.len() - left.len(),
+            sp.progression_challenges.len(),
+            sp.completed.len()
+        );
+    }
+}
+
+/// PC port addition (Max Out Save, `max_out.rs`): the names the progression handlers' scripts
+/// pass to the native `call` (`Namespace.Function`) as a literal first argument outside a
+/// comment, in handler order, each once.
+pub(crate) fn scripted_names(db: &AttribDb, call: &str) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for &handler in db.collections(class::PROGRESSION_HANDLERS) {
+        let Some(source) = db.attribute(class::PROGRESSION_HANDLERS, handler, field::HANDLER_SOURCE).and_then(|a| a.text(0)) else {
+            continue;
+        };
+        for name in literal_arguments(source, call) {
+            if !names.iter().any(|known| known == name) {
+                names.push(name.to_owned());
+            }
+        }
+    }
+    names
+}
+
+/// The literal first arguments of `call` in Lua `source`, each line read up to its `--` comment.
+fn literal_arguments<'a>(source: &'a str, call: &str) -> Vec<&'a str> {
+    let mut names = Vec::new();
+    for line in source.lines() {
+        let mut rest = line.split("--").next().unwrap_or_default();
+        while let Some(at) = rest.find(call) {
+            rest = &rest[at + call.len()..];
+            let name = rest
+                .trim_start()
+                .strip_prefix('(')
+                .and_then(|arguments| arguments.trim_start().strip_prefix('"'))
+                .and_then(|literal| literal.split_once('"'))
+                .map(|(name, _)| name);
+            if let Some(name) = name.filter(|name| !name.is_empty()) {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
+#[cfg(test)]
+mod max_out_tests {
+    /// A call's literal first arguments count only outside comments, each where it is written.
+    #[test]
+    fn literal_arguments_skip_comments_and_other_calls() {
+        let source = "\tUnlock.UnlockLocationForFreeskate( \"svpeak\" );\n\t-- Unlock.UnlockLocationForFreeskate( \"gvr\" );\n\
+            Progression.SendMessage( \"x\" ); Unlock.UnlockLocationForFreeskate(\"megapark\") -- Unlock.UnlockLocationForFreeskate(\"dam\")\n\
+            Unlock.UnlockLocationForFreeskate( name );";
+        assert_eq!(super::literal_arguments(source, "Unlock.UnlockLocationForFreeskate"), ["svpeak", "megapark"]);
+    }
 }
 
 /// `cSignPostManager::ProcessChallengeResults` (`0x825e10c0`): trigger the

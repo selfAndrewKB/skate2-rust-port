@@ -123,7 +123,9 @@ fn cas_colour(input:Output)->vec4<f32>{
  let tattoo_offset=vec2<f32>(.25*f32(i32(floor(tattoo_index))%4),select(0.,.5,tattoo_index>3.));
  let tattoo_sample=textureSample(cas_decal,normal_sampler,uv*tattoo_scale+tattoo_offset);
  let sample=textureSample(diffuse,normal_sampler,input.uv.xy);
- var colour=vec4<f32>(sample.xyz*sample.xyz,1.);let spec_mask=sample.a*sample.a;
+ // PC port: custom[4].z, when set, stands for a diffuse with no specular mask in its alpha
+ // (a linked Skate 3 data folder's skin, `cas_custom`).
+ var colour=vec4<f32>(sample.xyz*sample.xyz,1.);let spec_mask=select(sample.a*sample.a,stamp.custom[4].z,stamp.custom[4].z>0.);
  let packed=textureSample(normal_map,normal_sampler,input.uv.xy);
  let xy=packed.ag*2.-vec2<f32>(1.);let z=sqrt(abs(1.-dot(xy,xy)));
  let n=normalize(xy.x*input.tangent+xy.y*input.binormal+z*input.normal);
@@ -141,6 +143,13 @@ fn cas_colour(input:Output)->vec4<f32>{
    return vec4<f32>(cas_tone(lit,input.fog),hair_alpha*object.color.a);
  }
  if mode!=3. {colour*=stamp.custom[0];}
+ // PC port: Edit Griptape's colour (custom[2], its fourth lane set) over the deck's top face,
+ // which the first texture coordinate set keeps within custom[3]: the diffuse squared, brought
+ // to a mean of one there, times the colour's tint. The fourth lane is the most of the diffuse
+ // squared that counts, so a bright mark in the griptape takes the colour and does not shine.
+ if (mode==0. || mode==3.) && stamp.custom[2].w>0. && all(input.uv.xy>=stamp.custom[3].xy) && all(input.uv.xy<=stamp.custom[3].zw) {
+   colour=vec4<f32>(min(sample.xyz*sample.xyz,vec3<f32>(stamp.custom[2].w))*stamp.custom[2].xyz,1.);
+ }
  if uv.x>0. && uv.y>0. {
    if mode==0. || (mode==3. && uv.x<1. && uv.y<1.) {
      let decal=decal_sample;colour=colour*(1.-decal.a)+decal*decal.a;

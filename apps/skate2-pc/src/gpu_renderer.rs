@@ -55,6 +55,7 @@ pub(crate) mod particles;
 pub(crate) mod crowd;
 pub(crate) mod deck_ao;
 pub(crate) mod movie;
+mod pip;
 mod stereoscopy;
 mod weather;
 pub(crate) mod rain;
@@ -68,6 +69,7 @@ pub(crate) use map_draw::{
     DiagnosticFragment, DiagnosticPipelineKey, FrameEnvironment, GpuMap, GpuMapBuilder,
     InstanceMaterial, MapEnvironment, MapFrameStats, WorldShadowGeometry, world_box_in_view,
 };
+pub(crate) use pip::PipView;
 pub(crate) use raster_state::RasterState;
 pub(crate) use shadow_map::ShadowCascades;
 
@@ -112,6 +114,18 @@ pub struct GpuObject {
     pub(crate) hidden: bool,
 }
 
+impl GpuObject {
+    /// Whether the main view can show this object: `SceneRenderView::Cull` 0x828500a8 tests a
+    /// character's world `m_BB` against the view, here widened so nothing in view is left out
+    /// (`map_draw::widened_box_in_view`). Objects without one always draw.
+    fn in_view(&self, clip_from_world: &[f32; 16]) -> bool {
+        self.character
+            .as_ref()
+            .and_then(|character| character.shadow_bounds)
+            .is_none_or(|(_, bounds)| map_draw::widened_box_in_view(clip_from_world, bounds))
+    }
+}
+
 /// Owns a validated original 2D or cube texture and all uploaded mips; the
 /// view retains the texture. 2D textures also carry their one diagnostic
 /// diffuse bind group.
@@ -139,6 +153,10 @@ const NIS_WHITE_BLOWOUT: f32 = 3.0;
 pub struct GpuScene {
     pub(crate) stereoscopy: bool,
     pub(crate) stereo_planes: Option<[f32;2]>,
+    /// PC port addition, Skate During Turn Wait: the local skater's own camera, drawn into the
+    /// corner at the left, above the trick display and over the HUD, while the frame shows
+    /// another player's.
+    pub(crate) pip: Option<PipView>,
     pub(crate) career_photo: Option<u32>,
     pub(crate) replay_media: Option<crate::replay_media::Request>,
     pub(crate) capture_watermark: Option<marker_ui::DrawList>,
@@ -325,6 +343,16 @@ pub(crate) struct FrameDiagnostics {
 }
 
 /// A frame's commands on either side of the map's runs.
+/// What a recorded frame does with Skate During Turn Wait's corner (PC port addition).
+#[derive(Clone, Copy)]
+enum PipPass<'a> {
+    None,
+    /// The corner's own view: the scene into its targets, nothing after the scene's objects.
+    Draw(&'a pip::Targets),
+    /// The main view, which shows the corner drawn before it under the HUD.
+    Show(&'a pip::Targets, pip::Layout),
+}
+
 struct RecordedFrame {
     /// The shadow maps and the world UI panel's texture.
     before: wgpu::CommandBuffer,
@@ -337,6 +365,10 @@ struct RecordedFrame {
 pub struct GpuRenderer {
     media_capture: Option<media_capture::Target>,
     stereo_objects_active: bool,
+    /// Skate During Turn Wait's corner (PC port addition): its pass into the window and its scene
+    /// targets at the corner's size, made when a frame first shows it.
+    pip_composite: pip::Composite,
+    pip_targets: Option<pip::Targets>,
     present_pacing: PresentPacing,
     frame_cap: FrameCap,
     /// For the monitor's refresh rate.
@@ -371,6 +403,13 @@ pub struct GpuRenderer {
     config: wgpu::SurfaceConfiguration,
     /// Presentation antialiasing samples shared by every main-pass pipeline.
     sample_count: u32,
+    /// The sample counts of 1, 2 and 4 that both the surface and depth formats support on this
+    /// device, among which Display Settings' Anti-Aliasing picks.
+    supported_samples: Vec<u32>,
+    /// `SKATE2_NO_MSAA`: one sample, whatever Display Settings says.
+    no_msaa: bool,
+    /// Why the device was lost, from its device-lost callback.
+    device_lost: Arc<std::sync::Mutex<Option<String>>>,
     depth: wgpu::TextureView,
     /// The same depth, depth aspect only, for the NIS grade's depth reads.
     depth_sample: wgpu::TextureView,
@@ -535,12 +574,23 @@ impl GpuRenderer {
                     required_features: adapter.features()
                         & (wgpu::Features::TEXTURE_COMPRESSION_BC
                             | wgpu::Features::ADDRESS_MODE_CLAMP_TO_BORDER
+                            | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                             | shadow_features
                             | profile_features),
                     required_limits: wgpu::Limits::default(),
                 },
             )
             .await?;
+        // A lost device fails every frame after it; the error that ends the game says why.
+        let device_lost = Arc::new(std::sync::Mutex::new(None));
+        device.set_device_lost_callback({
+            let device_lost = Arc::clone(&device_lost);
+            move |_, message| {
+                if let Ok(mut lost) = device_lost.lock() {
+                    *lost = Some(message);
+                }
+            }
+        });
         let device = Arc::new(device);
         let queue = Arc::new(queue);
         let caps = surface.get_capabilities(&adapter);
@@ -590,29 +640,24 @@ impl GpuRenderer {
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
-        // Presentation-only enhancement: 4x MSAA when both the surface and depth
-        // formats support it on this device (SKATE2_NO_MSAA restores 1x).
-        let requested = if std::env::var_os("SKATE2_NO_MSAA").is_some() {
-            1
-        } else {
-            4
+        // Presentation-only enhancement: MSAA, up to 4x where both the surface and depth formats
+        // support it on this device. Display Settings' Anti-Aliasing picks the count from the
+        // first frame (`set_sample_count`); SKATE2_NO_MSAA keeps 1x.
+        let no_msaa = std::env::var_os("SKATE2_NO_MSAA").is_some();
+        // WebGPU guarantees 1 and 4 samples; 2 needs the adapter's own format features, which the
+        // device has with TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES.
+        let adapter_specific = device.features().contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
+        let supported = |format: wgpu::TextureFormat, samples: u32| {
+            adapter.get_texture_format_features(format).flags.sample_count_supported(samples)
+                && (adapter_specific || format.guaranteed_format_features(device.features()).flags.sample_count_supported(samples))
         };
-        let supported = |format: wgpu::TextureFormat| {
-            format
-                .guaranteed_format_features(device.features())
-                .flags
-                .sample_count_supported(requested)
-                && adapter
-                    .get_texture_format_features(format)
-                    .flags
-                    .sample_count_supported(requested)
-        };
-        let sample_count = if supported(format) && supported(DEPTH_FORMAT) {
-            requested
-        } else {
-            1
-        };
-        eprintln!("diagnostic MSAA samples: {sample_count}");
+        let supported_samples: Vec<u32> = [1, 2, 4]
+            .into_iter()
+            .filter(|&samples| samples == 1 || (supported(format, samples) && supported(DEPTH_FORMAT, samples)))
+            .collect();
+        let sample_count = if no_msaa { 1 } else { supported_samples.last().copied().unwrap_or(1) };
+        skate2_core::ui::options::set_supported_msaa(&supported_samples);
+        eprintln!("diagnostic MSAA samples: {sample_count} (supported {supported_samples:?})");
         let (depth, depth_sample, stencil_sample) = depth_view(&device, &config, sample_count);
         let msaa_color = msaa_view(&device, &config, sample_count);
         let object_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -680,6 +725,7 @@ impl GpuRenderer {
             shadows.world_rows(),
         ));
         let fps = fps::Fps::new(&device, format);
+        let pip_composite = pip::Composite::new(&device, format);
         let marker_ui = marker_ui::Pipeline::new(&device, &queue, format, sample_count);
         let visual_indicators = visual_indicator::Pipelines::new(&device, format, sample_count);
         let particles = particles::Pipelines::new(&device, format, sample_count);
@@ -704,6 +750,8 @@ impl GpuRenderer {
             final_pass: None,
             main_target,
             stereo_objects_active: false,
+            pip_composite,
+            pip_targets: None,
             display_settings: Default::default(),
             resolution_scale: 100,
             scale_requested: 100,
@@ -713,6 +761,9 @@ impl GpuRenderer {
             queue,
             config,
             sample_count,
+            supported_samples,
+            no_msaa,
+            device_lost,
             depth,
             depth_sample,
             stencil_sample,
@@ -758,6 +809,79 @@ impl GpuRenderer {
             self.surface.configure(&self.device, &self.config);
             self.rebuild_scene_targets();
         }
+    }
+
+    /// The main pass's samples per pixel.
+    pub(crate) fn sample_count(&self) -> u32 {
+        self.sample_count
+    }
+
+    /// A frame that got no swapchain image. On a lost device, which fails every frame after it,
+    /// the error names the device-lost reason and the Vulkan result the backend did not know.
+    fn surface_unavailable(&self, unavailable: SurfaceUnavailable) -> Box<dyn Error> {
+        let lost = self.device_lost.lock().ok().and_then(|lost| lost.clone());
+        match lost {
+            Some(reason) if unavailable == SurfaceUnavailable::Validation => {
+                let result = wgpu::hal::last_unexpected_vulkan_result()
+                    .map(|result| format!(", Vulkan result {result}"))
+                    .unwrap_or_default();
+                format!("the GPU device was lost ({reason}{result})").into()
+            }
+            _ => Box::new(unavailable),
+        }
+    }
+
+    /// Display Settings' Anti-Aliasing as this device can draw it: its samples, else the most it
+    /// supports below them; one with `SKATE2_NO_MSAA`.
+    fn wanted_sample_count(&self) -> u32 {
+        if self.no_msaa {
+            return 1;
+        }
+        let wanted = self.display_settings.get().msaa.samples();
+        self.supported_samples.iter().copied().filter(|&samples| samples <= wanted).max().unwrap_or(1)
+    }
+
+    /// PC port: Display Settings' Anti-Aliasing changed: the scene's targets and every main-pass
+    /// pipeline again at `samples`. The device pools identical bind group layouts, so the new
+    /// pipelines take the same layouts and every material, object, texture and character keeps
+    /// its bindings; the final pass is made again for the new depth. A map draw list built for
+    /// the old count no longer draws until it is built again (`GpuMap::sample_count`).
+    fn set_sample_count(&mut self, samples: u32) {
+        eprintln!("diagnostic MSAA samples: {samples}");
+        self.sample_count = samples;
+        let format = self.config.format;
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("diagnostic solid/diffuse; not original material lighting"),
+            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+        });
+        self.pipeline = create_pipeline(&self.device, &shader, format, samples, &[Some(&*self.object_layout)], "fs_main");
+        self.textured_pipeline = create_pipeline(
+            &self.device,
+            &shader,
+            format,
+            samples,
+            &[Some(&*self.object_layout), Some(&*self.texture_layout)],
+            "fs_textured",
+        );
+        self.character_pipelines =
+            character::CharacterPipelines::new(&self.device, format, samples, &self.object_layout, &self.texture_layout);
+        self.map_pipelines = Arc::new(map_draw::MapPipelines::new(&self.device, format, samples, &self.texture_layout));
+        self.dynamic_objects = Arc::new(dynamic_object::DynamicObjectPipelines::new(
+            &self.device,
+            format,
+            samples,
+            self.map_pipelines.camera_layout(),
+            Arc::new(dynamic_object::object_layout(&self.device)),
+            self.shadows.atlas(),
+            self.shadows.world_map(),
+            self.shadows.world_rows(),
+        ));
+        self.marker_ui = marker_ui::Pipeline::new(&self.device, &self.queue, format, samples);
+        self.visual_indicators = visual_indicator::Pipelines::new(&self.device, format, samples);
+        self.particles = particles::Pipelines::new(&self.device, format, samples);
+        self.crowd = crowd::Pipelines::new(&self.device, format, samples, &self.object_layout, &self.texture_layout);
+        self.final_pass = None;
+        self.rebuild_scene_targets();
     }
 
     /// The scene's size at `percent` of the render size, its longer side within the device's
@@ -996,6 +1120,13 @@ impl GpuRenderer {
             self.submit_uploads();
             return Ok(());
         }
+        // PC Display Settings' Anti-Aliasing, which changes on the fly.
+        let samples = self.wanted_sample_count();
+        if samples != self.sample_count {
+            self.set_sample_count(samples);
+        }
+        // A map draw list built for another sample count waits for its rebuild.
+        let map_view = scene.map.as_ref().filter(|map| map.sample_count == self.sample_count);
         // PC Resolution Scale: the scene renders at the scale only where a final blit brings it to
         // the window; a frame without one draws straight into the window, at 100%.
         let wanted = if scene.final_blit.is_some() {
@@ -1048,7 +1179,7 @@ impl GpuRenderer {
                 });
                 (None, Some(texture))
             }
-            Err(error) => return Err(error.into()),
+            Err(unavailable) => return Err(self.surface_unavailable(unavailable).into()),
         };
         let record_start = Instant::now();
         let render_texture = match (&self.media_capture, &frame, &offscreen) {
@@ -1058,58 +1189,101 @@ impl GpuRenderer {
             (None, None, None) => unreachable!("a frame or an offscreen capture target"),
         };
         let view=render_texture.create_view(&Default::default());
-        let stereo=scene.stereoscopy && settings.postfx && scene.postfx.is_some() && scene.final_blit.is_some();
+        let stereo=scene.stereoscopy && settings.postfx && scene.postfx.is_some() && scene.final_blit.is_some() && map_view.is_some();
         let eyes=if stereo {
-            let map=scene.map.as_ref().ok_or("stereo camera absent")?;
+            let map=map_view.ok_or("stereo camera absent")?;
             let planes=scene.stereo_planes.ok_or("stereo camera planes absent")?;
             vec![Some(map.stereo_eye(planes,0)?),Some(map.stereo_eye(planes,1)?)]
         } else { vec![None] };
+        // PC port addition, Skate During Turn Wait: the local skater's own camera is a second eye drawn
+        // first, into the corner's own targets, which the main view then shows under its HUD. Not
+        // beside stereoscopy's eyes, nor in a capture of the scene without its overlays.
+        let pip_layout = scene
+            .pip
+            .filter(|_| !stereo && capture.is_none_or(|(_, _, before_ui)| !before_ui))
+            .and(map_view)
+            .and_then(|_| pip::Layout::of(self.config.width, self.config.height));
+        let pip_eye = match (pip_layout, scene.pip.as_ref(), map_view) {
+            (Some(layout), Some(pip), Some(map)) => {
+                let size = layout.image_size();
+                if !self.pip_targets.as_ref().is_some_and(|targets| targets.fit(size, self.sample_count, self.config.format)) {
+                    self.pip_targets = Some(self.pip_composite.targets(&self.device, size, self.sample_count));
+                }
+                Some(pip::eye(map.view_clip(None), pip)?)
+            }
+            _ => None,
+        };
+        let pip_layout = pip_eye.and(pip_layout);
+        let pip_targets = if pip_eye.is_some() { self.pip_targets.take() } else { None };
+        let passes: Vec<(Option<stereoscopy::Eye>, bool)> =
+            pip_eye.map(|eye| (Some(eye), true)).into_iter().chain(eyes.into_iter().map(|eye| (eye, false))).collect();
+        // The objects' uniforms hold an eye's clips rather than their own until a pass writes
+        // their own back.
+        let mut objects_corrected = self.stereo_objects_active;
         let mut diagnostics=FrameDiagnostics::default();
         let mut map_wait=Duration::ZERO;
         let mut submit=Duration::ZERO;
-        for eye in eyes {
+        for (eye, pip_pass) in passes {
+        let pip = match (pip_pass, pip_targets.as_ref(), pip_layout) {
+            (true, Some(targets), _) => PipPass::Draw(targets),
+            (false, Some(targets), Some(layout)) => PipPass::Show(targets, layout),
+            _ => PipPass::None,
+        };
+        let (target, depth) = match pip {
+            PipPass::Draw(targets) => (targets.msaa.as_ref().unwrap_or(&targets.colour).clone(), targets.depth.clone()),
+            _ => (
+                self.msaa_color
+                    .as_ref()
+                    .unwrap_or(scene_color(
+                        self.final_pass.as_ref(),
+                        scene,
+                        settings,
+                        &view,
+                    ))
+                    .clone(),
+                self.depth.clone(),
+            ),
+        };
         // The map's selection and runs encode on the render workers while this thread
         // records the frame's other commands.
         let runs = MapRuns {
             device: Arc::clone(&self.device),
             camera: self.camera_binding.clone(),
-            target: self
-                .msaa_color
-                .as_ref()
-                .unwrap_or(scene_color(
-                    self.final_pass.as_ref(),
-                    scene,
-                    settings,
-                    &view,
-                ))
-                .clone(),
-            depth: self.depth.clone(),
+            target,
+            depth,
             threads: self.map_threads,
         };
         self.marker_ui.set_eye(&self.queue,eye.as_ref());
         self.visual_indicators.set_eye(&self.queue,eye.as_ref());
         self.particles.set_eye(&self.queue,eye.as_ref());
         self.crowd.set_eye(&self.queue,eye.as_ref());
-        if eye.is_some() || self.stereo_objects_active {
+        if eye.is_some() || objects_corrected {
             for object in &scene.objects {
                 let central=*object.central_clip.lock().map_err(|_| "object projection lock")?;
                 let clip=eye.as_ref().map_or(central,|e|e.transform(central));
                 let bytes:Vec<_>=clip.into_iter().flat_map(f32::to_ne_bytes).collect();
                 self.character_uploads.write(&object.uniform,0,&bytes);
             }
+            objects_corrected = eye.is_some();
         }
+        // The corner's pass keeps out of the GPU profile, which times the frame's main view.
+        let profile = if pip_pass { self.gpu_profile.take() } else { None };
         let mut map = None;
         let (recorded, recorded_end) = rayon::in_place_scope(|scope| {
-            if let Some(source) = &scene.map {
+            if let Some(source) = map_view {
                 let (runs, map) = (&runs, &mut map);
                 scope.spawn(move |_| *map = Some(runs.encode(source,eye.as_ref())));
             }
-            let recorded = self.record_frame(scene, settings, &render_texture, &view, if eye.is_some_and(|e|e.field==0) {None} else {capture}, eye.as_ref());
+            let capture = if pip_pass || eye.is_some_and(|e|e.field==0) {None} else {capture};
+            let recorded = self.record_frame(scene, settings, &render_texture, &view, capture, eye.as_ref(), pip);
             // While the map's runs finish, the submissions the GPU has completed release
             // their resources here rather than in this frame's submit.
             let _ = self.device.poll(wgpu::PollType::Poll);
             (recorded, Instant::now())
         });
+        if pip_pass {
+            self.gpu_profile = profile;
+        }
         map_wait += recorded_end.elapsed();
         let RecordedFrame {
             before,
@@ -1130,13 +1304,16 @@ impl GpuRenderer {
         self.queue.submit(uploads.into_iter().chain(buffers));
         if let Some(final_pass)=&mut self.final_pass {final_pass.after_submit();}
         self.shadows.submitted();
-        if let Some(profile) = &mut self.gpu_profile {
+        if let Some(profile) = self.gpu_profile.as_mut().filter(|_| !pip_pass) {
             profile.submitted();
         }
         submit += field_submit.elapsed();
         diagnostics=recorded_diagnostics;
         }
-        self.stereo_objects_active=stereo;
+        self.stereo_objects_active=objects_corrected;
+        if pip_targets.is_some() {
+            self.pip_targets = pip_targets;
+        }
         if let (Some(capture), Some(frame)) = (&self.media_capture, &frame) {
             self.queue.submit(Some(capture.preview(&self.device,&self.queue,&frame.texture.create_view(&Default::default()))));
         }
@@ -1175,17 +1352,22 @@ impl GpuRenderer {
         view: &wgpu::TextureView,
         capture: Option<(&wgpu::Buffer, u32, bool)>,
         eye: Option<&stereoscopy::Eye>,
+        pip: PipPass<'_>,
     ) -> RenderResult<RecordedFrame> {
-        crate::weather::set_visible(scene.map.is_some());
+        // A map draw list built for another sample count waits for its rebuild.
+        let map_view = scene.map.as_ref().filter(|map| map.sample_count == self.sample_count);
+        crate::weather::set_visible(map_view.is_some());
         self.shadows.begin_frame();
         let gpu = self
             .gpu_profile
             .as_mut()
             .map_or_else(Default::default, |profile| profile.begin(&self.device));
-        if let Some(map) = &scene.map {
-            // The only per-frame map upload: every map draw shares these globals.
+        if let Some(map) = map_view {
+            // The only per-frame map upload: every map draw shares these globals. Skate During
+            // Turn Wait's corner, which no PostFX follows, takes PostFX Off's exposure.
+            let unexposed = !settings.postfx || matches!(pip, PipPass::Draw(_));
             self.queue
-                .write_buffer(&self.camera, 0, &map.globals_for_eye((!settings.postfx).then_some(1.),eye));
+                .write_buffer(&self.camera, 0, &map.globals_for_eye(unexposed.then_some(1.),eye));
         }
         let mut encoder = self
             .device
@@ -1193,12 +1375,12 @@ impl GpuRenderer {
                 label: Some("diagnostic frame"),
             });
         // `RenderModeScene` 0x82857b40 renders both cascades before the scene.
-        let (shadows, camera) = scene.map.as_ref().map_or_else(
+        let (shadows, camera) = map_view.map_or_else(
             || (ShadowCascades::default(), [0.0; 3]),
             |map| (*map.shadows(), map.camera()),
         );
         // DMOs read the map's globals: without a map none draws or casts.
-        let dynamic_objects: &[DynamicObjectDraw] = if scene.map.is_some() {
+        let dynamic_objects: &[DynamicObjectDraw] = if map_view.is_some() {
             &scene.dynamic_objects
         } else {
             &[]
@@ -1240,7 +1422,7 @@ impl GpuRenderer {
             profile.stamp(&mut encoder, 1);
         }
         let world_shadow_start = Instant::now();
-        let world_shadow_islands = if let Some(map) = &scene.map {
+        let world_shadow_islands = if let Some(map) = map_view {
             self.shadows
                 .record_world(&self.device, &self.queue, &mut encoder, map)?
         } else {
@@ -1260,10 +1442,22 @@ impl GpuRenderer {
         let scene_view = scene_color(self.final_pass.as_ref(), scene, settings, view);
         // With MSAA the samples resolve into the swapchain image and are
         // then discarded; the overlay and capture read the resolved image.
-        let target = self.msaa_color.as_ref().unwrap_or(scene_view);
+        // Skate During Turn Wait's corner draws into its own targets alike.
+        let (target, resolve, scene_depth_view) = match pip {
+            PipPass::Draw(targets) => (
+                targets.msaa.as_ref().unwrap_or(&targets.colour),
+                targets.msaa.as_ref().map(|_| &targets.colour),
+                &targets.depth,
+            ),
+            PipPass::None | PipPass::Show(..) => (
+                self.msaa_color.as_ref().unwrap_or(scene_view),
+                self.msaa_color.as_ref().map(|_| scene_view),
+                &self.depth,
+            ),
+        };
         // A map's runs clear the scene targets; the individually bound objects
         // continue them.
-        let cleared = scene.map.is_some();
+        let cleared = map_view.is_some();
         let object_draws;
         let pass_end_start;
         let mut encoder = self
@@ -1272,8 +1466,8 @@ impl GpuRenderer {
                 label: Some("diagnostic frame objects"),
             });
         {
-            let (resolve_target, store) = match &self.msaa_color {
-                Some(_) => (Some(scene_view), wgpu::StoreOp::Discard),
+            let (resolve_target, store) = match resolve {
+                Some(resolved) => (Some(resolved), wgpu::StoreOp::Discard),
                 None => (None, wgpu::StoreOp::Store),
             };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1292,7 +1486,7 @@ impl GpuRenderer {
                         store,
                     },
                 })],
-                depth_stencil_attachment: Some(scene_depth(&self.depth, !cleared)),
+                depth_stencil_attachment: Some(scene_depth(scene_depth_view, !cleared)),
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
@@ -1308,7 +1502,17 @@ impl GpuRenderer {
             // orders keep part order.
             // DMO default/ghost meshes (draw order8 or1) join the same stable
             // sort after the objects.
-            let mut objects = scene.objects.iter().filter(|object| !object.hidden).collect::<Vec<_>>();
+            // SceneRenderView::Cull 0x828500a8: characters, vehicles and DMOs outside the view
+            // are left out; their shadows were culled per cascade above.
+            let view_clip = map_view.map(|map| map.view_clip(eye));
+            let in_view = |bounds: [[f32; 3]; 2]| {
+                view_clip.is_none_or(|clip| map_draw::widened_box_in_view(&clip, bounds))
+            };
+            let mut objects = scene
+                .objects
+                .iter()
+                .filter(|object| !object.hidden && view_clip.is_none_or(|clip| object.in_view(&clip)))
+                .collect::<Vec<_>>();
             objects.sort_by_key(|object| {
                 object
                     .character
@@ -1324,7 +1528,7 @@ impl GpuRenderer {
                         .map_or(0, |character| character.draw_order);
                     (order, SceneDraw::Object(object))
                 })
-                .chain(dynamic_objects.iter().flat_map(|draw| {
+                .chain(dynamic_objects.iter().filter(|draw| in_view(draw.world_bounds())).flat_map(|draw| {
                     (0..draw.mesh_count())
                         .map(move |mesh| (draw.draw_order(mesh), SceneDraw::Dynamic(draw, mesh)))
                 }))
@@ -1422,13 +1626,35 @@ impl GpuRenderer {
         }
         let pass_end = pass_end_start.elapsed();
         let scene_time = scene_start.elapsed();
+        if let PipPass::Draw(_) = pip {
+            // The corner shows the scene as it stands: no PostFX, blit, capture or HUD.
+            let finish_start = Instant::now();
+            let after = encoder.finish();
+            finish += finish_start.elapsed();
+            return Ok(RecordedFrame {
+                before,
+                after,
+                diagnostics: FrameDiagnostics {
+                    dynamic_upload,
+                    dynamic_shadows,
+                    world_shadows,
+                    scene: scene_time,
+                    objects: object_draws,
+                    pass_end,
+                    finish,
+                    world_shadow_islands,
+                    dynamic_objects: dynamic_objects.len(),
+                    ..FrameDiagnostics::default()
+                },
+            });
+        }
         let post_start = Instant::now();
         if let Some(profile) = &self.gpu_profile {
             profile.stamp(&mut encoder, 3);
         }
         if let Some((parameters,_))=&scene.final_blit {
             // PC weather composes over the scene before the native bloom and grading.
-            if let Some(map)=scene.map.as_ref() && let Some(frame)=map.weather_frame(eye) {
+            if let Some(map)=map_view && let Some(frame)=map.weather_frame(eye) {
                 self.final_pass.as_mut().expect("initialized final pass").record_weather(&self.device,&self.queue,&mut encoder,map,frame,settings.postfx)?;
             }
             if let Some((assets,frame))=scene.postfx.as_ref().filter(|_| settings.postfx) {
@@ -1521,6 +1747,13 @@ impl GpuRenderer {
             self.movie.borrow().draw(&self.queue, &mut encoder, view, &movie, size);
         }
         if let Some(ui) = &scene.marker_ui { self.marker_ui.draw(&mut encoder, view, ui); }
+        // PC port addition, Skate During Turn Wait: the local skater's own view, drawn before this
+        // frame, in its corner over the scene and the HUD (the watched player's gap and trick
+        // notices stay under it) and under the front end's fade. The game shows none while a menu
+        // is up.
+        if let PipPass::Show(targets, layout) = pip {
+            self.pip_composite.draw(&self.queue, &mut encoder, view, targets, layout);
+        }
         // FrontEndManager::RenderBackground82630dc0 covers the scene and APT.
         if let Some(fade) = &scene.frontend_fade { self.marker_ui.draw(&mut encoder, view, fade); }
         if let Some(movie) = scene.movie.filter(|movie| movie.foreground) {
@@ -1600,7 +1833,9 @@ fn write_bmp(
         .and_then(|size| size.checked_mul(4))
         .ok_or("BMP size overflow")?;
     let file_size = image_size.checked_add(54).ok_or("BMP file overflow")?;
-    let mut file = std::fs::File::create(path)?;
+    // Buffered: an RGBA image goes out four bytes a pixel, and unbuffered each was a write of its
+    // own (seconds a capture, which held the game's loop).
+    let mut file = std::io::BufWriter::new(std::fs::File::create(path)?);
     file.write_all(b"BM")?;
     file.write_all(&file_size.to_le_bytes())?;
     file.write_all(&[0; 4])?;
@@ -1626,6 +1861,7 @@ fn write_bmp(
             }
         }
     }
+    file.flush()?;
     Ok(())
 }
 
