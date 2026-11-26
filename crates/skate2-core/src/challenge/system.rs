@@ -1704,12 +1704,7 @@ impl ChallengeSystem {
                         .objectives
                         .iter()
                         .map(|objective| {
-                            let boundary = self
-                                .world
-                                .db
-                                .attribute(super::keys::class::CHALLENGE_OBJECTIVE, objective.key, super::objectives::field::SCORING_BOUNDARY)
-                                .and_then(|a| a.value_bytes(0))
-                                .map_or(0, |b| u64::from_be_bytes([b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]]));
+                            let boundary = super::objectives::scoring_boundary(&self.world.db, objective.key);
                             let mode = self.world.db.attribute(super::keys::class::CHALLENGE_OBJECTIVE, objective.key, super::objectives::field::ACTIVATION_MODE).and_then(|a| a.i32(0)).unwrap_or(0);
                             format!(
                                 "{:?} mode {mode} boundary {boundary:016x} in {} {:016x}: {}",

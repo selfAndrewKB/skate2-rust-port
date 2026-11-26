@@ -1603,7 +1603,7 @@ pub fn update(lua: &mut Lua<World>, world: &mut World) {
 }
 
 /// `ObjectiveInfo.ScoringBoundary`'s volume ID (its second eight bytes).
-fn scoring_boundary(db: &AttribDb, key: u64) -> u64 {
+pub(super) fn scoring_boundary(db: &AttribDb, key: u64) -> u64 {
     db.attribute(class::CHALLENGE_OBJECTIVE, key, field::SCORING_BOUNDARY)
         .and_then(|a| a.value_bytes(0))
         .map_or(0, |b| u64::from_be_bytes([b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]]))
