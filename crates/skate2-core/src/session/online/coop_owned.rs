@@ -2,7 +2,7 @@
 //! frames as this console sends them, and their puppets' lifecycle where they arrive. Kept
 //! beside upstream's `selected_session_online.rs`, which calls it.
 
-use super::{Arc, BTreeMap, NetFrame, SelectedLiveError, SelectedLiveSession, audio_lanes, error, net_header, owned, pose_lanes, remote_skater};
+use super::{Arc, BTreeMap, NetFrame, SelectedLiveError, SelectedLiveSession, error, net_header, owned, remote_skater};
 
 /// Co-op fork (M12): an owned skater's puppet hides after this many local ticks without a
 /// frame (its owner despawned it, or left); the runs come every `INTERVAL` ticks at most.
@@ -120,4 +120,24 @@ impl<T, C> SelectedLiveSession<T, C> {
             game.owned_sent.clear();
         }
     }
+}
+
+/// Co-op fork (M10): a pose as replay frames carry it, each bone's scale, rotation and
+/// translation in twelve lanes; packed for the owned AI skaters' frames the way the local skater's frame packs it.
+pub(super) fn pose_lanes(pose: &[skate2_formats::andale::AndaleSqt]) -> Vec<[f32; 12]> {
+    pose.iter()
+        .map(|sqt| {
+            let mut lanes = [0.0; 12];
+            lanes[0..4].copy_from_slice(&sqt.scale);
+            lanes[4..8].copy_from_slice(&sqt.rotation);
+            lanes[8..12].copy_from_slice(&sqt.translation);
+            lanes
+        })
+        .collect()
+}
+/// Co-op fork (M10): a tick's audio record as replay frames carry it: its world positions as
+/// offsets from the skater's root (header words 36 to 38), flattened.
+pub(super) fn audio_lanes(header: &[u32; super::HEADER_WORDS], record: crate::SkaterAudioPhysOut) -> (Vec<f32>, Vec<u32>) {
+    let root = [header[36], header[37], header[38]].map(f32::from_bits);
+    crate::online::audio_record::flatten(&crate::online::audio_record::relative_to_root(record, root))
 }

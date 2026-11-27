@@ -4,7 +4,7 @@
 //! `session/online/coop_world.rs`; the relay is `skate2-net`'s `ClientMessage::World`.
 
 #[path = "diagnostics.rs"]
-pub mod diagnostics;
+pub(crate) mod diagnostics;
 #[path = "outcomes.rs"]
 pub mod outcomes;
 #[path = "ownership.rs"]

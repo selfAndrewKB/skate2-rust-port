@@ -1,8 +1,8 @@
 //! Co-op fork: the shapes the bench's `SKATE2_DIAGNOSTIC_COOP_*` switches are written in, parsed
 //! once. Each caller names its switch (the literal stays at the read, where
 //! `tools/coop/switches.py` finds it) and keeps its own choices: whether a single tick is
-//! trimmed, whether a list is sorted. An entry that does not parse is skipped, as a bench typo
-//! must not stop a run.
+//! trimmed, whether a list is sorted. A value that does not parse gives no tick (a single tick)
+//! or is skipped (an entry of a list): a bench typo must not stop a run.
 
 /// `<tick>`, parsed as written: surrounding whitespace makes it no tick.
 #[must_use]

@@ -441,25 +441,6 @@ fn net_header(header: &[u8]) -> [u32; HEADER_WORDS] {
     words[40..42].fill(0);
     words
 }
-/// Co-op fork (M10): a pose as replay frames carry it, each bone's scale, rotation and
-/// translation in twelve lanes; the owned AI skaters' frames pack it as the local skater's do.
-fn pose_lanes(pose: &[skate2_formats::andale::AndaleSqt]) -> Vec<[f32; 12]> {
-    pose.iter()
-        .map(|sqt| {
-            let mut lanes = [0.0; 12];
-            lanes[0..4].copy_from_slice(&sqt.scale);
-            lanes[4..8].copy_from_slice(&sqt.rotation);
-            lanes[8..12].copy_from_slice(&sqt.translation);
-            lanes
-        })
-        .collect()
-}
-/// Co-op fork (M10): a tick's audio record as replay frames carry it: its world positions as
-/// offsets from the skater's root (header words 36 to 38), flattened.
-fn audio_lanes(header: &[u32; HEADER_WORDS], record: crate::SkaterAudioPhysOut) -> (Vec<f32>, Vec<u32>) {
-    let root = [header[36], header[37], header[38]].map(f32::from_bits);
-    crate::online::audio_record::flatten(&crate::online::audio_record::relative_to_root(record, root))
-}
 /// How long the game goes without a replay frame before it says `Busy`.
 const BUSY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
 /// How long after its last recipe the game sends another: the server drops one within two

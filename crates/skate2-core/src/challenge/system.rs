@@ -1375,7 +1375,7 @@ impl ChallengeSystem {
 /// Co-op fork (M13): a script's outcome for `player`: applied here and now when a human's event
 /// is being handled (every console's script decides alike at that tick, see
 /// [`apply_coop_outcome_to`]); otherwise queued to travel as a note.
-pub fn submit_coop_outcome(world: &mut World, player: i32, outcome: crate::coop::outcomes::Outcome) {
+pub(crate) fn submit_coop_outcome(world: &mut World, player: i32, outcome: crate::coop::outcomes::Outcome) {
     if world.event_player.is_some() {
         apply_coop_outcome_to(world, player, outcome, round_tick(world));
     } else {
