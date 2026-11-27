@@ -6,8 +6,8 @@ held by the dedicated server, the open world synchronized wherever either player
 role co-op, tutorials proven by everyone, each player's own skater in the scenes. Built on the
 port's netcode, never beside it ([rules](plan/rules.md)).
 
-**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.23.0-structure`**
-(2026-11-26): M25 to M27, the fork's structure (co-op out of upstream's files, the lint and test gate, structured logs and one reader, the switch list); M24, upstream 0.3.6 merged into the fork (protocol 128); M23 before it, the campaign round's sync check (each console hashes the scripts' state
+**Build:** `coop` branch of `selfAndrewKB/skate2-rust-port`, **`coop-v0.23.1-dedupe`**
+(2026-11-26): the duplication audit's fixes, behaviour unchanged; M25 to M27 before it, the fork's structure (co-op out of upstream's files, the lint and test gate, structured logs and one reader, the switch list); M24, upstream 0.3.6 merged into the fork (protocol 128); M23 before it, the campaign round's sync check (each console hashes the scripts' state
 after every round tick and the facts carry it, so a seat's log says where two games parted);
 M22 before it, the round's pace and the "Waiting for Skaters" notice ([versions](plan/versions.md)).
 Earlier (2026-11-12): M12, the ambient skaters on both screens: every console streams its own as
